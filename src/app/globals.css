@@ -1,30 +1,67 @@
 @import "tailwindcss";
 
 @theme {
-  --color-void: #060608;
-  --color-surface1: #111115;
-  --color-surface2: #1A1A1F;
   --color-hairline: #2A2A32;
-  --color-text-primary: #F3F3F5;
-  --color-text-secondary: #8F8F99;
+  --color-surface2: #1A1A1F;
 }
 
 :root {
-  --background: var(--color-void);
-  --foreground: var(--color-text-primary);
+  --background: #000000;
+  --foreground: #ffffff;
+  --accent-emerald: #10b981;
+  --accent-emerald-glow: rgba(16, 185, 129, 0.15);
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@layer base {
+  body {
+    color: var(--foreground);
+    background: var(--background);
+    font-family: Arial, Helvetica, sans-serif;
+    overflow-x: hidden;
+  }
+
+  /* Antigravity Atmosphere */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+    opacity: 0.05;
+    mix-blend-mode: overlay;
+  }
 }
 
-::selection {
-  background: var(--color-surface2);
-  color: var(--color-text-primary);
+.light-streak {
+  position: fixed;
+  width: 1px;
+  height: 300px;
+  background: linear-gradient(to bottom, transparent, white, transparent);
+  opacity: 0.2;
+  filter: blur(2px);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.emerald-streak {
+  position: fixed;
+  width: 2px;
+  height: 400px;
+  background: linear-gradient(to bottom, transparent, var(--accent-emerald), transparent);
+  opacity: 0.15;
+  filter: blur(4px);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.emerald-glow {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--accent-emerald);
+  filter: blur(60px);
+  opacity: 0.1;
+  pointer-events: none;
 }
 
 /* Custom scrollbar to match the design */

@@ -1,29 +1,28 @@
-import { Header } from "@/components/layout/header";
-import { Footer } from "@/components/layout/footer";
-import { NoiseOverlay } from "@/components/ui/noise-overlay";
-import { HeroSection } from "@/components/sections/hero";
-import { PainPoints } from "@/components/sections/pain-points";
-import { Expertise } from "@/components/sections/expertise";
-import { CaseStudies } from "@/components/sections/case-studies";
-import { Roadmap } from "@/components/sections/roadmap";
-import { AboutUs } from "@/components/sections/about-us";
-import { FAQ } from "@/components/sections/faq";
+import React from "react";
+import { Header } from "@/components/header";
+import { Hero } from "@/components/hero";
+import { Pains } from "@/components/pains";
+import { Expertise } from "@/components/expertise";
+import { Cases } from "@/components/cases";
+import { Roadmap } from "@/components/roadmap";
+import { About } from "@/components/about";
+import { FAQ } from "@/components/faq";
+import { Footer } from "@/components/footer";
 
 export default function Home() {
   return (
-    <main className="relative bg-void min-h-screen">
-      <NoiseOverlay />
+    <>
       <Header />
-      
-      <HeroSection />
-      <PainPoints />
-      <Expertise />
-      <CaseStudies />
-      <Roadmap />
-      <AboutUs />
-      <FAQ />
-      
+      <main>
+        <Hero />
+        <Cases />
+        <Pains />
+        <Expertise />
+        <Roadmap />
+        <About />
+        <FAQ />
+      </main>
       <Footer />
-    </main>
+    </>
   );
 }
