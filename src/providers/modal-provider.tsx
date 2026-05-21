@@ -90,6 +90,8 @@ export function useModal() {
   return context;
 }
 
+import { createLeadAction } from "@/app/actions/leads";
+
 function LeadModal() {
   const { isOpen, activeButtonId, closeModal } = useModal();
   const [name, setName] = useState("");
@@ -116,6 +118,16 @@ function LeadModal() {
     e.preventDefault();
     setError(null);
 
+    // 1. Client-side Deduplication lock (24-hour TTL)
+    const submittedAt = localStorage.getItem("lead_submitted_at");
+    if (submittedAt) {
+      const elapsed = Date.now() - parseInt(submittedAt, 10);
+      if (elapsed < 24 * 60 * 60 * 1000) {
+        setError("Лид уже есть");
+        return;
+      }
+    }
+
     if (!name.trim()) {
       setError("Будь ласка, вкажіть ваше ім'я");
       return;
@@ -132,19 +144,23 @@ function LeadModal() {
     setIsSubmitting(true);
     try {
       const visitorId = localStorage.getItem("visitor_id") || crypto.randomUUID();
-      const supabase = createClient();
-
-      const { error: dbError } = await supabase.from("leads").insert({
+      
+      // Call Server Action
+      const res = await createLeadAction({
         name: name.trim(),
         phone: phone.trim(),
-        telegram: telegram.trim() || null,
-        instagram: instagram.trim() || null,
-        button_id: activeButtonId || "unknown",
-        visitor_id: visitorId,
-        status: "new",
+        telegram: telegram.trim() || undefined,
+        instagram: instagram.trim() || undefined,
+        buttonId: activeButtonId || "unknown",
+        visitorId: visitorId,
       });
 
-      if (dbError) throw dbError;
+      if (res.error) {
+        throw new Error(res.error);
+      }
+
+      // Successful submission: persist submitted timestamp
+      localStorage.setItem("lead_submitted_at", Date.now().toString());
 
       setIsSuccess(true);
       setTimeout(() => {

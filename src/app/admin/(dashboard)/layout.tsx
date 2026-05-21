@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
-import { Users, LayoutDashboard, LogOut } from "lucide-react";
+import { Settings, LayoutDashboard, LogOut } from "lucide-react";
 import Link from "next/link";
 import { signOutAction } from "../actions";
 
@@ -55,11 +55,11 @@ export default async function AdminLayout({
 
             {userRole === "admin" && (
               <Link
-                href="/admin/users"
+                href="/admin/settings"
                 className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/10 text-white transition-all font-semibold text-sm cursor-pointer"
               >
-                <Users className="w-4 h-4 text-emerald-400" />
-                Співробітники
+                <Settings className="w-4 h-4 text-emerald-400" />
+                Налаштування
               </Link>
             )}
           </nav>
