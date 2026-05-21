@@ -2,9 +2,11 @@
 
 import React, { useEffect, useRef } from "react";
 import gsap from "gsap";
+import { useModal } from "@/providers/modal-provider";
 
 export function Header() {
   const headerRef = useRef<HTMLElement>(null);
+  const { openModal } = useModal();
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -34,8 +36,11 @@ export function Header() {
         <a href="#about" className="hover:text-white transition-colors duration-300">Команда</a>
       </nav>
 
-      <button className="px-6 py-2.5 rounded-full bg-white text-black font-semibold text-sm hover:bg-neutral-200 transition-colors duration-300 hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(255,255,255,0.2)] whitespace-nowrap">
-        Записатись на розбір
+      <button 
+        onClick={() => openModal("header_cta")}
+        className="px-6 py-2.5 rounded-full bg-white text-black font-semibold text-sm hover:bg-neutral-200 transition-colors duration-300 hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(255,255,255,0.2)] whitespace-nowrap cursor-pointer"
+      >
+        Розібрати мій проект
       </button>
     </header>
   );

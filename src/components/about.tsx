@@ -19,7 +19,7 @@ const team = [
     role: "Сенси та продажі",
     desc: "Співзасновник. Відповідає за «м'яке»: прогріви, дожими, продажі та розпаковку експертності. Особисто закривав угоди на $25 000 за тиждень та згенерував +80 000 підписників органікою. Знає, як конвертувати лояльність аудиторії в реальні гроші.",
     theme: "light",
-    image: "/assets/dmytro.jpg"
+    image: "/assets/dmytro.webp"
   }
 ];
 
@@ -57,7 +57,7 @@ export function About() {
   return (
     <section ref={containerRef} id="about" className="relative py-32 bg-neutral-950 text-white overflow-hidden">
       <div className="container mx-auto px-6 max-w-6xl relative z-10">
-        
+
         <div className="text-center mb-24">
           <h2 className="text-4xl md:text-6xl font-black tracking-tighter mb-6 uppercase">
             Практики, а не теоретики
@@ -72,64 +72,63 @@ export function About() {
             Ми як чорне та біле — абсолютні протилежності, які закривають 100% циклу. Тверда системність Віктора та емоційні продажі Дмитра стали фундаментом для B&W Prod.
           </p>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-16">
-            {team.map((member, idx) => (
-              <div 
-                key={idx} 
-                className={`group relative min-h-[500px] md:min-h-[600px] rounded-[40px] overflow-hidden transition-all duration-500 hover:-translate-y-2 flex flex-col justify-between ${
-                  member.theme === 'dark' 
-                    ? 'bg-neutral-900 border border-white/5 text-white' 
-                    : 'bg-white text-black'
-                }`}
-              >
-                {/* Individual Portrait - Floating / Transparent feel */}
-                <div className="absolute right-0 bottom-0 w-full md:w-2/3 h-full pointer-events-none overflow-hidden z-0">
-                  <div className={`absolute inset-0 z-10 ${
-                    member.theme === 'dark' 
-                      ? 'bg-gradient-to-l from-transparent via-neutral-900/80 to-neutral-900' 
-                      : 'bg-gradient-to-l from-transparent via-white/80 to-white'
-                  }`} />
-                   <div className={`absolute inset-0 z-10 ${
-                    member.theme === 'dark' 
-                      ? 'bg-gradient-to-t from-neutral-900 via-transparent to-transparent' 
-                      : 'bg-gradient-to-t from-white via-transparent to-transparent'
-                  }`} />
-                  <img 
-                    src={member.image} 
-                    alt={member.name}
-                    className="w-full h-full object-cover object-top opacity-60 group-hover:opacity-100 group-hover:scale-110 transition-all duration-700"
-                  />
-                </div>
-
-                {/* Content Overlay */}
-                <div className="relative z-20 p-12 md:p-16 h-full flex flex-col justify-between">
-                  <div>
-                    <div className="text-sm font-black uppercase tracking-[0.2em] mb-4 opacity-50">
-                      Co-Founder / 0{idx + 1}
-                    </div>
-                    <h3 className="text-5xl md:text-6xl font-black mb-4 uppercase tracking-tighter leading-tight">{member.name}</h3>
-                    <h4 className={`text-xl md:text-2xl font-bold mb-8 uppercase tracking-widest ${
-                      member.theme === 'dark' ? 'text-emerald-400' : 'text-neutral-500'
-                    }`}>
-                      {member.role}
-                    </h4>
-                  </div>
-                  
-                  <p className={`text-lg md:text-xl leading-relaxed max-w-sm ${
-                    member.theme === 'dark' ? 'text-white/60 group-hover:text-white/90' : 'text-black/60 group-hover:text-black/90'
-                  } transition-colors duration-500`}>
-                    {member.desc}
-                  </p>
-                </div>
+          <div className="flex flex-col gap-12 mb-16">
+            {/* Victor Card */}
+            <div className="flex flex-col md:flex-row rounded-[40px] overflow-hidden bg-neutral-900 border border-white/5 text-white transition-all duration-500 hover:border-emerald-500/20 group">
+              <div className="w-full md:w-5/12 min-h-[350px] md:h-[450px] relative overflow-hidden bg-neutral-950">
+                <img
+                  src="/assets/victor.png"
+                  alt="Віктор"
+                  className="w-full h-full object-cover object-top group-hover:scale-105 transition-all duration-700"
+                />
               </div>
-            ))}
+              <div className="w-full md:w-7/12 p-8 md:p-12 flex flex-col justify-center bg-neutral-900">
+                <div className="text-sm font-black uppercase tracking-[0.2em] mb-4 text-emerald-400">
+                  Co-Founder / 01
+                </div>
+                <h3 className="text-4xl md:text-5xl font-black mb-2 uppercase tracking-tighter leading-tight">
+                  Віктор
+                </h3>
+                <h4 className="text-lg md:text-xl font-bold mb-6 uppercase tracking-widest text-emerald-400/70">
+                  Системи та аналітика
+                </h4>
+                <p className="text-base md:text-lg leading-relaxed text-white/60 group-hover:text-white/80 transition-colors duration-300">
+                  Співзасновник. Відповідає за «тверде»: цифри, метрики, архітектуру запусків та окупність. Керував запусками з обертом до $100 000. Будує продуктові лінійки та інфраструктуру, де все піддається оцифруванню, логіці та суворій аналітиці.
+                </p>
+              </div>
+            </div>
+
+            {/* Dmytro Card */}
+            <div className="flex flex-col md:flex-row-reverse rounded-[40px] overflow-hidden bg-white text-black transition-all duration-500 hover:shadow-[0_0_30px_rgba(255,255,255,0.05)] group">
+              <div className="w-full md:w-5/12 min-h-[350px] md:h-[450px] relative overflow-hidden bg-neutral-100">
+                <img
+                  src="/assets/dmytro.webp"
+                  alt="Дмитро"
+                  className="w-full h-full object-cover object-top group-hover:scale-105 transition-all duration-700"
+                />
+              </div>
+              <div className="w-full md:w-7/12 p-8 md:p-12 flex flex-col justify-center bg-white">
+                <div className="text-sm font-black uppercase tracking-[0.2em] mb-4 text-neutral-400">
+                  Co-Founder / 02
+                </div>
+                <h3 className="text-4xl md:text-5xl font-black mb-2 uppercase tracking-tighter leading-tight">
+                  Дмитро
+                </h3>
+                <h4 className="text-lg md:text-xl font-bold mb-6 uppercase tracking-widest text-neutral-500">
+                  Сенси та продажі
+                </h4>
+                <p className="text-base md:text-lg leading-relaxed text-black/60 group-hover:text-black/80 transition-colors duration-300">
+                  Співзасновник. Відповідає за «м&apos;яке»: прогріви, дожими, продажі та розпаковку експертності. Особисто закривав угоди на $25 000 за тиждень та згенерував +80 000 підписників органікою. Знає, як конвертувати лояльність аудиторії в реальні гроші.
+                </p>
+              </div>
+            </div>
           </div>
 
           <div className="mt-8 p-10 md:p-14 rounded-[40px] bg-neutral-900/50 border border-white/10 backdrop-blur-xl relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
             <h3 className="text-2xl md:text-3xl font-black mb-6 uppercase tracking-tighter">Команда реалізації</h3>
             <p className="text-white/60 text-lg md:text-xl max-w-4xl leading-relaxed">
-              За нами стоїть штат профільних спеціалістів — від техліда і дизайнера до таргетолога та відділу продажів. Ми розробляємо стратегію, а наша команда своїми руками верстає сайти, збирає ботів та дотискає лідів. Ви отримуєте повноцінний production-відділ під ключ.
+              За нами стоїть штат профільних спеціалістів — від техліда і дизайнера до таргетолога та відділу продажів. Ми розробляємо стратегію, а наша команда своїми руками верстає сайти, збирає ботів та супроводжує лідів до оплати. Ви отримуєте повноцінний production-відділ під ключ.
             </p>
           </div>
         </div>

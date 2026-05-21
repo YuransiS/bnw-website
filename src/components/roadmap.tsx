@@ -25,7 +25,7 @@ const roadmap = [
   },
   {
     title: "Робота з продажами",
-    text: "Впроваджуємо відділ продажів або докручуємо ваш. Контролюємо закриття кожної заявки, скрипти та дотискання клієнтів до оплати."
+    text: "Впроваджуємо відділ продажів або покращуємо ефективність вашого. Контролюємо закриття кожної заявки, скрипти та супровід клієнтів до оплати."
   },
   {
     title: "Масштабування та супровід",
@@ -135,16 +135,7 @@ export function Roadmap() {
           })}
         </div>
 
-        <div className="mt-32 text-center max-w-3xl mx-auto p-10 rounded-3xl bg-white/[0.03] border border-white/10 backdrop-blur-md">
-          <p className="text-xl md:text-2xl font-medium text-white/80 mb-8">
-            Ми забираємо на себе всю операційку, щоб ви могли зосередитись на продукті.
-            <br className="hidden md:block"/>
-            <span className="font-bold text-white uppercase tracking-tighter">Готові побудувати систему?</span>
-          </p>
-          <button className="px-8 py-4 rounded-full bg-white text-black font-bold text-lg hover:bg-neutral-200 transition-all hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(255,255,255,0.2)] whitespace-nowrap">
-            Записатись на розбір
-          </button>
-        </div>
+
 
       </div>
     </section>

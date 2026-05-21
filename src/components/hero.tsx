@@ -2,9 +2,11 @@
 
 import React, { useEffect, useRef } from "react";
 import gsap from "gsap";
+import { useModal } from "@/providers/modal-provider";
 
 export function Hero() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const { openModal } = useModal();
   
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -90,33 +92,20 @@ export function Hero() {
         <div className="flex flex-col lg:flex-row items-center lg:items-start gap-12">
           
           <div className="max-w-4xl space-y-6">
-            <h1 className="hero-elem text-5xl md:text-7xl lg:text-8xl font-black tracking-tighter leading-[0.95] mb-6" style={{ textShadow: "0 10px 40px rgba(0,0,0,0.5)" }}>
-              СИСТЕМНИЙ <br/>
-              <span className="text-emerald-500 drop-shadow-[0_0_20px_rgba(16,185,129,0.4)] uppercase">ПРИБУТОК</span> <br/>
-              <span className="whitespace-nowrap">ВІД А ДО Я</span>
+            <h1 className="hero-elem text-3xl md:text-5xl lg:text-6xl font-black tracking-tighter leading-[1.1] mb-6" style={{ textShadow: "0 10px 40px rgba(0,0,0,0.5)" }}>
+              Створюємо під ключ <span className="text-emerald-500 drop-shadow-[0_0_20px_rgba(16,185,129,0.4)] uppercase">систему експертам</span>, яка приносить прибуток <span className="whitespace-nowrap">$10k–$30k+/місяць</span> через системний маркетинг та продюсування
             </h1>
 
-            <p className="hero-elem text-base md:text-lg text-white/60 max-w-xl mb-10 font-medium leading-relaxed">
-              Беремо на себе весь процес — від аналізу до прибутку. Ви — створюєте контент і даєте експертність, ми — будуємо стратегію і кожен етап.
+            <p className="hero-elem text-base md:text-lg lg:text-xl text-white/70 max-w-3xl mb-10 font-medium leading-relaxed">
+              Беремо на себе стратегію, трафік, воронки, продажі та операційне управління, щоб ви фокусувались на продукті та контенті
             </p>
 
-            <div className="hero-elem grid grid-cols-2 md:grid-cols-4 gap-2 lg:gap-3 w-full max-w-4xl mb-10">
-              {[
-                { label: "Досвіду", value: "5+ років" },
-                { label: "Виручка", value: "$15k–$50k" },
-                { label: "Оборот", value: "$100k+" },
-                { label: "ROAS", value: "300%+" }
-              ].map((fact, idx) => (
-                <div key={idx} className="flex flex-col p-3 rounded-xl bg-white/[0.03] border border-white/10 backdrop-blur-md hover:bg-white/[0.06] transition-colors duration-300">
-                  <span className="text-base md:text-lg font-black text-white mb-0.5">{fact.value}</span>
-                  <span className="text-[9px] md:text-[10px] text-white/40 uppercase tracking-wider font-bold leading-tight">{fact.label}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="hero-elem w-full flex flex-col items-center lg:items-start">
-              <button className="w-full md:w-auto px-10 py-5 rounded-full bg-white text-black font-bold text-lg hover:bg-neutral-200 hover:scale-[1.02] active:scale-95 transition-all duration-300 shadow-[0_0_40px_rgba(255,255,255,0.3)]">
-                Отримати діагностику
+            <div className="hero-elem w-full flex flex-col items-center lg:items-start pt-4">
+              <button 
+                onClick={() => openModal("hero_cta")}
+                className="w-full md:w-auto px-10 py-5 rounded-full bg-white text-black font-bold text-lg hover:bg-neutral-200 hover:scale-[1.02] active:scale-95 transition-all duration-300 shadow-[0_0_40px_rgba(255,255,255,0.3)] cursor-pointer"
+              >
+                Розібрати мій проект
               </button>
               <span className="text-xs text-white/40 mt-3 font-medium italic">
                 Безкоштовно знайдемо ваші точки росту
