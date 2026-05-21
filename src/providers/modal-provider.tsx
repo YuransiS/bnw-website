@@ -156,6 +156,11 @@ function LeadModal() {
       });
 
       if (res.error) {
+        if (res.error === "duplicate_lead") {
+          localStorage.setItem("lead_submitted_at", Date.now().toString());
+          setError("Лид уже есть");
+          return;
+        }
         throw new Error(res.error);
       }
 

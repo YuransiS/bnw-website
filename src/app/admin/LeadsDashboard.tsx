@@ -387,6 +387,13 @@ export default function LeadsDashboard({
 
   return (
     <div className="space-y-10 font-sans">
+      {/* Click Outside overlay when dropdown is open (covers all tabs and views) */}
+      {activeDropdownId && (
+        <div
+          className="fixed inset-0 z-40 cursor-default"
+          onClick={() => setActiveDropdownId(null)}
+        />
+      )}
       {/* Floating Push Notifications Container */}
       <div className="fixed top-6 right-6 z-[9999] space-y-3 pointer-events-none">
         {notifications.map((n) => (
@@ -593,7 +600,7 @@ export default function LeadsDashboard({
 
         {/* Leads content based on Tab */}
         {activeTab === "regular_customers" ? (
-          /* Independent Read-Only Monitor Layout for Regular Customers */
+          /* Premium Interactive Cards Monitor for Regular Customers */
           <div className="space-y-4">
             {filteredLeads.length === 0 ? (
               <div className="text-center py-12 border border-dashed border-white/5 rounded-2xl text-white/30 text-sm">
@@ -602,85 +609,142 @@ export default function LeadsDashboard({
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredLeads.map((lead) => (
-                  <div
-                    key={lead.id}
-                    className="relative bg-[#0C0C0F]/80 border border-emerald-500/20 hover:border-emerald-500/40 p-6 rounded-2xl transition-all shadow-xl hover:shadow-emerald-500/[0.05] group"
-                  >
-                    {/* Shiny Premium Orb Badge */}
-                    <div className="absolute top-4 right-4 flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[9px] font-black text-emerald-400 uppercase tracking-widest animate-pulse">
-                      <Sparkles className="w-3 h-3 text-emerald-400" />
-                      Постійний клієнт
-                    </div>
+                {filteredLeads.map((lead) => {
+                  const currentPipelineStatus = parsePipelineStatus(lead.status, lead.button_id);
+                  const currentConfig =
+                    PIPELINE_STATUSES.find((s) => s.key === currentPipelineStatus) ||
+                    PIPELINE_STATUSES[0];
 
-                    <div className="space-y-4">
-                      {/* Name and ID */}
-                      <div>
-                        <h3 className="font-extrabold text-base text-white tracking-tight group-hover:text-emerald-400 transition-colors">
-                          {lead.name}
-                        </h3>
-                        <p className="text-[9px] text-white/30 mt-1 truncate" title={lead.visitor_id}>
-                          id: {lead.visitor_id}
-                        </p>
-                      </div>
+                  return (
+                    <div
+                      key={lead.id}
+                      className="relative bg-[#0C0C0F]/80 border border-emerald-500/20 hover:border-emerald-500/40 p-6 rounded-2xl transition-all shadow-xl hover:shadow-emerald-500/[0.05] group"
+                    >
+                      {/* Premium Interactive Dropdown Selector in Card (Module 4 status change) */}
+                      <div className="absolute top-4 right-4 z-50">
+                        <div className="inline-block relative">
+                          <button
+                            disabled={updatingId === lead.id}
+                            onClick={() =>
+                              setActiveDropdownId(
+                                activeDropdownId === lead.id ? null : lead.id
+                              )
+                            }
+                            className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[10px] font-extrabold transition-all hover:scale-[1.02] active:scale-95 duration-200 cursor-pointer ${
+                              currentConfig.colorClass
+                            } disabled:opacity-50`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${currentConfig.dotColor} animate-pulse`} />
+                            <span>{currentConfig.label}</span>
+                            <ChevronDown className="w-3 h-3 opacity-60" />
+                          </button>
 
-                      {/* Phone and Clipboard Copy */}
-                      <div className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/5">
-                        <div className="text-xs font-semibold text-white/80">{lead.phone}</div>
-                        <button
-                          onClick={() => handleCopyPhone(lead.phone, lead.id)}
-                          className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition-all cursor-pointer flex items-center justify-center"
-                          title="Скопіювати номер телефону"
-                        >
-                          {copiedId === lead.id ? (
-                            <Check className="w-3.5 h-3.5 text-emerald-400" />
-                          ) : (
-                            <Copy className="w-3.5 h-3.5" />
+                          {/* Dropdown Menu Container inside card */}
+                          {activeDropdownId === lead.id && (
+                            <div className="absolute right-0 mt-2 w-52 rounded-2xl border border-white/10 bg-[#0C0C0F]/95 p-2 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2 duration-200 z-50">
+                              <div className="text-[10px] font-black uppercase tracking-wider text-white/30 px-3 py-1.5 border-b border-white/5 mb-1.5">
+                                Змінити статус
+                              </div>
+                              <div className="space-y-0.5 max-h-52 overflow-y-auto custom-scrollbar">
+                                {PIPELINE_STATUSES.map((statusItem) => {
+                                  const isSelected = currentPipelineStatus === statusItem.key;
+                                  return (
+                                    <button
+                                      key={statusItem.key}
+                                      onClick={async () => {
+                                        setActiveDropdownId(null);
+                                        await handlePipelineStatusChange(
+                                          lead.id,
+                                          statusItem.key,
+                                          lead.button_id
+                                        );
+                                      }}
+                                      className={`w-full flex items-center justify-between px-3 py-1.5 rounded-xl text-left text-[11px] font-bold transition-all duration-150 cursor-pointer ${
+                                        isSelected
+                                          ? "bg-white/10 text-white"
+                                          : "text-white/60 hover:text-white hover:bg-white/5"
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-1.5">
+                                        <span
+                                          className={`w-1.5 h-1.5 rounded-full ${statusItem.dotColor}`}
+                                        />
+                                        <span>{statusItem.label}</span>
+                                      </div>
+                                      {isSelected && (
+                                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
                           )}
-                        </button>
+                        </div>
                       </div>
 
-                      {/* Social Nickname Links (Parsed in Module 5) */}
-                      <div className="flex flex-wrap gap-2 pt-1 border-t border-white/5">
-                        {lead.telegram ? (
-                          renderTelegramLink(lead.telegram)
-                        ) : (
-                          <span className="text-[9px] text-white/20 uppercase tracking-wider font-bold">tg: немає</span>
-                        )}
-                        {lead.instagram ? (
-                          renderInstagramLink(lead.instagram)
-                        ) : (
-                          <span className="text-[9px] text-white/20 uppercase tracking-wider font-bold">ig: немає</span>
-                        )}
-                      </div>
+                      <div className="space-y-4">
+                        {/* Name and ID */}
+                        <div>
+                          <h3 className="font-extrabold text-base text-white tracking-tight group-hover:text-emerald-400 transition-colors pr-24">
+                            {lead.name}
+                          </h3>
+                          <p className="text-[9px] text-white/30 mt-1 truncate" title={lead.visitor_id}>
+                            id: {lead.visitor_id}
+                          </p>
+                        </div>
 
-                      {/* Footer Details */}
-                      <div className="flex justify-between items-center text-[10px] text-white/40 mt-2 font-medium">
-                        <span>Джерело: {BUTTON_LABELS[getBaseButtonId(lead.button_id)] || getBaseButtonId(lead.button_id)}</span>
-                        <span>
-                          {new Date(lead.created_at).toLocaleDateString("uk-UA", {
-                            day: "2-digit",
-                            month: "2-digit",
-                            year: "numeric",
-                          })}
-                        </span>
+                        {/* Phone and Clipboard Copy */}
+                        <div className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/5">
+                          <div className="text-xs font-semibold text-white/80">{lead.phone}</div>
+                          <button
+                            onClick={() => handleCopyPhone(lead.phone, lead.id)}
+                            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition-all cursor-pointer flex items-center justify-center"
+                            title="Скопіювати номер телефону"
+                          >
+                            {copiedId === lead.id ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </div>
+
+                        {/* Social Nickname Links (Parsed in Module 5) */}
+                        <div className="flex flex-wrap gap-2 pt-1 border-t border-white/5">
+                          {lead.telegram ? (
+                            renderTelegramLink(lead.telegram)
+                          ) : (
+                            <span className="text-[9px] text-white/20 uppercase tracking-wider font-bold">tg: немає</span>
+                          )}
+                          {lead.instagram ? (
+                            renderInstagramLink(lead.instagram)
+                          ) : (
+                            <span className="text-[9px] text-white/20 uppercase tracking-wider font-bold">ig: немає</span>
+                          )}
+                        </div>
+
+                        {/* Footer Details */}
+                        <div className="flex justify-between items-center text-[10px] text-white/40 mt-2 font-medium">
+                          <span>Джерело: {BUTTON_LABELS[getBaseButtonId(lead.button_id)] || getBaseButtonId(lead.button_id)}</span>
+                          <span>
+                            {new Date(lead.created_at).toLocaleDateString("uk-UA", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                            })}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
         ) : (
           /* Standard Leads Table view with premium features & custom select */
-          <div className="overflow-x-auto border border-white/5 rounded-xl">
-            {/* Click Outside overlay when dropdown is open */}
-            {activeDropdownId && (
-              <div
-                className="fixed inset-0 z-40 cursor-default"
-                onClick={() => setActiveDropdownId(null)}
-              />
-            )}
+          <div className="overflow-x-auto border border-white/5 rounded-xl min-h-[480px] pb-32">
 
             <table className="w-full border-collapse text-left text-xs relative">
               <thead>
@@ -707,7 +771,12 @@ export default function LeadsDashboard({
                       PIPELINE_STATUSES[0];
 
                     return (
-                      <tr key={lead.id} className="hover:bg-white/[0.01] transition-all group">
+                      <tr
+                        key={lead.id}
+                        className={`hover:bg-white/[0.01] transition-all group ${
+                          activeDropdownId === lead.id ? "relative z-30 bg-white/[0.02]" : ""
+                        }`}
+                      >
                         {/* Client Name & ID */}
                         <td className="p-4">
                           <div className="font-extrabold text-sm text-white group-hover:text-emerald-400 transition-colors">
@@ -760,7 +829,7 @@ export default function LeadsDashboard({
                         </td>
 
                         {/* Premium Capsule status Dropdown with color indicators (Module 4) */}
-                        <td className="p-4 text-center">
+                        <td className={`p-4 text-center ${activeDropdownId === lead.id ? "relative z-40" : ""}`}>
                           <div className="inline-block relative">
                             <button
                               disabled={updatingId === lead.id}

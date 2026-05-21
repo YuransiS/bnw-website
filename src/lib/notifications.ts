@@ -24,6 +24,7 @@ export class NotificationService {
   static async sendToTelegram(lead: NotificationLead): Promise<void> {
     const token = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = process.env.TELEGRAM_CHAT_ID;
+    const threadId = process.env.TELEGRAM_THREAD_ID;
 
     if (!token || !chatId) {
       console.warn(
@@ -50,15 +51,25 @@ export class NotificationService {
 
     try {
       const url = `https://api.telegram.org/bot${token}/sendMessage`;
+      
+      const payload: any = {
+        chat_id: chatId,
+        text: text,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+      };
+
+      if (threadId) {
+        const parsedThreadId = parseInt(threadId, 10);
+        if (!isNaN(parsedThreadId)) {
+          payload.message_thread_id = parsedThreadId;
+        }
+      }
+
       const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: text,
-          parse_mode: "HTML",
-          disable_web_page_preview: true,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {

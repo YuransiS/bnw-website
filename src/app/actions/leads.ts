@@ -29,7 +29,21 @@ export async function createLeadAction(input: LeadInput) {
 
     const supabase = await createClient();
 
-    // 2. Perform insert into leads database table
+    // 2. Perform backend duplicate check (same phone within last 24 hours)
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: existingLeads, error: checkError } = await supabase
+      .from("leads")
+      .select("id")
+      .eq("phone", phone.trim())
+      .gt("created_at", oneDayAgo);
+
+    if (checkError) {
+      console.error("[createLeadAction] Error checking duplicates:", checkError);
+    } else if (existingLeads && existingLeads.length > 0) {
+      return { error: "duplicate_lead" };
+    }
+
+    // 3. Perform insert into leads database table
     const { data: leadData, error: dbError } = await supabase
       .from("leads")
       .insert({
