@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/server";
 import { NotificationService } from "@/lib/notifications";
 
 interface LeadInput {
@@ -27,7 +27,7 @@ export async function createLeadAction(input: LeadInput) {
       return { error: "Будь ласка, вкажіть хоча б один спосіб зв'язку (Telegram або Instagram)." };
     }
 
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     // 2. Perform backend duplicate check (same phone within last 24 hours)
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
