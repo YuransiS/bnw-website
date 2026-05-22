@@ -187,7 +187,7 @@ export function Cases() {
           {casesData.map((item, idx) => (
             <div
               key={idx}
-              className="case-card-anim flex-shrink-0 w-[390px] min-h-[490px] snap-start bg-neutral-900/40 border border-white/5 rounded-[32px] p-8 flex flex-col justify-between hover:bg-neutral-900/80 hover:border-emerald-500/20 transition-all duration-500 backdrop-blur-xl group relative"
+              className="case-card-anim flex-shrink-0 w-[390px] min-h-[490px] snap-start bg-neutral-900/95 md:bg-neutral-900/40 border border-white/5 rounded-[32px] p-8 flex flex-col justify-between hover:bg-neutral-900/80 hover:border-emerald-500/20 transition-all duration-500 backdrop-blur-none md:backdrop-blur-xl group relative"
             >
               <div>
                 {/* Header: Clickable Avatar to Instagram */}
@@ -203,6 +203,8 @@ export function Cases() {
                       src={item.avatar}
                       alt={item.name}
                       className="w-full h-full object-cover group-hover/avatar:scale-110 transition-transform duration-500"
+                      loading="lazy"
+                      decoding="async"
                     />
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/avatar:opacity-100 flex items-center justify-center transition-opacity duration-300">
                       <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -283,7 +285,7 @@ export function Cases() {
           {casesData.map((item, idx) => (
             <div
               key={idx}
-              className="case-card-anim flex-shrink-0 w-[88vw] max-w-[330px] min-h-[410px] snap-center bg-neutral-900/40 border border-white/5 rounded-3xl p-6 flex flex-col justify-between backdrop-blur-md"
+              className="case-card-anim flex-shrink-0 w-[88vw] max-w-[330px] min-h-[410px] snap-center bg-neutral-900/95 border border-white/5 rounded-3xl p-6 flex flex-col justify-between backdrop-blur-none"
             >
               <div>
                 {/* Header */}
@@ -294,7 +296,7 @@ export function Cases() {
                     rel="noopener noreferrer"
                     className="relative w-12 h-12 rounded-full overflow-hidden border-2 border-white/10"
                   >
-                    <img src={item.avatar} alt={item.name} className="w-full h-full object-cover" />
+                    <img src={item.avatar} alt={item.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                   </a>
                   <div>
                     <div className="flex items-center gap-1">

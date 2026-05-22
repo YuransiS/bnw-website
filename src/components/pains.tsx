@@ -97,7 +97,7 @@ export function Pains() {
             <div
               key={idx}
               ref={(el) => { cardsRef.current[idx] = el; }}
-              className="group relative p-8 md:p-12 rounded-[32px] bg-neutral-900/40 border border-white/5 backdrop-blur-xl hover:bg-neutral-900/80 hover:border-emerald-500/20 hover:-translate-y-1 hover:shadow-[0_20px_50px_rgba(0,0,0,0.4)] transition-all duration-500 flex flex-col justify-between"
+              className="group relative p-8 md:p-12 rounded-[32px] bg-neutral-900/95 md:bg-neutral-900/40 border border-white/5 backdrop-blur-none md:backdrop-blur-xl hover:bg-neutral-900/80 hover:border-emerald-500/20 hover:-translate-y-1 hover:shadow-[0_20px_50px_rgba(0,0,0,0.4)] transition-all duration-500 flex flex-col justify-between"
             >
               {/* Radial gradient shine hover */}
               <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-750 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.03)_0%,transparent_70%)] rounded-[32px] pointer-events-none" />

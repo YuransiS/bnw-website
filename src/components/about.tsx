@@ -26,7 +26,7 @@ const team = [
 const principles = [
   { title: "Цифри замість інтуїції", text: "Ми не масштабуємо те, що «здається класним». Кожне рішення у проєкті спирається на наскрізну аналітику, конверсії та вартість цільової дії." },
   { title: "Гра вдовгу (Win-Win)", text: "Ми не робимо одноразові «випалені» запуски, щоб зірвати куш і зникнути. Наша ціль — побудувати вам інфраструктуру, яка стабільно приноситиме гроші роками." },
-  { title: "Партнерство в контенті", text: "Ми знімаємо з вас проблему «що сьогодні знімати, щоб купили». Ми готуємо сценарні плани, допомагаємо з упаковкою смислів та підказуємо робочі формати. Вам не потрібно вигадувати прогріви з нуля." }
+  { title: "Партнерство", text: "Ми зацікавлені у довгостроковій сумісній роботі, працюємо офіційно заключаючи договір. Найголовніший показник нашої компанії — це LTV наших клієнтів." }
 ];
 
 export function About() {
@@ -68,18 +68,16 @@ export function About() {
         </div>
 
         <div className="mb-24">
-          <p className="text-center text-lg md:text-xl font-bold text-white/80 mb-16 max-w-3xl mx-auto leading-relaxed">
-            Ми як чорне та біле — абсолютні протилежності, які закривають 100% циклу. Тверда системність Віктора та емоційні продажі Дмитра стали фундаментом для B&W Prod.
-          </p>
-
           <div className="flex flex-col gap-12 mb-16">
             {/* Victor Card */}
             <div className="flex flex-col md:flex-row rounded-[40px] overflow-hidden bg-neutral-900 border border-white/5 text-white transition-all duration-500 hover:border-emerald-500/20 group">
               <div className="w-full md:w-5/12 min-h-[350px] md:h-[450px] relative overflow-hidden bg-neutral-950">
                 <img
-                  src="/assets/victor.png"
+                  src="/assets/victor.webp"
                   alt="Віктор"
                   className="w-full h-full object-cover object-top group-hover:scale-105 transition-all duration-700"
+                  loading="lazy"
+                  decoding="async"
                 />
               </div>
               <div className="w-full md:w-7/12 p-8 md:p-12 flex flex-col justify-center bg-neutral-900">
@@ -92,9 +90,15 @@ export function About() {
                 <h4 className="text-lg md:text-xl font-bold mb-6 uppercase tracking-widest text-emerald-400/70">
                   Системи та аналітика
                 </h4>
-                <p className="text-base md:text-lg leading-relaxed text-white/60 group-hover:text-white/80 transition-colors duration-300">
-                  Співзасновник. Відповідає за «тверде»: цифри, метрики, архітектуру запусків та окупність. Керував запусками з обертом до $100 000. Будує продуктові лінійки та інфраструктуру, де все піддається оцифруванню, логіці та суворій аналітиці.
-                </p>
+                <a
+                  href="https://www.instagram.com/victor.petryk/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2.5 px-8 py-4 rounded-full bg-emerald-500 text-black font-black hover:bg-emerald-400 hover:scale-[1.03] active:scale-95 transition-all duration-300 shadow-[0_10px_30px_rgba(16,185,129,0.25)] cursor-pointer w-fit"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" x2="17.51" y1="6.5" y2="6.5" /></svg>
+                  Instagram Віктора
+                </a>
               </div>
             </div>
 
@@ -105,6 +109,8 @@ export function About() {
                   src="/assets/dmytro.webp"
                   alt="Дмитро"
                   className="w-full h-full object-cover object-top group-hover:scale-105 transition-all duration-700"
+                  loading="lazy"
+                  decoding="async"
                 />
               </div>
               <div className="w-full md:w-7/12 p-8 md:p-12 flex flex-col justify-center bg-white">
@@ -117,19 +123,17 @@ export function About() {
                 <h4 className="text-lg md:text-xl font-bold mb-6 uppercase tracking-widest text-neutral-500">
                   Сенси та продажі
                 </h4>
-                <p className="text-base md:text-lg leading-relaxed text-black/60 group-hover:text-black/80 transition-colors duration-300">
-                  Співзасновник. Відповідає за «м&apos;яке»: прогріви, дожими, продажі та розпаковку експертності. Особисто закривав угоди на $25 000 за тиждень та згенерував +80 000 підписників органікою. Знає, як конвертувати лояльність аудиторії в реальні гроші.
-                </p>
+                <a
+                  href="https://www.instagram.com/dimaoleinikkk/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2.5 px-8 py-4 rounded-full bg-black text-white font-black hover:bg-neutral-900 hover:scale-[1.03] active:scale-95 transition-all duration-300 shadow-[0_10px_30px_rgba(0,0,0,0.15)] border border-neutral-800 cursor-pointer w-fit"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" x2="17.51" y1="6.5" y2="6.5" /></svg>
+                  Instagram Дмитра
+                </a>
               </div>
             </div>
-          </div>
-
-          <div className="mt-8 p-10 md:p-14 rounded-[40px] bg-neutral-900/50 border border-white/10 backdrop-blur-xl relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-            <h3 className="text-2xl md:text-3xl font-black mb-6 uppercase tracking-tighter">Команда реалізації</h3>
-            <p className="text-white/60 text-lg md:text-xl max-w-4xl leading-relaxed">
-              За нами стоїть штат профільних спеціалістів — від техліда і дизайнера до таргетолога та відділу продажів. Ми розробляємо стратегію, а наша команда своїми руками верстає сайти, збирає ботів та супроводжує лідів до оплати. Ви отримуєте повноцінний production-відділ під ключ.
-            </p>
           </div>
         </div>
 

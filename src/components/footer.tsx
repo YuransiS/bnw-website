@@ -25,21 +25,33 @@ export function Footer() {
             <h4 className="text-sm font-bold text-neutral-500 uppercase tracking-widest mb-6">Контакти</h4>
             <ul className="space-y-4">
               <li>
-                <a href="mailto:diman658t58@gmail.com" className="flex items-center gap-3 text-white/70 hover:text-white transition-colors">
+                <a href="mailto:bnwprod3@gmail.com" className="flex items-center gap-3 text-white/70 hover:text-white transition-colors">
                   <Mail className="w-5 h-5" />
-                  Пошта
+                  bnwprod3@gmail.com
                 </a>
               </li>
               <li>
-                <a href="https://t.me/pan_producer" className="flex items-center gap-3 text-white/70 hover:text-white transition-colors">
+                <a href="https://t.me/victor_petryk" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-white/70 hover:text-white transition-colors">
                   <Send className="w-5 h-5" />
-                  Telegram
+                  Telegram Віктора
                 </a>
               </li>
               <li>
-                <a href="https://www.instagram.com/victor.petryk/" className="flex items-center gap-3 text-white/70 hover:text-white transition-colors">
+                <a href="https://t.me/pan_producer" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-white/70 hover:text-white transition-colors">
+                  <Send className="w-5 h-5" />
+                  Telegram Дмитра
+                </a>
+              </li>
+              <li>
+                <a href="https://www.instagram.com/victor.petryk/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-white/70 hover:text-white transition-colors">
                   <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" x2="17.51" y1="6.5" y2="6.5" /></svg>
-                  Instagram
+                  Instagram Віктора
+                </a>
+              </li>
+              <li>
+                <a href="https://www.instagram.com/dimaoleinikkk/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-white/70 hover:text-white transition-colors">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" x2="17.51" y1="6.5" y2="6.5" /></svg>
+                  Instagram Дмитра
                 </a>
               </li>
             </ul>

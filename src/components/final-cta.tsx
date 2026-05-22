@@ -11,9 +11,6 @@ export function FinalCTA() {
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none" />
 
       <div className="container mx-auto px-6 max-w-4xl relative z-10 text-center">
-        <p className="text-xl md:text-2xl text-white/70 max-w-2xl mx-auto mb-12 font-medium leading-relaxed">
-          Ми забираємо на себе всю операційку, щоб ви могли зосередитись на продукті.
-        </p>
         
         <div className="mb-12">
           <h2 className="text-4xl md:text-7xl font-black uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-emerald-400">

@@ -23,7 +23,7 @@ export function Header() {
   return (
     <header
       ref={headerRef}
-      className="fixed top-0 left-0 w-full z-50 py-4 px-6 md:px-12 flex justify-between items-center backdrop-blur-xl border-b border-white/5 bg-black/40"
+      className="fixed top-0 left-0 w-full z-50 py-4 px-6 md:px-12 flex justify-between items-center backdrop-blur-none md:backdrop-blur-xl border-b border-white/5 bg-black/90 md:bg-black/40"
     >
       <div className="text-xl md:text-2xl font-black tracking-tighter text-white">
         B&W <span className="text-white/50">Prod</span>

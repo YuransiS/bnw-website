@@ -49,7 +49,7 @@ export function TrustQuote() {
               <span className="text-emerald-500 drop-shadow-[0_0_10px_rgba(16,185,129,0.2)]">
                 відповідальність за результат
               </span>
-              : разом з вами ми затверджуємо план продажів та працюємо з вами до досягнення максимального результату»
+              : разом з вами ми затверджуємо план продажів та працюємо до досягнення максимального результату»
             </p>
             <footer className="quote-anim flex items-center gap-3 text-white/50 text-sm md:text-base font-medium uppercase tracking-wider">
               <span className="w-8 h-px bg-white/30 block" />

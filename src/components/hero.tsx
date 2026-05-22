@@ -57,10 +57,12 @@ export function Hero() {
         <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black z-10 lg:hidden" />
         
         <img 
-          src="/assets/hero.jpeg" 
+          src="/assets/hero.webp" 
           alt="B&W Founders" 
           className="w-full h-[60vh] md:h-full object-cover lg:w-1/2 lg:ml-auto grayscale opacity-40 lg:opacity-60 transition-opacity duration-1000 mt-20 md:mt-0"
           style={{ objectPosition: 'center 20%' }}
+          loading="eager"
+          decoding="async"
         />
 
         {/* Floating Dollars Animation Layer */}
@@ -92,8 +94,10 @@ export function Hero() {
         <div className="flex flex-col lg:flex-row items-center lg:items-start gap-12">
           
           <div className="max-w-4xl space-y-6">
-            <h1 className="hero-elem text-3xl md:text-5xl lg:text-6xl font-black tracking-tighter leading-[1.1] mb-6" style={{ textShadow: "0 10px 40px rgba(0,0,0,0.5)" }}>
-              Створюємо під ключ <span className="text-emerald-500 drop-shadow-[0_0_20px_rgba(16,185,129,0.4)] uppercase">систему експертам</span>, яка приносить прибуток <span className="whitespace-nowrap">$10k–$30k+/місяць</span> через системний маркетинг та продюсування
+            <h1 className="hero-elem text-3xl md:text-5xl lg:text-6xl font-black tracking-tighter leading-[1.25] mb-6" style={{ textShadow: "0 10px 40px rgba(0,0,0,0.5)" }}>
+              <span className="block mb-3">Створюємо під ключ <span className="text-emerald-500 drop-shadow-[0_0_20px_rgba(16,185,129,0.4)] uppercase">систему для експерта</span></span>
+              <span className="block mb-3">яка приносить прибуток <span className="text-emerald-500 whitespace-nowrap">$10k–$30k+/місяць</span></span>
+              <span className="block text-white/90 text-xl md:text-3xl lg:text-4xl font-extrabold tracking-tight">через системний маркетинг та продюсування</span>
             </h1>
 
             <p className="hero-elem text-base md:text-lg lg:text-xl text-white/70 max-w-3xl mb-10 font-medium leading-relaxed">

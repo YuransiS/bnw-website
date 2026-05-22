@@ -109,7 +109,7 @@ export function SystemScheme() {
   }, []);
 
   return (
-    <section ref={containerRef} className="relative py-24 md:py-32 bg-black text-white overflow-hidden">
+    <section ref={containerRef} className="relative py-24 md:py-32 bg-black text-white overflow-hidden hidden md:block">
       {/* Background Glows */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-emerald-500/[0.03] rounded-full blur-[130px] pointer-events-none" />
 
