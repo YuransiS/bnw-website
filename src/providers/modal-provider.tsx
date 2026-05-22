@@ -123,7 +123,7 @@ function LeadModal() {
     if (submittedAt) {
       const elapsed = Date.now() - parseInt(submittedAt, 10);
       if (elapsed < 24 * 60 * 60 * 1000) {
-        setError("Лид уже есть");
+        setError("Ми вже отримали вашу заявку і скоро з вами зв'яжемось.");
         return;
       }
     }
@@ -144,7 +144,7 @@ function LeadModal() {
     setIsSubmitting(true);
     try {
       const visitorId = localStorage.getItem("visitor_id") || crypto.randomUUID();
-      
+
       // Call Server Action
       const res = await createLeadAction({
         name: name.trim(),
@@ -158,7 +158,7 @@ function LeadModal() {
       if (res.error) {
         if (res.error === "duplicate_lead") {
           localStorage.setItem("lead_submitted_at", Date.now().toString());
-          setError("Лид уже есть");
+          setError("Ми вже отримали вашу заявку і скоро з вами зв'яжемось.");
           return;
         }
         throw new Error(res.error);

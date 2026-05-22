@@ -67,7 +67,7 @@ export function Metrics() {
 
           {/* CTA Button Block */}
           <div className="metric-card w-full flex flex-col items-center">
-            <button 
+            <button
               onClick={() => openModal("metrics_cta")}
               className="w-full md:w-auto px-10 py-5 rounded-full bg-white text-black font-bold text-lg hover:bg-neutral-200 hover:scale-[1.02] active:scale-95 transition-all duration-300 shadow-[0_0_30px_rgba(255,255,255,0.25)] cursor-pointer"
             >

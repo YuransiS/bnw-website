@@ -34,9 +34,9 @@ export function SystemFocus() {
     <section className="relative py-24 md:py-32 bg-black text-white overflow-hidden">
       {/* Background Glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] md:w-[600px] md:h-[600px] bg-emerald-500/5 rounded-full blur-[120px] pointer-events-none z-0" />
-      
+
       <div className="container mx-auto px-6 max-w-5xl relative z-10">
-        <div 
+        <div
           ref={elementRef}
           className="text-center max-w-4xl mx-auto p-8 md:p-16 rounded-[32px] bg-gradient-to-b from-neutral-900/60 to-black/40 border border-white/10 shadow-2xl backdrop-blur-xl"
         >
