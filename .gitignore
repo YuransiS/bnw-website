@@ -42,3 +42,8 @@ next-env.d.ts
 
 .Експертність.md
 .Правки_2md.md
+*.png
+*.mp4
+*.webp
+*.jpg
+*.jpeg
