@@ -69,16 +69,8 @@ export function HeroMobile() {
         transition={{ type: "spring", stiffness: 50, damping: 15, delay: 0.4 }}
         className="relative z-20 w-full flex flex-col mt-auto"
       >
-        {/* Category badge */}
-        <div className="flex items-center gap-2 mb-3">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
-          <span className="text-[9px] font-black tracking-[0.2em] text-white/40 uppercase font-mono">
-            Преміум-продюсування експертів
-          </span>
-        </div>
-
         {/* Heading: beautifully separated blocks for clear semantic structure */}
-        <h1 className="text-[28px] font-black tracking-tighter leading-[1.22] mb-4 text-white" style={{ textShadow: "0 10px 40px rgba(0,0,0,0.6)" }}>
+        <h1 className="text-[32px] font-black tracking-tighter leading-[1.18] mb-4 text-white" style={{ textShadow: "0 10px 40px rgba(0,0,0,0.6)" }}>
           <span className="block mb-2">
             Створюємо під ключ{" "}
             <span className="text-emerald-500 drop-shadow-[0_0_15px_rgba(16,185,129,0.35)] uppercase">
@@ -91,7 +83,7 @@ export function HeroMobile() {
               $10k–$30k+/місяць
             </span>
           </span>
-          <span className="block text-white/90 text-[19px] font-bold tracking-tight mt-3.5 leading-snug">
+          <span className="block text-white/90 text-[21px] font-bold tracking-tight mt-3.5 leading-snug">
             через системний маркетинг та продюсування
           </span>
         </h1>
