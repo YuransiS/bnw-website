@@ -15,7 +15,7 @@ const casesData = [
     niche: "Експерт по візуалу",
     point_a: "Останні запуски на 2–3к$, вигоріла аудиторія, мало заявок, продажі в переписці з низькою конверсією, тягнула все на собі",
     point_b: "1 987 000 грн ($45 000) продажів за останні 3 місяці",
-    avatar: "/assets/expert-victoria.jpg",
+    avatar: "https://mfyrftpdhprjyouyjecd.supabase.co/storage/v1/object/public/assets/expert-victoria.jpg",
     instagram: "https://www.instagram.com/victoria_meshcheriakova/"
   },
   {
@@ -23,7 +23,7 @@ const casesData = [
     niche: "Експерт з тейпування",
     point_a: "Останні запуски на 2–3к$, заявки є, але продажі в переписці з низькою конверсією, кожен запуск = вигорання",
     point_b: "1 473 000 грн ($33 355) за 3 місяці",
-    avatar: "/assets/expert-svitlana.jpg",
+    avatar: "https://mfyrftpdhprjyouyjecd.supabase.co/storage/v1/object/public/assets/expert-svitlana.jpg",
     instagram: "https://www.instagram.com/svitlana_tape/"
   },
   {
@@ -31,16 +31,16 @@ const casesData = [
     niche: "ніша — інвестиції",
     point_a: "Запуски до 5к$, відсутність флагману, воронки не давали заявок, нерозуміння як масштабуватися",
     point_b: "Перший запуск з нами на 930 000 грн ($21 137) за 2 місяці",
-    avatar: "/assets/nda-avatar.png",
+    avatar: "https://mfyrftpdhprjyouyjecd.supabase.co/storage/v1/object/public/assets/nda-avatar.png",
     instagram: "#",
     isNda: true
   },
   {
     name: "Валерія",
     niche: "AI-креатор",
-    point_a: "Продажів на 1000$/місяць з міні-продукту, відсутність флагману, нерозуміння як масштабуватися",
+    point_a: "Продажів на 1000$/місяць з міні-продукту, відсутність флагману, нерозуміння как масштабуватися",
     point_b: "630 946 грн ($14 265), солдаут нового продукту",
-    avatar: "/assets/expert-pix.jpg",
+    avatar: "https://mfyrftpdhprjyouyjecd.supabase.co/storage/v1/object/public/assets/expert-pix.jpg",
     instagram: "https://www.instagram.com/pix_ai_ua/"
   },
   {
@@ -48,7 +48,7 @@ const casesData = [
     niche: "Монетизація блогу",
     point_a: "Запуски на 5000$ за 2 місяці, все робить сама, воронки не конвертують заявок",
     point_b: "964 019 грн ($21 730) за 3 місяці (Фактична каса: 803 969 грн + Доплати: 160 050 грн)",
-    avatar: "/assets/vlada.jpg",
+    avatar: "https://mfyrftpdhprjyouyjecd.supabase.co/storage/v1/object/public/assets/vlada.jpg",
     instagram: "https://www.instagram.com/vladyslava.tsarenko/"
   },
   {
@@ -56,7 +56,7 @@ const casesData = [
     niche: "Міжнародний товарний бізнес (Etsy & Shopify)",
     point_a: "Запуски на 7000–10 000$, вигорів робити все сам, продажі та контент без системи, вперся в стелю результатів",
     point_b: "140 000$ за 9 місяців",
-    avatar: "/assets/expert-stas.jpg",
+    avatar: "https://mfyrftpdhprjyouyjecd.supabase.co/storage/v1/object/public/assets/expert-stas.jpg",
     instagram: "https://www.instagram.com/stanislav.gunya/",
     casePost: "https://www.instagram.com/p/DNP8hmGM7L_/?utm_source=ig_web_button_share_sheet&igsh=MzRlODBiNWFlZA=="
   }

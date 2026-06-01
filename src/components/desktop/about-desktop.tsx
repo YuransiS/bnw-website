@@ -56,7 +56,7 @@ export function AboutDesktop() {
             <div className="flex flex-row rounded-[40px] overflow-hidden bg-neutral-900 border border-white/5 text-white transition-all duration-500 hover:border-emerald-500/20 group">
               <div className="w-5/12 h-[450px] relative overflow-hidden bg-neutral-950">
                 <img
-                  src="/assets/victor.webp"
+                  src="https://mfyrftpdhprjyouyjecd.supabase.co/storage/v1/object/public/assets/victor.webp"
                   alt="Віктор"
                   className="w-full h-full object-cover object-top group-hover:scale-105 transition-all duration-700"
                   loading="lazy"
@@ -87,7 +87,7 @@ export function AboutDesktop() {
             <div className="flex flex-row-reverse rounded-[40px] overflow-hidden bg-white text-black transition-all duration-500 hover:shadow-[0_0_30px_rgba(255,255,255,0.05)] group">
               <div className="w-5/12 h-[450px] relative overflow-hidden bg-neutral-100">
                 <img
-                  src="/assets/dmytro.webp"
+                  src="https://mfyrftpdhprjyouyjecd.supabase.co/storage/v1/object/public/assets/dmytro.webp"
                   alt="Дмитро"
                   className="w-full h-full object-cover object-top group-hover:scale-105 transition-all duration-700"
                   loading="lazy"

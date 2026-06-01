@@ -27,7 +27,7 @@ export function AboutMobile() {
           <div className="flex flex-col rounded-3xl overflow-hidden bg-neutral-900 border border-white/5 text-white">
             <div className="w-full min-h-[300px] relative bg-neutral-950">
               <img
-                src="/assets/victor.webp"
+                src="https://mfyrftpdhprjyouyjecd.supabase.co/storage/v1/object/public/assets/victor.webp"
                 alt="Віктор"
                 className="w-full h-full object-cover object-top"
                 loading="lazy"
@@ -58,7 +58,7 @@ export function AboutMobile() {
           <div className="flex flex-col rounded-3xl overflow-hidden bg-white text-black">
             <div className="w-full min-h-[300px] relative bg-neutral-100">
               <img
-                src="/assets/dmytro.webp"
+                src="https://mfyrftpdhprjyouyjecd.supabase.co/storage/v1/object/public/assets/dmytro.webp"
                 alt="Дмитро"
                 className="w-full h-full object-cover object-top"
                 loading="lazy"

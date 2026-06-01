@@ -11,19 +11,19 @@ const expertiseList = [
     title: "Стратегія та Контент",
     subtitle: "Фундамент вашого росту",
     text: "Проводимо глибокий аналіз поточної моделі, упаковуємо бренд та продукт. Створюємо сценарії для прогрівів, готуємо рекламні креативи та працюємо з вашою медійністю. Ми знімаємо головний біль «що знімати, щоб купували».",
-    image: "/assets/exp-strategy.png"
+    image: "https://mfyrftpdhprjyouyjecd.supabase.co/storage/v1/object/public/assets/exp-strategy.png"
   },
   {
     title: "Технічна інфраструктура",
     subtitle: "Система, що працює 24/7",
     text: "Збираємо лендінги та проєктуємо складні автоворонки. Налаштовуємо чат-боти, підключаємо платіжні системи та вибудовуємо архітектуру повідомлень, яка гріє та конвертує холодний трафік без вашої участі.",
-    image: "/assets/exp-tech.png"
+    image: "https://mfyrftpdhprjyouyjecd.supabase.co/storage/v1/object/public/assets/exp-tech.png"
   },
   {
     title: "Трафік та Продажі",
     subtitle: "Твердий результат у цифрах",
     text: "Заливаємо цільовий трафік та керуємо рекламними кампаніями. Наш відділ продажів обробляє заявки за скриптами та супроводжує лідів до оплати. Ми контролюємо кожен показник (ROI, ROMI) та системно масштабуємо прибуток.",
-    image: "/assets/exp-traffic.png"
+    image: "https://mfyrftpdhprjyouyjecd.supabase.co/storage/v1/object/public/assets/exp-traffic.png"
   }
 ];
 
