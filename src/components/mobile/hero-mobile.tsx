@@ -15,7 +15,7 @@ export function HeroMobile() {
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/90 to-transparent z-10" />
 
         <img
-          src="/assets/hero-bg-mobile.png"
+          src="https://mfyrftpdhprjyouyjecd.supabase.co/storage/v1/object/public/assets/hero-bg-mobile.png"
           alt="B&W Premium Background Mobile"
           className="w-full h-full object-cover opacity-85"
           loading="eager"

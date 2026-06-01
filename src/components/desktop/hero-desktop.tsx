@@ -56,7 +56,7 @@ export function HeroDesktop() {
         <div className="absolute inset-0 bg-gradient-to-r from-black via-transparent to-transparent z-10" />
 
         <img
-          src="/assets/hero-bg-desktop.png"
+          src="https://mfyrftpdhprjyouyjecd.supabase.co/storage/v1/object/public/assets/hero-bg-desktop.png"
           alt="B&W Premium Background"
           className="w-full h-full object-cover opacity-80 transition-opacity duration-1000"
           loading="eager"
