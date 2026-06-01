@@ -49,17 +49,16 @@ export function HeroDesktop() {
       <div className="absolute top-1/3 left-0 w-96 h-96 bg-white/5 rounded-full blur-[130px] bg-orb pointer-events-none z-0" />
       <div className="absolute bottom-1/4 right-0 w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-[150px] bg-orb pointer-events-none z-0" />
 
-      {/* Founders Background Image - Full Screen Depth */}
+      {/* Premium Background Image - Full Screen Depth */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
         {/* Deep masking for cinematic blend */}
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-black/20 z-10" />
         <div className="absolute inset-0 bg-gradient-to-r from-black via-transparent to-transparent z-10" />
 
         <img
-          src="/assets/hero.webp"
-          alt="B&W Founders"
-          className="w-full h-full object-cover lg:w-1/2 lg:ml-auto grayscale lg:opacity-60 transition-opacity duration-1000"
-          style={{ objectPosition: 'center 20%' }}
+          src="/assets/hero-bg-desktop.png"
+          alt="B&W Premium Background"
+          className="w-full h-full object-cover opacity-80 transition-opacity duration-1000"
           loading="eager"
           decoding="async"
         />
