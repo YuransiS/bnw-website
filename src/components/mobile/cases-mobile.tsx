@@ -1,8 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { ArrowRight, ExternalLink } from "lucide-react";
 import { useModal } from "@/providers/modal-provider";
+import { AnimatePresence, motion } from "framer-motion";
 
 const casesData = [
   {
@@ -22,24 +23,25 @@ const casesData = [
     instagram: "https://www.instagram.com/svitlana_tape/"
   },
   {
-    name: "Софія",
-    niche: "Фінансовий експерт",
+    name: "Під NDA",
+    niche: "ніша — інвестиції",
     point_a: "Запуски до 5к$, відсутність флагману, воронки не давали заявок, нерозуміння як масштабуватися",
     point_b: "Перший запуск з нами на 930 000 грн ($21 137) за 2 місяці",
-    avatar: "/assets/expert-sofi.jpg",
-    instagram: "https://www.instagram.com/sofi.finsight/"
+    avatar: "/assets/nda-avatar.png",
+    instagram: "#",
+    isNda: true
   },
   {
     name: "Валерія",
     niche: "AI-креатор",
-    point_a: "Продажів на 1000$/місяць з міні-продукту, відсутність флагману, нерозуміння як масштабуватися",
+    point_a: "Продажів на 1000$/місяць з міні-продукту, відсутність флагману, нерозуміння как масштабуватися",
     point_b: "630 946 грн ($14 265), солдаут нового продукту",
     avatar: "/assets/expert-pix.jpg",
     instagram: "https://www.instagram.com/pix_ai_ua/"
   },
   {
     name: "Влада",
-    niche: "Бізнес-коуч",
+    niche: "Монетизація блогу",
     point_a: "Запуски на 5000$ за 2 місяці, все робить сама, воронки не конвертують заявок",
     point_b: "964 019 грн ($21 730) за 3 місяці (Фактична каса: 803 969 грн + Доплати: 160 050 грн)",
     avatar: "/assets/vlada.jpg",
@@ -58,6 +60,7 @@ const casesData = [
 
 export function CasesMobile() {
   const { openModal } = useModal();
+  const [showNdaModal, setShowNdaModal] = useState(false);
 
   return (
     <section id="cases-mob" className="relative py-16 bg-black text-white overflow-hidden">
@@ -86,20 +89,41 @@ export function CasesMobile() {
               <div>
                 {/* Header */}
                 <div className="flex items-center gap-4 mb-4">
-                  <a
-                    href={item.instagram}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="relative w-12 h-12 rounded-full overflow-hidden border border-white/10 shrink-0"
-                  >
-                    <img src={item.avatar} alt={item.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
-                  </a>
+                  {item.isNda ? (
+                    <button
+                      onClick={() => setShowNdaModal(true)}
+                      className="relative w-12 h-12 rounded-full overflow-hidden border border-white/10 shrink-0 cursor-pointer"
+                    >
+                      <img src={item.avatar} alt={item.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
+                    </button>
+                  ) : (
+                    <a
+                      href={item.instagram}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="relative w-12 h-12 rounded-full overflow-hidden border border-white/10 shrink-0"
+                    >
+                      <img src={item.avatar} alt={item.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
+                    </a>
+                  )}
                   <div>
                     <div className="flex items-center gap-1">
                       <h3 className="font-bold text-lg leading-tight">{item.name}</h3>
-                      <a href={item.instagram} target="_blank" rel="noopener noreferrer" className="text-white/40">
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
+                      {item.isNda ? (
+                        <button
+                          onClick={() => setShowNdaModal(true)}
+                          className="text-white/40 hover:text-white transition-colors cursor-pointer"
+                        >
+                          <svg className="w-3.5 h-3.5 text-white/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                          </svg>
+                        </button>
+                      ) : (
+                        <a href={item.instagram} target="_blank" rel="noopener noreferrer" className="text-white/40">
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      )}
                     </div>
                     <p className="text-[10px] text-white/40 font-bold uppercase tracking-wider mt-0.5">{item.niche}</p>
                   </div>
@@ -150,6 +174,45 @@ export function CasesMobile() {
           </div>
         </div>
       </div>
+
+      {/* NDA Explanation Modal */}
+      <AnimatePresence>
+        {showNdaModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-5">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowNdaModal(false)}
+              className="absolute inset-0 bg-black/85 backdrop-blur-md"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="relative z-10 w-full max-w-sm overflow-hidden rounded-3xl border border-white/10 bg-[#0C0C0F]/90 p-8 text-center text-white shadow-2xl backdrop-blur-xl"
+            >
+              <div className="absolute -top-24 -left-24 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="w-14 h-14 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center mx-auto mb-5 shadow-[0_0_20px_rgba(16,185,129,0.15)]">
+                <svg className="w-6 h-6 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-black uppercase mb-2 tracking-tight">Дані під NDA</h3>
+              <p className="text-white/60 text-xs leading-relaxed mb-6 font-medium">
+                Ми поважаємо конфіденційність наших партнерів. Згідно з угодою про нерозголошення (NDA), персональні дані експерта та посилання на профіль повністю приховані.
+              </p>
+              <button
+                onClick={() => setShowNdaModal(false)}
+                className="w-full py-3.5 rounded-full bg-white text-black font-bold text-xs shadow-[0_0_15px_rgba(255,255,255,0.15)] cursor-pointer"
+              >
+                Зрозуміло
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </section>
   );
 }

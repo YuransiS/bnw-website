@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { ArrowRight, ExternalLink } from "lucide-react";
 import { useModal } from "@/providers/modal-provider";
+import { AnimatePresence, motion } from "framer-motion";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -26,12 +27,13 @@ const casesData = [
     instagram: "https://www.instagram.com/svitlana_tape/"
   },
   {
-    name: "Софія",
-    niche: "Фінансовий експерт",
+    name: "Під NDA",
+    niche: "ніша — інвестиції",
     point_a: "Запуски до 5к$, відсутність флагману, воронки не давали заявок, нерозуміння як масштабуватися",
     point_b: "Перший запуск з нами на 930 000 грн ($21 137) за 2 місяці",
-    avatar: "/assets/expert-sofi.jpg",
-    instagram: "https://www.instagram.com/sofi.finsight/"
+    avatar: "/assets/nda-avatar.png",
+    instagram: "#",
+    isNda: true
   },
   {
     name: "Валерія",
@@ -43,7 +45,7 @@ const casesData = [
   },
   {
     name: "Влада",
-    niche: "Бізнес-коуч",
+    niche: "Монетизація блогу",
     point_a: "Запуски на 5000$ за 2 місяці, все робить сама, воронки не конвертують заявок",
     point_b: "964 019 грн ($21 730) за 3 місяці (Фактична каса: 803 969 грн + Доплати: 160 050 грн)",
     avatar: "/assets/vlada.jpg",
@@ -64,6 +66,7 @@ export function CasesDesktop() {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const { openModal } = useModal();
+  const [showNdaModal, setShowNdaModal] = useState(false);
 
   // GSAP animation
   useEffect(() => {
@@ -189,34 +192,69 @@ export function CasesDesktop() {
               <div>
                 {/* Header */}
                 <div className="flex items-center gap-4 mb-6">
-                  <a
-                    href={item.instagram}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="relative w-16 h-16 rounded-full overflow-hidden border-2 border-white/10 hover:border-emerald-500 transition-colors duration-300 group/avatar block"
-                    title="Перейти в Instagram"
-                  >
-                    <img
-                      src={item.avatar}
-                      alt={item.name}
-                      className="w-full h-full object-cover group-hover/avatar:scale-110 transition-transform duration-500"
-                      loading="lazy"
-                      decoding="async"
-                    />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/avatar:opacity-100 flex items-center justify-center transition-opacity duration-300">
-                      <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
-                        <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
-                        <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
-                      </svg>
-                    </div>
-                  </a>
+                  {item.isNda ? (
+                    <button
+                      onClick={() => setShowNdaModal(true)}
+                      className="relative w-16 h-16 rounded-full overflow-hidden border-2 border-white/10 hover:border-emerald-500 transition-colors duration-300 group/avatar block cursor-pointer"
+                      title="Кейс під NDA"
+                    >
+                      <img
+                        src={item.avatar}
+                        alt={item.name}
+                        className="w-full h-full object-cover group-hover/avatar:scale-110 transition-transform duration-500"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/avatar:opacity-100 flex items-center justify-center transition-opacity duration-300">
+                        <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                        </svg>
+                      </div>
+                    </button>
+                  ) : (
+                    <a
+                      href={item.instagram}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="relative w-16 h-16 rounded-full overflow-hidden border-2 border-white/10 hover:border-emerald-500 transition-colors duration-300 group/avatar block"
+                      title="Перейти в Instagram"
+                    >
+                      <img
+                        src={item.avatar}
+                        alt={item.name}
+                        className="w-full h-full object-cover group-hover/avatar:scale-110 transition-transform duration-500"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/avatar:opacity-100 flex items-center justify-center transition-opacity duration-300">
+                        <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+                          <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                          <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+                        </svg>
+                      </div>
+                    </a>
+                  )}
                   <div>
                     <div className="flex items-center gap-1.5">
                       <h3 className="font-extrabold text-2xl">{item.name}</h3>
-                      <a href={item.instagram} target="_blank" rel="noopener noreferrer" className="text-white/30 hover:text-emerald-500 transition-colors">
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
+                      {item.isNda ? (
+                        <button
+                          onClick={() => setShowNdaModal(true)}
+                          className="text-white/30 hover:text-emerald-500 transition-colors cursor-pointer animate-pulse"
+                          title="Кейс під NDA"
+                        >
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                          </svg>
+                        </button>
+                      ) : (
+                        <a href={item.instagram} target="_blank" rel="noopener noreferrer" className="text-white/30 hover:text-emerald-500 transition-colors">
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                      )}
                     </div>
                     <p className="text-sm text-white/40 font-semibold uppercase tracking-wider mt-0.5">{item.niche}</p>
                   </div>
@@ -275,6 +313,45 @@ export function CasesDesktop() {
           </div>
         </div>
       </div>
+
+      {/* NDA Explanation Modal */}
+      <AnimatePresence>
+        {showNdaModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-5">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowNdaModal(false)}
+              className="absolute inset-0 bg-black/85 backdrop-blur-md"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="relative z-10 w-full max-w-md overflow-hidden rounded-[32px] border border-white/10 bg-[#0C0C0F]/90 p-10 text-center text-white shadow-2xl backdrop-blur-xl"
+            >
+              <div className="absolute -top-24 -left-24 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="w-16 h-16 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center mx-auto mb-6 shadow-[0_0_25px_rgba(16,185,129,0.15)]">
+                <svg className="w-8 h-8 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+              </div>
+              <h3 className="text-2xl font-black uppercase mb-3 tracking-tight">Дані під NDA</h3>
+              <p className="text-white/60 text-sm leading-relaxed mb-8 font-medium">
+                Ми поважаємо конфіденційність наших партнерів. Згідно з угодою про нерозголошення (NDA), персональні дані експерта та посилання на профіль повністю приховані.
+              </p>
+              <button
+                onClick={() => setShowNdaModal(false)}
+                className="w-full py-4 rounded-full bg-white text-black font-bold text-sm hover:bg-neutral-200 transition-all cursor-pointer shadow-[0_0_20px_rgba(255,255,255,0.15)]"
+              >
+                Зрозуміло
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </section>
   );
 }
