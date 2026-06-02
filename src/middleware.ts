@@ -6,11 +6,15 @@ export async function middleware(request: NextRequest) {
   const url = request.nextUrl.clone();
   const hostname = request.headers.get("host") || "";
 
+  // Check if it's the auth callback path (we must NOT rewrite or protect this path)
+  const isAuthCallback = url.pathname === "/auth/callback" || url.pathname.startsWith("/auth/callback") || url.pathname.startsWith("/admin/auth/callback");
+
   // 1. Determine if it's an admin subdomain or adm parameter (for local testing)
   const isAdminSubdomain =
-    hostname.startsWith("admin.") ||
-    hostname.startsWith("bnw-admin.") ||
-    (hostname.includes("localhost") && url.searchParams.has("adm"));
+    !isAuthCallback &&
+    (hostname.startsWith("admin.") ||
+      hostname.startsWith("bnw-admin.") ||
+      (hostname.includes("localhost") && url.searchParams.has("adm")));
 
   // 2. Setup internal rewrite path if on the admin subdomain
   let rewrittenPath = url.pathname;
@@ -27,7 +31,7 @@ export async function middleware(request: NextRequest) {
 
   const isTargetingAdmin = rewrittenPath.startsWith("/admin");
 
-  if (isTargetingAdmin) {
+  if (isTargetingAdmin && !isAuthCallback) {
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,

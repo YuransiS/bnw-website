@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
 import { KeyRound, Mail, Loader2, ArrowRight, LogIn, UserPlus } from "lucide-react";
@@ -13,6 +13,16 @@ export default function AdminLoginPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const urlError = params.get("error");
+      if (urlError === "auth-callback-failed") {
+        setError("Помилка авторизації: не вдалося обміняти тимчасовий код на сесію. Спробуйте ще раз або зверніться до адміністратора.");
+      }
+    }
+  }, []);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,7 +72,7 @@ export default function AdminLoginPage() {
           router.refresh();
         }, 1500);
       } else {
-        setSuccess("Дякуємо за реєстрацію! Якщо потрібно підтвердити пошту, перевірте свою скриньку.");
+        setSuccess("Лист із посиланням для підтвердження відправлено на вашу пошту. Після підтвердження вас буде автоматично авторизовано.");
         setIsLoading(false);
       }
     } catch (err: any) {
@@ -232,6 +242,7 @@ export default function AdminLoginPage() {
 
         {/* Google OAuth Button */}
         <button
+          type="button"
           onClick={handleGoogleSignIn}
           disabled={isLoading}
           className="w-full py-3.5 rounded-full bg-white/[0.02] hover:bg-white/[0.05] border border-white/10 text-white font-bold transition-all cursor-pointer hover:scale-[1.01] active:scale-95 duration-300 flex items-center justify-center gap-2.5 text-sm"
