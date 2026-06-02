@@ -1,5 +1,5 @@
 import React from "react";
-import { createClient } from "@/utils/supabase/server";
+import { createClient, createAdminClient } from "@/utils/supabase/server";
 import SettingsForm from "./SettingsForm";
 import Link from "next/link";
 import { ShieldX } from "lucide-react";
@@ -8,6 +8,7 @@ export const revalidate = 0;
 
 export default async function AdminSettingsPage() {
   const supabase = await createClient();
+  const adminSupabase = createAdminClient();
 
   // 1. Authenticate user session
   const {
@@ -18,38 +19,36 @@ export default async function AdminSettingsPage() {
     return null; // Next.js middleware will trigger a redirect to login page
   }
 
-  // 2. Fetch privilege details
-  let { data: profile } = await supabase
+  // 2. Fetch privilege details using admin client to bypass RLS latency
+  let { data: profile } = await adminSupabase
     .from("profiles")
     .select("role")
     .eq("id", user.id)
     .single();
 
-  // Auto-provision or auto-upgrade developer emails to 'admin' role
+  // Auto-provision or auto-upgrade developer emails to 'superman' / 'admin' role
   const devEmails = ["yura3zaxar@outlook.com", "yura3zaxar@gmail.com"];
-  if (user.email && devEmails.includes(user.email.toLowerCase()) && (!profile || profile.role !== "admin")) {
+  if (user.email && devEmails.includes(user.email.toLowerCase()) && (!profile || (profile.role !== "admin" && profile.role !== "superman"))) {
     try {
-      const { createAdminClient } = await import("@/utils/supabase/server");
-      const adminSupabase = createAdminClient();
       await adminSupabase.from("profiles").upsert({
         id: user.id,
         email: user.email.toLowerCase(),
-        role: "admin",
+        role: "superman",
       });
       // Re-fetch privilege details
-      const { data: updatedProfile } = await supabase
+      const { data: updatedProfile } = await adminSupabase
         .from("profiles")
         .select("role")
         .eq("id", user.id)
         .single();
       profile = updatedProfile;
     } catch (e) {
-      console.error("Failed to auto-upgrade user to admin role in settings page:", e);
+      console.error("Failed to auto-upgrade user to superman role in settings page:", e);
     }
   }
 
-  // 3. Strict gate check - Only Admins allowed in Settings
-  if (profile?.role !== "admin") {
+  // 3. Strict gate check - Only Superman (Admin) allowed in Settings
+  if (profile?.role !== "admin" && profile?.role !== "superman") {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 font-sans">
         <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500/20 text-red-500 flex items-center justify-center mb-6 shadow-[0_0_20px_rgba(239,68,68,0.1)]">
@@ -59,7 +58,7 @@ export default async function AdminSettingsPage() {
           403 Доступ заборонено
         </h1>
         <p className="text-white/50 text-sm max-w-sm leading-relaxed mb-8">
-          У вас немає адміністративних прав для перегляду та керування налаштуваннями CRM.
+          У вас немає прав Супермена для керування доступами холдингу B&W.
         </p>
         <Link
           href="/admin"
@@ -71,16 +70,24 @@ export default async function AdminSettingsPage() {
     );
   }
 
-  // 4. Fetch team members profiles
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select("id, email, role")
-    .order("email");
+  // 4. Fetch team members profiles, projects list, and mapping in parallel
+  // Use admin client to bypass RLS for administrative commands
+  const [profilesRes, projectsRes, mappingRes] = await Promise.all([
+    adminSupabase.from("profiles").select("id, email, role").order("email"),
+    adminSupabase.from("projects").select("id, name, slug").order("name"),
+    adminSupabase.from("profile_projects").select("profile_id, project_id"),
+  ]);
+
+  const profiles = profilesRes.data || [];
+  const projects = projectsRes.data || [];
+  const profileProjects = mappingRes.data || [];
 
   return (
     <SettingsForm
       currentUserId={user.id}
-      profiles={profiles || []}
+      profiles={profiles}
+      projects={projects}
+      profileProjects={profileProjects}
     />
   );
 }

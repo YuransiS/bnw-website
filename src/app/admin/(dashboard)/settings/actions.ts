@@ -3,7 +3,7 @@
 import { createClient, createAdminClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
 
-// Helper function to verify that the calling user is an Admin
+// Helper function to verify that the calling user is a Superman (Admin)
 async function verifyAdminAccess() {
   const supabase = await createClient();
   const {
@@ -14,27 +14,64 @@ async function verifyAdminAccess() {
     throw new Error("Неавторизовано. Будь ласка, увійдіть.");
   }
 
-  const { data: profile } = await supabase
+  const adminSupabase = createAdminClient();
+  const { data: profile } = await adminSupabase
     .from("profiles")
     .select("role")
     .eq("id", user.id)
     .single();
 
-  if (profile?.role !== "admin") {
+  if (profile?.role !== "admin" && profile?.role !== "superman") {
     throw new Error("403 Доступ заборонено.");
   }
 
   return user.id;
 }
 
-// 1. Create a new user (Admin or Manager)
+// 1. Get all available projects from the DB
+export async function getProjectsList() {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("projects")
+      .select("id, name, slug")
+      .order("name");
+    
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error("Failed to fetch projects list:", err);
+    return [];
+  }
+}
+
+// 2. Get projects assigned to a specific profile
+export async function getUserProjects(profileId: string): Promise<string[]> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("profile_projects")
+      .select("project_id")
+      .eq("profile_id", profileId);
+
+    if (error) throw error;
+    return (data || []).map((p) => p.project_id);
+  } catch (err) {
+    console.error("Failed to fetch user project access:", err);
+    return [];
+  }
+}
+
+// 3. Create a new user (Superman, Operational Producer, Sales)
 export async function createUserAction(prevState: any, formData: FormData) {
   try {
-    await verifyAdminAccess();
+    const currentUserId = await verifyAdminAccess();
 
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
-    const role = formData.get("role") as "admin" | "manager";
+    const role = formData.get("role") as string;
+    const projectIdsJson = formData.get("projectIds") as string;
+    const projectIds: string[] = projectIdsJson ? JSON.parse(projectIdsJson) : [];
 
     if (!email || !password || !role) {
       return { error: "Будь ласка, заповніть усі обов'язкові поля." };
@@ -42,7 +79,9 @@ export async function createUserAction(prevState: any, formData: FormData) {
     if (password.length < 6) {
       return { error: "Пароль має містити не менше 6 символів." };
     }
-    if (role !== "admin" && role !== "manager") {
+
+    const allowedRoles = ["admin", "superman", "producer", "sales", "pending"];
+    if (!allowedRoles.includes(role)) {
       return { error: "Невірна роль користувача." };
     }
 
@@ -77,6 +116,21 @@ export async function createUserAction(prevState: any, formData: FormData) {
       return { error: "Помилка створення профілю: " + profileError.message };
     }
 
+    // Assign projects if user is a Producer or Sales department
+    if ((role === "producer" || role === "sales") && projectIds.length > 0) {
+      const inserts = projectIds.map((pId) => ({
+        profile_id: authData.user.id,
+        project_id: pId,
+      }));
+      const { error: accessError } = await supabaseAdmin
+        .from("profile_projects")
+        .insert(inserts);
+
+      if (accessError) {
+        console.error("Failed to assign project access inside create:", accessError.message);
+      }
+    }
+
     revalidatePath("/admin/settings");
     return { success: true, message: "Користувача успішно створено!" };
   } catch (err: any) {
@@ -84,18 +138,24 @@ export async function createUserAction(prevState: any, formData: FormData) {
   }
 }
 
-// 2. Edit an existing user (Email, Optional Password, Role)
+// 4. Edit an existing user (Email, Optional Password, Role, Project assignments)
 export async function editUserAction(
   profileId: string,
   email: string,
   password?: string,
-  role?: "admin" | "manager"
+  role?: string,
+  projectIds: string[] = []
 ) {
   try {
     const currentUserId = await verifyAdminAccess();
 
     if (!profileId || !email) {
       return { error: "Ідентифікатор користувача та пошта є обов'язковими." };
+    }
+
+    const allowedRoles = ["admin", "superman", "producer", "sales", "pending"];
+    if (role && !allowedRoles.includes(role)) {
+      return { error: "Невірна роль користувача." };
     }
 
     const supabaseAdmin = createAdminClient();
@@ -121,14 +181,14 @@ export async function editUserAction(
     }
 
     // Prepare update parameters for Profiles table
-    const profileParams: { email: string; role?: "admin" | "manager" } = {
+    const profileParams: { email: string; role?: string } = {
       email: email.trim(),
     };
     
-    // Prevent self-demoting from admin role to maintain system integrity
-    if (role && (role === "admin" || role === "manager")) {
-      if (profileId === currentUserId && role !== "admin") {
-        return { error: "Ви не можете змінити власну роль з Адміністратора на Менеджера!" };
+    // Prevent self-demoting from admin/superman role to maintain system integrity
+    if (role) {
+      if (profileId === currentUserId && role !== "admin" && role !== "superman") {
+        return { error: "Ви не можете змінити власну роль з Адміністратора!" };
       }
       profileParams.role = role;
     }
@@ -142,6 +202,28 @@ export async function editUserAction(
       return { error: "Помилка оновлення профілю: " + profileError.message };
     }
 
+    // Sync project access junction table
+    // 1. Delete all old assignments
+    await supabaseAdmin
+      .from("profile_projects")
+      .delete()
+      .eq("profile_id", profileId);
+
+    // 2. Insert new ones if role is producer or sales
+    if ((role === "producer" || role === "sales") && projectIds.length > 0) {
+      const inserts = projectIds.map((pId) => ({
+        profile_id: profileId,
+        project_id: pId,
+      }));
+      const { error: accessError } = await supabaseAdmin
+        .from("profile_projects")
+        .insert(inserts);
+
+      if (accessError) {
+        return { error: "Помилка призначення проектів: " + accessError.message };
+      }
+    }
+
     revalidatePath("/admin/settings");
     return { success: true, message: "Дані користувача успішно оновлено!" };
   } catch (err: any) {
@@ -149,7 +231,7 @@ export async function editUserAction(
   }
 }
 
-// 3. Delete a user
+// 5. Delete a user
 export async function deleteUserAction(profileId: string) {
   try {
     const currentUserId = await verifyAdminAccess();
@@ -160,7 +242,7 @@ export async function deleteUserAction(profileId: string) {
 
     const supabaseAdmin = createAdminClient();
 
-    // Delete user from Supabase auth which automatically cascades to profiles
+    // Delete user from Supabase auth which automatically cascades to profiles and profile_projects
     const { error } = await supabaseAdmin.auth.admin.deleteUser(profileId);
 
     if (error) {
