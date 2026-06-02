@@ -222,7 +222,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     const today = new Date();
     const formatDate = (d: Date) => d.toISOString().split("T")[0];
     const end = formatDate(today);
-    
+
     const start = new Date();
     if (preset === "30d") {
       start.setDate(today.getDate() - 30);
@@ -276,6 +276,16 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedLeadHistory, setSelectedLeadHistory] = useState<any[] | null>(null);
   const [selectedLeadInfo, setSelectedLeadInfo] = useState<any | null>(null);
+
+  // Collapsible UTM Tree States & handlers
+  const [expandedUtmNodes, setExpandedUtmNodes] = useState<Record<string, boolean>>({});
+
+  const toggleUtmNode = (path: string) => {
+    setExpandedUtmNodes(prev => ({
+      ...prev,
+      [path]: !prev[path]
+    }));
+  };
 
   // Sync active tab based on viewType
   useEffect(() => {
@@ -367,11 +377,11 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         return "Відмова";
       }
       if (
-        lower === "new" || 
-        lower === "pending" || 
-        lower === "зареєстровано" || 
-        lower.includes("очікується") || 
-        lower === "новий лід" || 
+        lower === "new" ||
+        lower === "pending" ||
+        lower === "зареєстровано" ||
+        lower.includes("очікується") ||
+        lower === "новий лід" ||
         lower === "новий"
       ) {
         return "Новий лід";
@@ -514,10 +524,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     return allClustered.filter((lead: any) => {
       const nameVal = lead.name?.trim();
       const hasRealName = nameVal && nameVal !== "" && nameVal !== "Невідомий";
-      const hasContacts = 
+      const hasContacts =
         hasRealName ||
-        lead.phone?.trim() !== "" || 
-        lead.telegram?.trim() !== "" || 
+        lead.phone?.trim() !== "" ||
+        lead.telegram?.trim() !== "" ||
         lead.email?.trim() !== "";
       const isPaid = lead.status === "Купив курс" || lead.status === "Купив(-ла) Трипвайер";
       return hasContacts || isPaid;
@@ -672,7 +682,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     const uahTripwireRevenue = processedLeads.reduce((sum, l) => sum + Number(l.uahTripwirePaid || 0), 0);
 
     const netProfitUsd = usdCourseRevenue - totalSpend;
-    
+
     // Blended ROI using rate 41.0
     const blendedRevenue = usdCourseRevenue + (uahCourseRevenue / 41.0);
     const roi = totalSpend > 0 ? (blendedRevenue / totalSpend) * 100 : 0;
@@ -680,7 +690,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     const paidLeads = processedLeads.filter((l) => l.status === "Купив курс");
     const paidTripwires = processedLeads.filter((l) => l.status === "Купив(-ла) Трипвайер");
     const totalSales = paidLeads.length + paidTripwires.length;
-    
+
     // Split Course & Tripwire sales by currency
     const usdSales = processedLeads.filter(
       (l) => (l.status === "Купив курс" || l.status === "Купив(-ла) Трипвайер") && (Number(l.usdPaid || 0) + Number(l.usdTripwirePaid || 0) > 0)
@@ -695,7 +705,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     const leadToSaleConv = totalLeads > 0 ? (totalSales / totalLeads) * 100 : 0;
     const leadToSaleConvUsd = totalLeads > 0 ? (usdSalesCount / totalLeads) * 100 : 0;
     const leadToSaleConvUah = totalLeads > 0 ? (uahSalesCount / totalLeads) * 100 : 0;
-    
+
     // Average Order Value (AOV) strictly divided by currency-specific sales count
     // and counting both course + tripwire revenue for that currency
     const aovUsd = usdSalesCount > 0 ? (usdCourseRevenue + usdTripwireRevenue) / usdSalesCount : 0;
@@ -732,8 +742,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     let end = endDate ? new Date(endDate) : new Date();
 
     if (!start) {
-      const leadDates = processedLeads.map(l => new Date(l.created_at).getTime());
-      const trafficDates = filteredTraffic.map(t => new Date(t.created_at).getTime());
+      const leadDates = processedLeads.map((l: any) => new Date(l.created_at).getTime());
+      const trafficDates = filteredTraffic.map((t: any) => new Date(t.created_at).getTime());
       const allDates = [...leadDates, ...trafficDates];
       const minTime = allDates.length > 0 ? Math.min(...allDates) : Date.now();
       start = new Date(minTime);
@@ -747,7 +757,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     const dayLeads: Record<string, number> = {};
     const dayClicks: Record<string, number> = {};
     const curr = new Date(start);
-    
+
     while (curr <= end) {
       const str = curr.toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" });
       dayLeads[str] = 0;
@@ -776,39 +786,88 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     }));
   }, [processedLeads, filteredTraffic, startDate, endDate, viewType]);
 
-  // UTM performance breakdown calculation
-  const utmAttributionList = useMemo(() => {
+  // Collapsible Hierarchical UTM Attribution Tree performance breakdown
+  const utmAttributionTree = useMemo(() => {
     if (viewType !== "single" || processedLeads.length === 0) return [];
 
-    const map: Record<string, { clicks: number; leads: number; usd_revenue: number; uah_revenue: number; revenue: number }> = {};
+    const root: Record<string, any> = {};
 
+    // Helper to get or create node
+    const getOrCreateNode = (parent: any, name: string) => {
+      if (!parent[name]) {
+        parent[name] = {
+          name,
+          clicks: 0,
+          leads: 0,
+          usd_revenue: 0,
+          uah_revenue: 0,
+          revenue: 0,
+          children: {}
+        };
+      }
+      return parent[name];
+    };
+
+    // Aggregate Leads
     processedLeads.forEach((lead) => {
       const source = lead.utm_source || "direct";
-      if (!map[source]) {
-        map[source] = { clicks: 0, leads: 0, usd_revenue: 0, uah_revenue: 0, revenue: 0 };
-      }
-      map[source].leads += 1;
-      const usdPaid = Number(lead.usdPaid || 0);
-      const uahPaid = Number(lead.uahPaid || 0);
-      map[source].usd_revenue += usdPaid;
-      map[source].uah_revenue += uahPaid;
-      map[source].revenue += usdPaid + (uahPaid / 41.0);
+      const medium = lead.utm_medium || "";
+      const campaign = lead.utm_campaign || "";
+      const content = lead.utm_content || "";
+
+      // Path of levels: filter out empty names
+      const path = [source, medium, campaign, content].filter(Boolean);
+      
+      let curr = root;
+      path.forEach((part) => {
+        const node = getOrCreateNode(curr, part);
+        node.leads += 1;
+        const usdPaid = Number(lead.usdPaid || 0);
+        const uahPaid = Number(lead.uahPaid || 0);
+        node.usd_revenue += usdPaid;
+        node.uah_revenue += uahPaid;
+        node.revenue += usdPaid + (uahPaid / 41.0);
+        curr = node.children;
+      });
     });
 
-    // Also inject click/traffic ratios
+    // Aggregate Clicks/Traffic
     filteredTraffic.forEach((t: any) => {
       const source = t.utm_source || "direct";
-      if (map[source]) {
-        map[source].clicks += 1;
-      }
+      const medium = t.utm_medium || "";
+      const campaign = t.utm_campaign || "";
+      const content = t.utm_content || "";
+
+      const path = [source, medium, campaign, content].filter(Boolean);
+      
+      let curr = root;
+      let possible = true;
+      path.forEach((part) => {
+        if (!possible) return;
+        if (curr[part]) {
+          curr[part].clicks += 1;
+          curr = curr[part].children;
+        } else {
+          possible = false;
+        }
+      });
     });
 
-    return Object.entries(map)
-      .map(([source, stats]) => {
-        const cr = stats.clicks > 0 ? (stats.leads / stats.clicks) * 100 : 0;
-        return { source, ...stats, cr };
-      })
-      .sort((a, b) => b.revenue - a.revenue || b.leads - a.leads);
+    // Helper to convert Record to Sorted Array recursively
+    const finalizeNodes = (nodesRecord: Record<string, any>): any[] => {
+      return Object.values(nodesRecord)
+        .map((node: any) => {
+          const cr = node.clicks > 0 ? (node.leads / node.clicks) * 100 : 0;
+          return {
+            ...node,
+            cr,
+            children: finalizeNodes(node.children)
+          };
+        })
+        .sort((a, b) => b.revenue - a.revenue || b.leads - a.leads);
+    };
+
+    return finalizeNodes(root);
   }, [processedLeads, filteredTraffic, viewType]);
 
   // --- Kanban Column logic & state manipulation ---
@@ -831,7 +890,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     try {
       const res = await updateUnifiedLeadStatusAction(orderId, targetColumn);
       if (res.error) throw new Error(res.error);
-      
+
       // Force trigger state reload on success
       router.refresh();
     } catch (err: any) {
@@ -844,12 +903,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   // Form link creator builder click triggers
   const handleBuildPaymentButton = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Formulate a beautiful secure checkout signature URL simulation
     const slug = activeProject?.slug || "bnw_main";
     const secureMockToken = Math.floor(Math.random() * 9000000) + 1000000;
     const url = `https://wayforpay.com/pay?merchant=${slug}_sales&amount=${payAmount}&currency=${payCurrency}&name=${encodeURIComponent(payProduct)}&orderId=WFP_${secureMockToken}&signature=a8b3c9d7e6f8`;
-    
+
     setGeneratedLink(url);
   };
 
@@ -924,6 +983,59 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     );
   };
 
+  // Collapsible UTM Tree Row recursive renderer
+  const renderUtmNodeRow = (node: any, depth = 0, parentPath = "") => {
+    const currentPath = parentPath ? `${parentPath}/${node.name}` : node.name;
+    const isExpanded = !!expandedUtmNodes[currentPath];
+    const hasChildren = node.children && node.children.length > 0;
+
+    return (
+      <React.Fragment key={currentPath}>
+        <tr 
+          onClick={() => hasChildren && toggleUtmNode(currentPath)}
+          className={`transition-all border-b border-white/5 cursor-pointer ${
+            depth === 0 ? "bg-white/[0.01] hover:bg-white/[0.03]" : "hover:bg-white/[0.02]"
+          }`}
+        >
+          <td className="p-4 flex items-center gap-2" style={{ paddingLeft: `${16 + depth * 24}px` }}>
+            {hasChildren ? (
+              <span className="text-white/40 shrink-0">
+                {isExpanded ? (
+                  <ChevronDown className="w-3.5 h-3.5" />
+                ) : (
+                  <ChevronRight className="w-3.5 h-3.5" />
+                )}
+              </span>
+            ) : (
+              <span className="w-3.5 h-3.5 shrink-0" />
+            )}
+            <span className={`truncate text-xs ${
+              depth === 0 
+                ? "font-extrabold text-white uppercase tracking-wider" 
+                : depth === 1
+                ? "font-bold text-indigo-400"
+                : depth === 2
+                ? "font-medium text-amber-400/90"
+                : "font-normal text-white/60"
+            }`}>
+              {node.name}
+            </span>
+          </td>
+          <td className="p-4 text-center font-bold text-neutral-400">{node.clicks}</td>
+          <td className="p-4 text-center font-extrabold text-white">{node.leads}</td>
+          <td className="p-4 text-center font-bold text-blue-400">{node.cr.toFixed(1)}%</td>
+          <td className="p-4 text-center font-black text-emerald-400">
+            {formatDualCurrency(node.usd_revenue, node.uah_revenue)}
+          </td>
+        </tr>
+
+        {hasChildren && isExpanded && node.children.map((child: any) => 
+          renderUtmNodeRow(child, depth + 1, currentPath)
+        )}
+      </React.Fragment>
+    );
+  };
+
   return (
     <div className={`${bgClass} min-h-screen transition-all font-sans w-full max-w-full pb-20`}>
       {/* Visual background style sheet inject */}
@@ -945,13 +1057,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 border-b pb-6 ${borderClass}`}>
         <div className="space-y-1.5">
           <div className="flex items-center gap-3">
-            <span className={`text-xs font-black uppercase px-2.5 py-0.5 rounded tracking-widest ${
-              role === "admin" || role === "superman"
+            <span className={`text-xs font-black uppercase px-2.5 py-0.5 rounded tracking-widest ${role === "admin" || role === "superman"
                 ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                 : role === "producer"
-                ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
-                : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-            }`}>
+                  ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                  : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+              }`}>
               {role === "admin" || role === "superman" ? "Супермен" : role === "producer" ? "Продюсер" : "Відділ продажів"}
             </span>
             <div className={`flex items-center gap-1.5 text-xs ${textMutedClass}`}>
@@ -969,9 +1080,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           {/* Theme Toggle */}
           <button
             onClick={handleToggleTheme}
-            className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
-              isLight ? "border-neutral-200 bg-white hover:bg-neutral-50" : "border-white/10 bg-white/[0.02] hover:bg-white/[0.06]"
-            }`}
+            className={`p-3.5 rounded-xl border transition-all cursor-pointer ${isLight ? "border-neutral-200 bg-white hover:bg-neutral-50" : "border-white/10 bg-white/[0.02] hover:bg-white/[0.06]"
+              }`}
             title="Змінити тему оформлення"
           >
             {theme === "dark" ? <Sun className="w-4 h-4 text-yellow-400" /> : <Moon className="w-4 h-4 text-indigo-400" />}
@@ -985,15 +1095,14 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         {viewType === "all" && (
           <button
             onClick={() => setActiveTab("hub")}
-            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === "hub"
+            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${activeTab === "hub"
                 ? isLight
                   ? "bg-neutral-900 text-white shadow-sm"
                   : "bg-white text-black shadow-lg"
                 : isLight
-                ? "text-neutral-500 hover:text-neutral-900"
-                : "text-white/40 hover:text-white"
-            }`}
+                  ? "text-neutral-500 hover:text-neutral-900"
+                  : "text-white/40 hover:text-white"
+              }`}
           >
             <Layers className="w-4 h-4" />
             Центр управління
@@ -1004,15 +1113,14 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         {viewType === "all" && (role === "admin" || role === "superman") && (
           <button
             onClick={() => setActiveTab("leaderboard")}
-            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === "leaderboard"
+            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${activeTab === "leaderboard"
                 ? isLight
                   ? "bg-neutral-900 text-white shadow-sm"
                   : "bg-white text-black shadow-lg"
                 : isLight
-                ? "text-neutral-500 hover:text-neutral-900"
-                : "text-white/40 hover:text-white"
-            }`}
+                  ? "text-neutral-500 hover:text-neutral-900"
+                  : "text-white/40 hover:text-white"
+              }`}
           >
             <Users className="w-4 h-4" />
             🏆 Лідери ОП
@@ -1023,15 +1131,14 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         {viewType === "single" && (role === "admin" || role === "superman" || role === "producer") && (
           <button
             onClick={() => setActiveTab("analytics")}
-            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === "analytics"
+            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${activeTab === "analytics"
                 ? isLight
                   ? "bg-neutral-900 text-white shadow-sm"
                   : "bg-white text-black shadow-lg"
                 : isLight
-                ? "text-neutral-500 hover:text-neutral-900"
-                : "text-white/40 hover:text-white"
-            }`}
+                  ? "text-neutral-500 hover:text-neutral-900"
+                  : "text-white/40 hover:text-white"
+              }`}
           >
             <BarChart4 className="w-4 h-4" />
             Сквозна аналітика
@@ -1042,15 +1149,14 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         {viewType === "single" && (
           <button
             onClick={() => setActiveTab("current_sites")}
-            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === "current_sites"
+            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${activeTab === "current_sites"
                 ? isLight
                   ? "bg-neutral-900 text-white shadow-sm"
                   : "bg-white text-black shadow-lg"
                 : isLight
-                ? "text-neutral-500 hover:text-neutral-900"
-                : "text-white/40 hover:text-white"
-            }`}
+                  ? "text-neutral-500 hover:text-neutral-900"
+                  : "text-white/40 hover:text-white"
+              }`}
           >
             <Globe className="w-4 h-4 text-emerald-450" />
             Поточні сайти
@@ -1061,15 +1167,14 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         {viewType === "single" && (
           <button
             onClick={() => setActiveTab("kanban")}
-            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === "kanban"
+            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${activeTab === "kanban"
                 ? isLight
                   ? "bg-neutral-900 text-white shadow-sm"
                   : "bg-white text-black shadow-lg"
                 : isLight
-                ? "text-neutral-500 hover:text-neutral-900"
-                : "text-white/40 hover:text-white"
-            }`}
+                  ? "text-neutral-500 hover:text-neutral-900"
+                  : "text-white/40 hover:text-white"
+              }`}
           >
             <KanbanSquare className="w-4 h-4" />
             Канбан дошка
@@ -1080,15 +1185,14 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         {viewType === "single" && (
           <button
             onClick={() => setActiveTab("leads")}
-            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === "leads"
+            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${activeTab === "leads"
                 ? isLight
                   ? "bg-neutral-900 text-white shadow-sm"
                   : "bg-white text-black shadow-lg"
                 : isLight
-                ? "text-neutral-500 hover:text-neutral-900"
-                : "text-white/40 hover:text-white"
-            }`}
+                  ? "text-neutral-500 hover:text-neutral-900"
+                  : "text-white/40 hover:text-white"
+              }`}
           >
             <Grid className="w-4 h-4" />
             База лідів
@@ -1099,15 +1203,14 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         {viewType === "single" && (
           <button
             onClick={() => setActiveTab("paylink")}
-            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === "paylink"
+            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${activeTab === "paylink"
                 ? isLight
                   ? "bg-neutral-900 text-white shadow-sm"
                   : "bg-white text-black shadow-lg"
                 : isLight
-                ? "text-neutral-500 hover:text-neutral-900"
-                : "text-white/40 hover:text-white"
-            }`}
+                  ? "text-neutral-500 hover:text-neutral-900"
+                  : "text-white/40 hover:text-white"
+              }`}
           >
             <LinkIcon className="w-4 h-4" />
             Платіжні кнопки
@@ -1121,7 +1224,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         const totalSpend = summaryData.reduce((sum: number, p: any) => sum + Number(p.spend || 0), 0);
         const totalUsdRevenue = summaryData.reduce((sum: number, p: any) => sum + Number(p.usd_revenue || 0), 0);
         const totalUahRevenue = summaryData.reduce((sum: number, p: any) => sum + Number(p.uah_revenue || 0), 0);
-        
+
         const totalBlendedRevenue = totalUsdRevenue + (totalUahRevenue / 41.0);
         const blendedProfit = totalBlendedRevenue - totalSpend;
         const blendedRoi = totalSpend > 0 ? (totalBlendedRevenue / totalSpend) * 100 : 0;
@@ -1217,13 +1320,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                               {formatDualProfit(usdRev, spend, uahRev)}
                             </td>
                             <td className="p-4 text-center font-black">
-                              <span className={`px-2.5 py-1 rounded-full text-[10px] ${
-                                projRoi >= 150
+                              <span className={`px-2.5 py-1 rounded-full text-[10px] ${projRoi >= 150
                                   ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                                   : projRoi >= 100
-                                  ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20"
-                                  : "bg-red-500/10 text-red-400 border border-red-500/20"
-                              }`}>
+                                    ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20"
+                                    : "bg-red-500/10 text-red-400 border border-red-500/20"
+                                }`}>
                                 {projRoi.toFixed(0)}%
                               </span>
                             </td>
@@ -1298,9 +1400,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                             ${Number(c.profit).toFixed(2)}
                           </td>
                           <td className="p-4 text-center font-black">
-                            <span className={`px-2 py-0.5 rounded text-[9px] ${
-                              c.roi >= 120 ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"
-                            }`}>
+                            <span className={`px-2 py-0.5 rounded text-[9px] ${c.roi >= 120 ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"
+                              }`}>
                               {Number(c.roi).toFixed(0)}%
                             </span>
                           </td>
@@ -1370,13 +1471,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                           {formatDualProfit(prod.usd_revenue, prod.spend, prod.uah_revenue)}
                         </td>
                         <td className="p-4 text-center font-black">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] ${
-                            prod.roi >= 150
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] ${prod.roi >= 150
                               ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                               : prod.roi >= 100
-                              ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20"
-                              : "bg-red-500/10 text-red-400 border border-red-500/20"
-                          }`}>
+                                ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20"
+                                : "bg-red-500/10 text-red-400 border border-red-500/20"
+                            }`}>
                             {Number(prod.roi).toFixed(0)}%
                           </span>
                         </td>
@@ -1423,11 +1523,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                     <button
                       key={preset.id}
                       onClick={() => applyPreset(preset.id as any)}
-                      className={`flex-1 sm:flex-none px-3.5 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-150 cursor-pointer text-center ${
-                        isActive
+                      className={`flex-1 sm:flex-none px-3.5 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-150 cursor-pointer text-center ${isActive
                           ? "bg-white text-black shadow-lg"
                           : "text-white/40 hover:text-white hover:bg-white/5"
-                      }`}
+                        }`}
                     >
                       {preset.label}
                     </button>
@@ -1444,11 +1543,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                     setStartDate(e.target.value);
                     setDateRangePreset("custom");
                   }}
-                  className={`px-3 py-2 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 w-full sm:w-36 ${
-                    isLight 
-                      ? "bg-neutral-100 border border-neutral-300 text-neutral-900" 
+                  className={`px-3 py-2 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 w-full sm:w-36 ${isLight
+                      ? "bg-neutral-100 border border-neutral-300 text-neutral-900"
                       : "bg-[#050507] border border-white/5 text-white"
-                  }`}
+                    }`}
                   placeholder="Від"
                 />
                 <span className="text-white/20 text-xs font-bold">—</span>
@@ -1459,21 +1557,19 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                     setEndDate(e.target.value);
                     setDateRangePreset("custom");
                   }}
-                  className={`px-3 py-2 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 w-full sm:w-36 ${
-                    isLight 
-                      ? "bg-neutral-100 border border-neutral-300 text-neutral-900" 
+                  className={`px-3 py-2 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 w-full sm:w-36 ${isLight
+                      ? "bg-neutral-100 border border-neutral-300 text-neutral-900"
                       : "bg-[#050507] border border-white/5 text-white"
-                  }`}
+                    }`}
                   placeholder="До"
                 />
                 {(startDate || endDate) && (
                   <button
                     onClick={() => applyPreset("all")}
-                    className={`p-2 rounded-xl border transition-all cursor-pointer ${
-                      isLight
+                    className={`p-2 rounded-xl border transition-all cursor-pointer ${isLight
                         ? "border-neutral-200 hover:bg-neutral-100 text-neutral-600"
                         : "border-white/10 hover:bg-white/5 text-white/60 hover:text-white"
-                    }`}
+                      }`}
                     title="Скинути період"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -1816,11 +1912,11 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
               Ефективність UTM Джерел
             </h2>
 
-            <div className="overflow-x-auto border border-white/5 rounded-xl">
+             <div className="overflow-x-auto border border-white/5 rounded-xl">
               <table className="w-full border-collapse text-left text-xs">
                 <thead>
                   <tr className="bg-white/[0.02] text-white/40 uppercase tracking-widest font-black border-b border-white/5">
-                    <th className="p-4">Джерело (utm_source)</th>
+                    <th className="p-4">Дерево UTM Параметрів (Джерело → Канал → Кампанія → Вміст)</th>
                     <th className="p-4 text-center">Зафіксовано кліків</th>
                     <th className="p-4 text-center">Кількість заявок</th>
                     <th className="p-4 text-center">Конверсія клік-ліди</th>
@@ -1828,22 +1924,14 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5 text-white/80">
-                  {utmAttributionList.length === 0 ? (
+                  {utmAttributionTree.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="p-6 text-center text-white/30 italic">Кампанії не визначені</td>
                     </tr>
                   ) : (
-                    utmAttributionList.map((item, idx) => (
-                      <tr key={idx} className="hover:bg-white/[0.01] transition-all">
-                        <td className="p-4 font-extrabold text-white uppercase tracking-wider">{item.source}</td>
-                        <td className="p-4 text-center font-bold text-neutral-400">{item.clicks}</td>
-                        <td className="p-4 text-center font-extrabold text-white">{item.leads}</td>
-                        <td className="p-4 text-center font-bold text-blue-400">{item.cr.toFixed(1)}%</td>
-                        <td className="p-4 text-center font-black text-emerald-400">
-                          {formatDualCurrency(item.usd_revenue, item.uah_revenue)}
-                        </td>
-                      </tr>
-                    ))
+                    utmAttributionTree.map((node: any) => 
+                      renderUtmNodeRow(node)
+                    )
                   )}
                 </tbody>
               </table>
@@ -1956,13 +2044,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                             setSelectedLeadHistory(lead.history);
                             setSelectedLeadInfo(lead);
                           }}
-                          className={`p-4 rounded-xl border bg-white/[0.01] hover:bg-white/[0.03] transition-all cursor-grab active:cursor-grabbing relative overflow-hidden group ${
-                            updatingId === lead.id
+                          className={`p-4 rounded-xl border bg-white/[0.01] hover:bg-white/[0.03] transition-all cursor-grab active:cursor-grabbing relative overflow-hidden group ${updatingId === lead.id
                               ? "opacity-50 pointer-events-none scale-95 border-emerald-500/50"
                               : lead.usdPaid > 0 || lead.uahPaid > 0
-                              ? "border-emerald-500/15"
-                              : "border-white/5"
-                          }`}
+                                ? "border-emerald-500/15"
+                                : "border-white/5"
+                            }`}
                         >
                           {(lead.usdPaid > 0 || lead.uahPaid > 0) && (
                             <div className="absolute top-0 right-0 px-2 py-0.5 rounded-bl-lg bg-emerald-500/10 border-l border-b border-emerald-500/20 text-[9px] font-black text-emerald-400">
@@ -1975,7 +2062,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                               {lead.name}
                             </h4>
                             <p className="text-[10px] text-white/40">{lead.phone}</p>
-                            
+
                             <div className="flex flex-wrap gap-1.5 pt-1.5 border-t border-white/5">
                               {lead.telegram && renderSocialsLink(lead.telegram, "tg")}
                               <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-white/5 text-white/40 border border-white/5 shrink-0">
@@ -2092,11 +2179,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                 <button
                   type="button"
                   onClick={() => setUnpaidIntentOnly(!unpaidIntentOnly)}
-                  className={`px-4 py-2.5 rounded-full border text-[11px] font-black uppercase transition-all cursor-pointer flex items-center gap-1.5 ${
-                    unpaidIntentOnly
+                  className={`px-4 py-2.5 rounded-full border text-[11px] font-black uppercase transition-all cursor-pointer flex items-center gap-1.5 ${unpaidIntentOnly
                       ? "bg-red-500/10 text-red-400 border-red-500/20"
                       : "bg-white/[0.02] text-white/50 border-white/10 hover:text-white"
-                  }`}
+                    }`}
                 >
                   <AlertCircle className="w-3.5 h-3.5" />
                   Втрачена ініціатива (Unpaid Intent)
@@ -2203,9 +2289,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                                     e.stopPropagation();
                                     handleCopyPhone(lead.phone, lead.id);
                                   }}
-                                  className={`p-1 rounded transition-all cursor-pointer ${
-                                    isLight ? "bg-neutral-100 hover:bg-neutral-200 text-neutral-500 hover:text-neutral-900" : "bg-white/5 hover:bg-white/10 text-white/40 hover:text-white"
-                                  }`}
+                                  className={`p-1 rounded transition-all cursor-pointer ${isLight ? "bg-neutral-100 hover:bg-neutral-200 text-neutral-500 hover:text-neutral-900" : "bg-white/5 hover:bg-white/10 text-white/40 hover:text-white"
+                                    }`}
                                 >
                                   {copiedId === lead.id ? (
                                     <Check className="w-3 h-3 text-emerald-400" />
@@ -2223,9 +2308,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
                           {/* Attribution link source */}
                           <td className="p-4">
-                            <span className={`font-semibold uppercase text-[10px] tracking-wider px-2 py-0.5 rounded ${
-                              isLight ? "bg-neutral-100 text-neutral-600 border border-neutral-200" : "bg-white/5 text-white/60 border border-white/5"
-                            }`}>
+                            <span className={`font-semibold uppercase text-[10px] tracking-wider px-2 py-0.5 rounded ${isLight ? "bg-neutral-100 text-neutral-600 border border-neutral-200" : "bg-white/5 text-white/60 border border-white/5"
+                              }`}>
                               {lead.utm_source || "direct"}
                             </span>
                           </td>
@@ -2238,9 +2322,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                                 setSelectedLeadHistory(lead.history);
                                 setSelectedLeadInfo(lead);
                               }}
-                              className={`px-2 py-1 rounded border transition-all font-black text-[11px] cursor-pointer ${
-                                isLight ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-emerald-600" : "bg-white/5 hover:bg-white/10 border-white/5 text-emerald-400"
-                              }`}
+                              className={`px-2 py-1 rounded border transition-all font-black text-[11px] cursor-pointer ${isLight ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-emerald-600" : "bg-white/5 hover:bg-white/10 border-white/5 text-emerald-400"
+                                }`}
                             >
                               {lead.touchCount} торкань
                             </button>
@@ -2263,15 +2346,14 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
                           {/* Pipeline status pill */}
                           <td className="p-4 text-center">
-                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[10px] font-extrabold ${
-                              lead.status === "Купив курс" || lead.status === "Купив(-ла) Трипвайер"
+                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[10px] font-extrabold ${lead.status === "Купив курс" || lead.status === "Купив(-ла) Трипвайер"
                                 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                                 : lead.status === "Відмова"
-                                ? "bg-red-500/10 text-red-400 border-red-500/20"
-                                : isLight
-                                ? "bg-neutral-150 border-neutral-300 text-neutral-700"
-                                : "bg-neutral-800 border-neutral-700 text-neutral-300"
-                            }`}>
+                                  ? "bg-red-500/10 text-red-400 border-red-500/20"
+                                  : isLight
+                                    ? "bg-neutral-150 border-neutral-300 text-neutral-700"
+                                    : "bg-neutral-800 border-neutral-700 text-neutral-300"
+                              }`}>
                               <span className={`w-1.5 h-1.5 rounded-full ${col.dotColor}`} />
                               {lead.status}
                             </span>
@@ -2284,9 +2366,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                                 setSelectedLeadHistory(lead.history);
                                 setSelectedLeadInfo(lead);
                               }}
-                              className={`px-3.5 py-1.5 rounded text-[10px] font-black uppercase transition-all cursor-pointer ${
-                                isLight ? "bg-neutral-100 hover:bg-neutral-200 text-neutral-800" : "bg-white/5 hover:bg-white/10 text-white"
-                              }`}
+                              className={`px-3.5 py-1.5 rounded text-[10px] font-black uppercase transition-all cursor-pointer ${isLight ? "bg-neutral-100 hover:bg-neutral-200 text-neutral-800" : "bg-white/5 hover:bg-white/10 text-white"
+                                }`}
                             >
                               Історія
                             </button>
@@ -2309,22 +2390,20 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                   <button
                     disabled={currentPage === 1}
                     onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                    className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all disabled:opacity-30 ${
-                      isLight
+                    className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all disabled:opacity-30 ${isLight
                         ? "border-neutral-200 hover:bg-neutral-100 disabled:hover:bg-transparent"
                         : "border-white/10 hover:bg-white/5 disabled:hover:bg-transparent"
-                    }`}
+                      }`}
                   >
                     Назад
                   </button>
                   <button
                     disabled={currentPage * pageSize >= processedLeads.length}
                     onClick={() => setCurrentPage(prev => prev + 1)}
-                    className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all disabled:opacity-30 ${
-                      isLight
+                    className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all disabled:opacity-30 ${isLight
                         ? "border-neutral-200 hover:bg-neutral-100 disabled:hover:bg-transparent"
                         : "border-white/10 hover:bg-white/5 disabled:hover:bg-transparent"
-                    }`}
+                      }`}
                   >
                     Вперед
                   </button>
@@ -2420,7 +2499,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                   </div>
 
                   <p className="text-xs text-white/40 uppercase tracking-wider font-bold">Стиль Pay-Button (WayForPay)</p>
-                  
+
                   <div className="py-4 border-t border-b border-white/5 space-y-2">
                     <p className="text-2xl font-black text-white">{payProduct}</p>
                     <p className="text-3xl font-black text-emerald-400">
@@ -2501,7 +2580,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                       {land.url.replace(/^https?:\/\//, "")}
                     </p>
                   </div>
-                  
+
                   <a
                     href={land.url}
                     target="_blank"
@@ -2706,7 +2785,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                   <div key={touch.id} className="relative pl-12 pb-8 last:pb-2 group">
                     {/* Visual connecting line */}
                     <div className="absolute left-[15px] top-8 bottom-0 w-0.5 bg-gradient-to-b from-white/10 to-transparent group-last:hidden" />
-                    
+
                     {/* Glorious glowing node */}
                     <div className={`absolute left-0 top-1.5 w-8 h-8 rounded-full border flex items-center justify-center transition-all duration-300 z-10 ${ringColor}`}>
                       {touchIcon}
@@ -2718,13 +2797,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                       <div className="flex justify-between items-center">
                         <div className="flex items-center gap-2.5">
                           <span className="text-[10px] font-black uppercase text-white/30 tracking-widest">Крок #{idx + 1}</span>
-                          <span className={`px-2.5 py-0.5 rounded text-[9px] font-black uppercase border ${
-                            isPaidCourse
+                          <span className={`px-2.5 py-0.5 rounded text-[9px] font-black uppercase border ${isPaidCourse
                               ? "bg-emerald-500/10 text-emerald-450 border-emerald-500/20"
                               : isTripwire
-                              ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
-                              : "bg-white/5 text-white/50 border-white/5"
-                          }`}>
+                                ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
+                                : "bg-white/5 text-white/50 border-white/5"
+                            }`}>
                             {touch.status}
                           </span>
                         </div>
@@ -2760,7 +2838,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                       {(() => {
                         if (!touch.metadata || Object.keys(touch.metadata).length === 0) return null;
                         const meta = touch.metadata;
-                        
+
                         const fullUrl = meta.full_url || meta.fullUrl || meta.page_url || "";
                         const pathVal = meta.path || meta.page_path || "";
                         const targetSheet = meta.target_sheet || meta.targetSheet || "";
@@ -2772,8 +2850,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                         const displayUrl = fullUrl ? fullUrl.replace(/^https?:\/\//, "") : "";
 
                         const shownKeys = new Set([
-                          "full_url", "fullUrl", "page_url", "path", "page_path", "target_sheet", 
-                          "targetSheet", "tariffName", "tariff_name", "tariff", "elt_import", 
+                          "full_url", "fullUrl", "page_url", "path", "page_path", "target_sheet",
+                          "targetSheet", "tariffName", "tariff_name", "tariff", "elt_import",
                           "original_sheet", "row", "device_info", "user_agent", "visitor_id", "visitorId",
                           "visitor_uuid", "phone", "email", "telegram", "name", "customerName", "customerPhone",
                           "customerEmail", "social", "amount", "currency", "failUrl", "successUrl", "utms"
@@ -2784,7 +2862,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                         return (
                           <div className="space-y-2.5 border-t border-white/5 pt-3">
                             <span className="text-[9px] font-black uppercase text-white/30 tracking-widest block">Шлях клієнта & Торкання</span>
-                            
+
                             <div className="flex flex-wrap gap-2">
                               {fullUrl && (
                                 <a
