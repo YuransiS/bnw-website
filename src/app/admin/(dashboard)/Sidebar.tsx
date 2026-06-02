@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useTransition } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
@@ -20,7 +20,8 @@ import {
   Activity,
   Award,
   Crown,
-  Briefcase
+  Briefcase,
+  Loader2
 } from "lucide-react";
 import { signOutAction } from "../actions";
 
@@ -59,6 +60,16 @@ export default function Sidebar({
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
+  const [isPending, startTransition] = useTransition();
+
+  const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    e.preventDefault();
+    setIsMobileOpen(false);
+    startTransition(() => {
+      router.push(href);
+      router.refresh();
+    });
+  };
 
   const isSettingsPage = pathname === "/admin/settings";
   const activeSlug = isSettingsPage ? "" : (searchParams.get("slug") || (isSuperman ? "all" : allowedProjects[0]?.slug || ""));
@@ -156,7 +167,7 @@ export default function Sidebar({
                 <div className="relative group">
                   <Link
                     href="/admin?slug=bw_main"
-                    onClick={() => setIsMobileOpen(false)}
+                    onClick={(e) => handleLinkClick(e, "/admin?slug=bw_main")}
                     className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all font-semibold text-sm cursor-pointer ${
                       activeSlug === "bw_main"
                         ? "bg-white text-black shadow-lg border-white font-extrabold"
@@ -188,7 +199,7 @@ export default function Sidebar({
                   <div className="relative group">
                     <Link
                       href="/admin?slug=all"
-                      onClick={() => setIsMobileOpen(false)}
+                      onClick={(e) => handleLinkClick(e, "/admin?slug=all")}
                       className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border transition-all text-xs font-black cursor-pointer ${
                         activeSlug === "all"
                           ? "bg-white text-black shadow-lg border-white"
@@ -212,7 +223,7 @@ export default function Sidebar({
                     <div className="relative group">
                       <Link
                         href="/admin?slug=bw_main"
-                        onClick={() => setIsMobileOpen(false)}
+                        onClick={(e) => handleLinkClick(e, "/admin?slug=bw_main")}
                         className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border transition-all text-xs font-black cursor-pointer ${
                           activeSlug === "bw_main"
                             ? "bg-white text-black shadow-lg border-white font-extrabold"
@@ -240,7 +251,7 @@ export default function Sidebar({
                     <div key={proj.slug} className="relative group">
                       <Link
                         href={`/admin?slug=${proj.slug}`}
-                        onClick={() => setIsMobileOpen(false)}
+                        onClick={(e) => handleLinkClick(e, `/admin?slug=${proj.slug}`)}
                         className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border transition-all text-xs font-black cursor-pointer ${
                           isCurrent
                             ? "bg-white text-black shadow-lg border-white"
@@ -270,7 +281,7 @@ export default function Sidebar({
             <div className="relative group">
               <Link
                 href="/admin/settings"
-                onClick={() => setIsMobileOpen(false)}
+                onClick={(e) => handleLinkClick(e, "/admin/settings")}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all font-semibold text-sm cursor-pointer ${
                   isSettingsPage
                     ? "bg-white text-black shadow-lg border-white font-extrabold"
@@ -350,6 +361,27 @@ export default function Sidebar({
           </form>
         </div>
       </aside>
+
+      {/* Loading Overlay for Next.js Page transitions */}
+      {isPending && (
+        <div className="fixed inset-0 bg-[#060608]/70 backdrop-blur-md z-[9999] flex flex-col items-center justify-center gap-4 transition-all duration-300 animate-in fade-in">
+          <div className="relative">
+            {/* Outer pulsating glow orb */}
+            <div className="absolute inset-0 bg-emerald-500/25 rounded-full blur-2xl animate-pulse" />
+            <div className="relative inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+              <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+            </div>
+          </div>
+          <div className="flex flex-col items-center gap-1.5">
+            <p className="text-sm font-black uppercase tracking-widest text-white">
+              Завантаження даних
+            </p>
+            <p className="text-[10px] uppercase font-bold tracking-wider text-emerald-400/80 animate-pulse">
+              Оновлення аналітики...
+            </p>
+          </div>
+        </div>
+      )}
     </>
   );
 }

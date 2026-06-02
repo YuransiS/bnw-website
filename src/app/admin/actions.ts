@@ -201,20 +201,41 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
         LIMIT 50;
       `;
 
+      // Fetch all orders with automatic pagination to bypass PostgREST 1000 limit
+      const fetchAllOrdersForSummary = async () => {
+        let results: any[] = [];
+        let from = 0;
+        const limit = 1000;
+        let hasMore = true;
+        while (hasMore) {
+          const { data, error } = await adminSupabase
+            .from("unified_orders")
+            .select("id, project_id, amount, status, metadata, campaign_id, utm_campaign")
+            .range(from, from + limit - 1);
+          if (error) throw error;
+          results = [...results, ...(data || [])];
+          if ((data || []).length < limit) hasMore = false;
+          else from += limit;
+        }
+        return results;
+      };
+
       const [summaryRes, campaignRes] = await Promise.all([
-        supabase.rpc("execute_sql_query", { sql_text: summaryQuery }),
-        supabase.rpc("execute_sql_query", { sql_text: campaignQuery }),
+        supabase.rpc("get_projects_summary"),
+        supabase.rpc("get_campaigns_summary"),
       ]);
 
-      // Fallback to JS queries if RPC execute_sql_query does not exist in Supabase
+      // Fallback to JS queries if RPC does not exist in Supabase
       let summary = summaryRes.data || [];
       let campaigns = campaignRes.data || [];
 
       if (summaryRes.error || campaignRes.error) {
-        // Fallback manual JS logic if RPC is not provisioned
-        const { data: allProjects } = await supabase.from("projects").select("*");
-        const { data: allOrders } = await supabase.from("unified_orders").select("*");
-        const { data: allSpends } = await supabase.from("daily_traffic_and_costs").select("*");
+        // Fallback manual JS logic with full paginated fetching
+        const [allProjects, allOrders, allSpends] = await Promise.all([
+          supabase.from("projects").select("*").then(r => r.data || []),
+          fetchAllOrdersForSummary(),
+          supabase.from("daily_traffic_and_costs").select("*").then(r => r.data || []),
+        ]);
 
         summary = (allProjects || []).map((proj) => {
           const projOrders = (allOrders || []).filter((o) => o.project_id === proj.id && o.status !== "Клик" && o.status !== "КликФормы");
@@ -245,7 +266,8 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
           });
 
           const spend = projSpends.reduce((sum, s) => sum + Number(s.spend || 0), 0);
-          const leads_count = projOrders.length;
+          const uniqueCusts = new Set(projOrders.map((o) => o.customer_id).filter(Boolean));
+          const leads_count = uniqueCusts.size;
           const cpl = leads_count > 0 ? Number((spend / leads_count).toFixed(2)) : 0;
 
           return {
@@ -262,18 +284,19 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
       }
 
       // Calculate OP Leaderboard
-      const [producersRes, profileProjectsRes, allProjRes, allOrdersRes, allCostsRes] = await Promise.all([
+      // Fetch all orders using our page loop instead of truncating at 1000 rows
+      const [producersRes, profileProjectsRes, allProjRes, allOrdersForLeaderboard, allCostsRes] = await Promise.all([
         adminSupabase.from("profiles").select("id, email").eq("role", "producer"),
         adminSupabase.from("profile_projects").select("profile_id, project_id"),
         adminSupabase.from("projects").select("id, name, slug"),
-        adminSupabase.from("unified_orders").select("project_id, amount, status, metadata").neq("status", "Клик").neq("status", "КликФормы"),
+        fetchAllOrdersForSummary(),
         adminSupabase.from("daily_traffic_and_costs").select("project_id, spend"),
       ]);
 
       const producers = producersRes.data || [];
       const mappings = profileProjectsRes.data || [];
       const projects = allProjRes.data || [];
-      const orders = allOrdersRes.data || [];
+      const orders = (allOrdersForLeaderboard || []).filter((o) => o.status !== "Клик" && o.status !== "КликФормы");
       const costs = allCostsRes.data || [];
 
       const leaderboard = producers.map((prod) => {
@@ -311,7 +334,8 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
           }
         });
 
-        const totalLeads = prodOrders.length;
+        const uniqueProdCusts = new Set(prodOrders.map((o) => o.customer_id).filter(Boolean));
+        const totalLeads = uniqueProdCusts.size;
 
         // Aggregate spend
         const prodCosts = costs.filter((c) => assignedIds.includes(c.project_id));
