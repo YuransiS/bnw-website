@@ -63,6 +63,10 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 ```
 
+### Сводные RPC функции
+* `public.get_projects_summary()` — Возвращает таблицу агрегированных метрик по всем проектам холдинга (выручка USD/UAH, затраты, уникальные лиды/клиенты и CPL) без ограничения на 1000 строк.
+* `public.get_campaigns_summary()` — Возвращает таблицу ROI и окупаемости по рекламным кампаниям холдинга.
+
 ---
 
 ## 4. Логика сквозной аналитики и слияния лидов (DSU)
