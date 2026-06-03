@@ -94,7 +94,7 @@ export default function SettingsForm({
       return;
     }
 
-    if ((role === "producer" || role === "sales") && selectedProjects.length === 0) {
+    if ((role === "producer" || role === "sales" || role === "rop") && selectedProjects.length === 0) {
       setError("Будь ласка, оберіть хоча б один проект для Продюсера чи Відділу продажів.");
       return;
     }
@@ -174,6 +174,8 @@ export default function SettingsForm({
         return "Супермен";
       case "producer":
         return "Операційний продюсер";
+      case "rop":
+        return "Керівник відділу продажів (РОП)";
       case "sales":
         return "Відділ продажів";
       case "pending":
@@ -190,6 +192,8 @@ export default function SettingsForm({
         return "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
       case "producer":
         return "bg-purple-500/10 text-purple-400 border border-purple-500/20";
+      case "rop":
+        return "bg-orange-500/10 text-orange-400 border border-orange-500/20";
       case "sales":
         return "bg-blue-500/10 text-blue-400 border border-blue-500/20";
       case "pending":
@@ -294,6 +298,7 @@ export default function SettingsForm({
                   { key: "pending", label: "Очікує схвалення (Pending)" },
                   { key: "superman", label: "Супермен (Superman)" },
                   { key: "producer", label: "Операційний продюсер (Producer)" },
+                  { key: "rop", label: "Керівник відділу продажів (РОП)" },
                   { key: "sales", label: "Відділ продажів (Sales)" }
                 ].map((item) => (
                   <button
