@@ -54,6 +54,7 @@ export async function getSessionAndAccess(selectedProjectSlug?: string) {
     const assignedProjectIds = new Set((explicitAssignments || []).map((a) => a.project_id));
 
     allowedProjects = projectsList.filter((p) => {
+      if (p.slug === "vova_win") return false;
       if (p.slug === "bw_main") {
         return assignedProjectIds.has(p.id);
       }
@@ -67,7 +68,8 @@ export async function getSessionAndAccess(selectedProjectSlug?: string) {
 
     allowedProjects = (data || [])
       .map((item: any) => item.projects)
-      .filter(Boolean);
+      .filter(Boolean)
+      .filter((p: any) => p.slug !== "vova_win");
   }
 
   // Resolve current active project slug
@@ -576,4 +578,86 @@ export async function createUnifiedLeadAction(
   } catch (err: any) {
     return { error: err.message || "Failed to create lead" };
   }
+}
+
+export async function getDashboardData() {
+  const supabase = await createClient();
+  const adminSupabase = createAdminClient();
+  
+  // 1. Authenticate user
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    throw new Error("Unauthorized");
+  }
+
+  // 2. Fetch privilege details using admin client
+  const { data: profile } = await adminSupabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || profile.role === "pending") {
+    throw new Error("Unauthorized");
+  }
+
+  // 3. Fetch all leads, page views, and button clicks in parallel
+  const [leadsRes, pageViewsRes, clicksRes] = await Promise.all([
+    adminSupabase.from("leads").select("*").order("created_at", { ascending: false }),
+    adminSupabase.from("page_views").select("visitor_id"),
+    adminSupabase.from("button_clicks").select("button_id"),
+  ]);
+
+  if (leadsRes.error) throw leadsRes.error;
+  if (pageViewsRes.error) throw pageViewsRes.error;
+  if (clicksRes.error) throw clicksRes.error;
+
+  return {
+    leads: leadsRes.data || [],
+    pageViews: pageViewsRes.data || [],
+    clicks: clicksRes.data || [],
+  };
+}
+
+export async function updateLeadStatus(
+  leadId: string,
+  newDbStatus: "new" | "in_progress" | "completed" | "rejected",
+  newButtonId: string
+) {
+  const supabase = await createClient();
+  const adminSupabase = createAdminClient();
+
+  // 1. Authenticate user
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    throw new Error("Unauthorized");
+  }
+
+  // 2. Fetch privilege details
+  const { data: profile } = await adminSupabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || profile.role === "pending") {
+    throw new Error("Unauthorized");
+  }
+
+  // 3. Perform database update
+  const { data, error } = await adminSupabase
+    .from("leads")
+    .update({
+      status: newDbStatus,
+      button_id: newButtonId,
+    })
+    .eq("id", leadId)
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return { success: true, lead: data };
 }

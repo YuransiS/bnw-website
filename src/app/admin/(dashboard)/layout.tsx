@@ -76,6 +76,7 @@ export default async function AdminLayout({
     const assignedProjectIds = new Set((explicitAssignments || []).map((a) => a.project_id));
 
     allowedProjects = projectsList.filter((p) => {
+      if (p.slug === "vova_win") return false;
       if (p.slug === "bw_main") {
         return assignedProjectIds.has(p.id);
       }
@@ -89,7 +90,8 @@ export default async function AdminLayout({
 
     allowedProjects = (data || [])
       .map((item: any) => item.projects)
-      .filter(Boolean);
+      .filter(Boolean)
+      .filter((p: any) => p.slug !== "vova_win");
   }
 
   return (
