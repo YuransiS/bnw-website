@@ -82,12 +82,23 @@ export default async function AdminSettingsPage() {
   const projects = projectsRes.data || [];
   const profileProjects = mappingRes.data || [];
 
+  const isYura = user.email && (user.email.toLowerCase() === "yura3zaxar@gmail.com" || user.email.toLowerCase() === "yura3zaxar@outlook.com");
+  let crmFeedback: any[] = [];
+  if (isYura) {
+    const { data: feedbackData } = await adminSupabase
+      .from("crm_feedback")
+      .select("*")
+      .order("created_at", { ascending: false });
+    crmFeedback = feedbackData || [];
+  }
+
   return (
     <SettingsForm
       currentUserId={user.id}
       profiles={profiles}
       projects={projects}
       profileProjects={profileProjects}
+      crmFeedback={crmFeedback}
     />
   );
 }

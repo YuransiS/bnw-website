@@ -2,6 +2,7 @@
 
 import React, { useState, useTransition, useEffect } from "react";
 import { createUserAction, editUserAction, deleteUserAction, toggleProjectActiveAction } from "./actions";
+import { updateFeedbackStatusAction } from "../../actions";
 import { UserPlus, Trash2, Shield, User, Loader2, Edit3, X, Save, CheckSquare, Square, Check, Briefcase } from "lucide-react";
 import { useTheme } from "../../ThemeProvider";
 
@@ -24,11 +25,21 @@ interface ProfileProjectMapping {
   project_id: string;
 }
 
+interface FeedbackItem {
+  id: string;
+  created_at: string;
+  user_email: string;
+  type: "error" | "improvement";
+  message: string;
+  status: string;
+}
+
 interface SettingsFormProps {
   currentUserId: string;
   profiles: Profile[];
   projects: Project[];
   profileProjects: ProfileProjectMapping[];
+  crmFeedback?: FeedbackItem[];
 }
 
 export default function SettingsForm({
@@ -36,6 +47,7 @@ export default function SettingsForm({
   profiles,
   projects,
   profileProjects,
+  crmFeedback = [],
 }: SettingsFormProps) {
   const { theme } = useTheme();
   const isLight = theme === "light";
@@ -63,6 +75,11 @@ export default function SettingsForm({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // Determine if the current user is yura3zaxar
+  const currentUser = profiles.find((p) => p.id === currentUserId);
+  const currentUserEmail = currentUser?.email || "";
+  const isYura = currentUserEmail.toLowerCase() === "yura3zaxar@gmail.com" || currentUserEmail.toLowerCase() === "yura3zaxar@outlook.com";
 
   // Reset states when exiting edit mode or after successful action
   const resetForm = () => {
@@ -200,6 +217,19 @@ export default function SettingsForm({
         setError(res.error);
       } else {
         setSuccess(res.message || "Статус проекту успішно оновлено!");
+      }
+    });
+  };
+
+  const handleUpdateFeedbackStatus = (feedbackId: string, status: string) => {
+    setError(null);
+    setSuccess(null);
+    startTransition(async () => {
+      const res = await updateFeedbackStatusAction(feedbackId, status);
+      if (res.error) {
+        setError(res.error);
+      } else {
+        setSuccess("Статус повідомлення успішно оновлено!");
       }
     });
   };
@@ -597,6 +627,87 @@ export default function SettingsForm({
             })}
           </div>
         </div>
+
+        {/* Feedback Section (Visible only to yura3zaxar@gmail.com and yura3zaxar@outlook.com) */}
+        {isYura && (
+          <div className={`lg:col-span-3 p-6 rounded-2xl space-y-6 ${cardClass}`}>
+            <h2 className={`text-lg font-black uppercase tracking-tight flex items-center gap-2 ${isLight ? "text-neutral-900" : "text-white"}`}>
+              <Shield className="w-5 h-5 text-emerald-500 animate-pulse" />
+              Зворотній зв'язок: Помилки та Пропозиції (Тільки для вас)
+            </h2>
+
+            <div className={`overflow-x-auto border rounded-xl ${borderClass}`}>
+              <table className="w-full border-collapse text-left text-xs">
+                <thead>
+                  <tr className={`uppercase tracking-widest font-black border-b ${tableHeaderClass}`}>
+                    <th className="p-4">Час</th>
+                    <th className="p-4">Співробітник</th>
+                    <th className="p-4">Тип</th>
+                    <th className="p-4">Повідомлення</th>
+                    <th className="p-4">Статус</th>
+                    <th className="p-4 text-right">Дії</th>
+                  </tr>
+                </thead>
+                <tbody className={`divide-y ${isLight ? "divide-neutral-200" : "divide-white/5"}`}>
+                  {crmFeedback.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-6 text-center text-white/30 italic">
+                        Повідомлень поки що немає
+                      </td>
+                    </tr>
+                  ) : (
+                    crmFeedback.map((item) => {
+                      const itemDate = new Date(item.created_at).toLocaleString("uk-UA");
+                      return (
+                        <tr key={item.id} className={`transition-all ${tableRowClass}`}>
+                          <td className="p-4 font-bold text-neutral-400 whitespace-nowrap">
+                            {itemDate}
+                          </td>
+                          <td className="p-4 font-black">
+                            {item.user_email}
+                          </td>
+                          <td className="p-4">
+                            <span className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                              item.type === "error"
+                                ? "bg-red-500/10 text-red-400 border border-red-500/20"
+                                : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                            }`}>
+                              {item.type === "error" ? "Помилка" : "Покращення"}
+                            </span>
+                          </td>
+                          <td className="p-4 max-w-md font-medium leading-relaxed break-words whitespace-pre-wrap">
+                            {item.message}
+                          </td>
+                          <td className="p-4">
+                            <span className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                              item.status === "new"
+                                ? "bg-blue-500/10 text-blue-400 border border-blue-500/20 animate-pulse"
+                                : "bg-neutral-500/10 text-neutral-400 border border-neutral-500/20"
+                            }`}>
+                              {item.status === "new" ? "Нове" : "Опрацьовано"}
+                            </span>
+                          </td>
+                          <td className="p-4 text-right">
+                            {item.status === "new" ? (
+                              <button
+                                onClick={() => handleUpdateFeedbackStatus(item.id, "resolved")}
+                                className="px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500 hover:text-black text-emerald-400 rounded-lg border border-emerald-500/15 cursor-pointer transition-all text-[10px] font-black uppercase tracking-wider"
+                              >
+                                Виконано
+                              </button>
+                            ) : (
+                              <span className={`text-xs italic pr-2 ${textSubtleClass}`}>Опрацьовано</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

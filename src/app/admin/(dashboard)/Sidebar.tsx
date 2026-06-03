@@ -21,9 +21,12 @@ import {
   Award,
   Crown,
   Briefcase,
-  Loader2
+  Loader2,
+  AlertTriangle,
+  Lightbulb,
+  Check
 } from "lucide-react";
-import { signOutAction } from "../actions";
+import { signOutAction, submitCrmFeedbackAction } from "../actions";
 import { useTheme } from "../ThemeProvider";
 
 interface Project {
@@ -80,6 +83,14 @@ export default function Sidebar({
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
+  // Feedback modal states
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
+  const [feedbackType, setFeedbackType] = useState<"error" | "improvement">("error");
+  const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [feedbackSuccess, setFeedbackSuccess] = useState<string | null>(null);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [feedbackPending, setFeedbackPending] = useState(false);
+
   // Sync collapsed state from localStorage after mount
   useEffect(() => {
     setIsMounted(true);
@@ -107,11 +118,44 @@ export default function Sidebar({
     return name.slice(0, 2).toUpperCase();
   };
 
+  const handleOpenFeedback = (type: "error" | "improvement") => {
+    setFeedbackType(type);
+    setFeedbackMessage("");
+    setFeedbackSuccess(null);
+    setFeedbackError(null);
+    setIsFeedbackModalOpen(true);
+  };
+
+  const handleFeedbackSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!feedbackMessage.trim()) return;
+
+    setFeedbackPending(true);
+    setFeedbackError(null);
+    setFeedbackSuccess(null);
+
+    try {
+      const res = await submitCrmFeedbackAction(feedbackType, feedbackMessage);
+      if (res.error) {
+        setFeedbackError(res.error);
+      } else {
+        setFeedbackSuccess(res.message || "Дякуємо! Ваш запит надіслано.");
+      }
+    } catch (err) {
+      setFeedbackError("Невідома помилка при відправці.");
+    } finally {
+      setFeedbackPending(false);
+    }
+  };
+
   const isLight = theme === "light";
   const bgClass = isLight ? "bg-white border-neutral-200 text-neutral-900" : "bg-[#0C0C0F] border-white/5 text-white";
   const textClass = isLight ? "text-neutral-900" : "text-white";
   const textMutedClass = isLight ? "text-neutral-500" : "text-white/45";
   const borderClass = isLight ? "border-neutral-200" : "border-white/5";
+
+  // Hide feedback buttons ONLY for yura3zaxar@gmail.com and yura3zaxar@outlook.com
+  const showFeedbackButtons = userEmail !== "yura3zaxar@gmail.com" && userEmail !== "yura3zaxar@outlook.com";
 
   return (
     <>
@@ -292,6 +336,59 @@ export default function Sidebar({
 
         {/* Lower/Bottom block: Settings, Profile & Logout */}
         <div className={`pt-6 border-t space-y-4 shrink-0 ${isLight ? "border-neutral-200" : "border-white/5"}`}>
+          {/* Feedback buttons (Only visible for users who are NOT yura3zaxar@gmail.com) */}
+          {showFeedbackButtons && (
+            <div className="space-y-1.5">
+              {!isCollapsed && (
+                <p className={`text-[10px] font-bold uppercase tracking-widest px-4 mb-1.5 ${isLight ? "text-neutral-400" : "text-white/40"}`}>
+                  Зворотній зв'язок
+                </p>
+              )}
+              
+              <div className="relative group">
+                <button
+                  onClick={() => handleOpenFeedback("error")}
+                  className={`w-full flex items-center gap-3 px-4 py-2 rounded-xl border transition-all text-xs font-black cursor-pointer text-left ${
+                    isLight
+                      ? "bg-red-50 hover:bg-red-100 border-red-100 text-red-600 hover:text-red-700"
+                      : "bg-red-500/5 hover:bg-red-500/10 border-red-500/10 hover:border-red-500/20 text-red-400"
+                  } ${isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : ""}`}
+                >
+                  <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                  {!isCollapsed && <span>Повідомити про помилку</span>}
+                </button>
+                {isCollapsed && (
+                  <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl ${
+                    isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
+                  }`}>
+                    Повідомити про помилку
+                  </div>
+                )}
+              </div>
+
+              <div className="relative group">
+                <button
+                  onClick={() => handleOpenFeedback("improvement")}
+                  className={`w-full flex items-center gap-3 px-4 py-2 rounded-xl border transition-all text-xs font-black cursor-pointer text-left ${
+                    isLight
+                      ? "bg-amber-50 hover:bg-amber-100 border-amber-100 text-amber-600 hover:text-amber-700"
+                      : "bg-amber-500/5 hover:bg-amber-500/10 border-amber-500/10 hover:border-amber-500/20 text-amber-400"
+                  } ${isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : ""}`}
+                >
+                  <Lightbulb className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  {!isCollapsed && <span>Запропонувати покращення</span>}
+                </button>
+                {isCollapsed && (
+                  <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl ${
+                    isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
+                  }`}>
+                    Запропонувати покращення
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Relocated settings route link */}
           {isSuperman && (
             <div className="relative group">
@@ -379,7 +476,7 @@ export default function Sidebar({
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold text-sm border border-red-500/15 cursor-pointer transition-all hover:scale-[1.01] duration-150"
               >
                 <LogOut className="w-4 h-4" />
-                Вийти з системы
+                Вийти з системи
               </button>
             )}
           </form>
@@ -405,6 +502,111 @@ export default function Sidebar({
             <p className="text-[10px] uppercase font-bold tracking-wider text-emerald-400/80 animate-pulse">
               Оновлення аналітики...
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Feedback Modal Overlay */}
+      {isFeedbackModalOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+          <div className={`w-full max-w-md p-6 rounded-2xl relative shadow-2xl space-y-4 border ${
+            isLight ? "bg-white border-neutral-200 text-neutral-900" : "bg-[#0C0C0F] border-white/10 text-white"
+          }`}>
+            <button
+              onClick={() => setIsFeedbackModalOpen(false)}
+              className={`absolute top-4 right-4 p-1 rounded-lg transition-all ${
+                isLight ? "text-neutral-400 hover:text-neutral-800 hover:bg-neutral-100" : "text-white/40 hover:text-white hover:bg-white/5"
+              }`}
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-2">
+              {feedbackType === "error" ? (
+                <>
+                  <AlertTriangle className="w-5 h-5 text-red-500 animate-pulse" />
+                  <h3 className="text-base font-black uppercase tracking-tight">Повідомити про помилку</h3>
+                </>
+              ) : (
+                <>
+                  <Lightbulb className="w-5 h-5 text-amber-500 animate-bounce" />
+                  <h3 className="text-base font-black uppercase tracking-tight">Запропонувати покращення</h3>
+                </>
+              )}
+            </div>
+
+            {feedbackError && (
+              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-semibold">
+                {feedbackError}
+              </div>
+            )}
+
+            {feedbackSuccess ? (
+              <div className="space-y-4 py-4 text-center">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto shadow-lg">
+                  <Check className="w-6 h-6 animate-in zoom-in" />
+                </div>
+                <p className="text-sm font-bold text-emerald-450">{feedbackSuccess}</p>
+                <button
+                  onClick={() => setIsFeedbackModalOpen(false)}
+                  className="px-6 py-2 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs transition-all cursor-pointer"
+                >
+                  Закрити
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleFeedbackSubmit} className="space-y-4">
+                <div>
+                  <label className={`block text-[10px] font-bold uppercase tracking-widest mb-1.5 ${textMutedClass}`}>
+                    Повідомлення
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={feedbackMessage}
+                    onChange={(e) => setFeedbackMessage(e.target.value)}
+                    placeholder={
+                      feedbackType === "error"
+                        ? "Опишіть помилку: що ви намагалися зробити, який результат очікували і що пішло не так..."
+                        : "Опишіть ваше покращення: як ця ідея зробить роботу CRM зручнішою та що саме варто додати..."
+                    }
+                    className={`w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all text-sm resize-none ${
+                      isLight ? "bg-white border border-neutral-300 text-neutral-900 placeholder:text-neutral-400" : "bg-white/5 border border-white/10 text-white placeholder:text-white/20"
+                    }`}
+                    required
+                  />
+                </div>
+
+                <div className="flex gap-2 justify-end pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsFeedbackModalOpen(false)}
+                    className={`px-5 py-2.5 rounded-full text-xs font-black uppercase transition-all cursor-pointer ${
+                      isLight ? "bg-neutral-100 hover:bg-neutral-200 text-neutral-700" : "bg-white/5 hover:bg-white/10 text-white"
+                    }`}
+                  >
+                    Скасувати
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={feedbackPending}
+                    className={`px-5 py-2.5 rounded-full text-xs font-black uppercase transition-all text-black cursor-pointer flex items-center gap-1.5 ${
+                      feedbackType === "error"
+                        ? "bg-red-50 hover:bg-red-400 disabled:bg-red-800 text-white"
+                        : "bg-amber-500 hover:bg-amber-400 disabled:bg-amber-800"
+                    }`}
+                  >
+                    {feedbackPending ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Надсилання...
+                      </>
+                    ) : (
+                      "Надіслати"
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

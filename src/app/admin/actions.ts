@@ -741,3 +741,70 @@ export async function assignLeadToManagerAction(customerId: string, managerId: s
     return { error: err.message || "Failed to assign manager" };
   }
 }
+
+// Submit error report or improvement suggestion
+export async function submitCrmFeedbackAction(type: "error" | "improvement", message: string) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Неавторизовано.");
+
+    const { error } = await supabase
+      .from("crm_feedback")
+      .insert({
+        user_id: user.id,
+        user_email: user.email,
+        type,
+        message,
+      });
+
+    if (error) throw error;
+    return { success: true, message: "Дякуємо! Ваш запит успішно надіслано." };
+  } catch (err: any) {
+    return { error: err.message || "Не вдалося надіслати запит." };
+  }
+}
+
+// Retrieve feedback items (Only for yura3zaxar@gmail.com and yura3zaxar@outlook.com)
+export async function getCrmFeedbackList() {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || (user.email !== "yura3zaxar@gmail.com" && user.email !== "yura3zaxar@outlook.com")) {
+      throw new Error("403 Доступ заборонено.");
+    }
+
+    const { data, error } = await supabase
+      .from("crm_feedback")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (err: any) {
+    console.error("Failed to load crm feedback:", err);
+    return [];
+  }
+}
+
+// Update feedback item status (Only for yura3zaxar@gmail.com and yura3zaxar@outlook.com)
+export async function updateFeedbackStatusAction(feedbackId: string, status: string) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || (user.email !== "yura3zaxar@gmail.com" && user.email !== "yura3zaxar@outlook.com")) {
+      throw new Error("403 Доступ заборонено.");
+    }
+
+    const { error } = await supabase
+      .from("crm_feedback")
+      .update({ status })
+      .eq("id", feedbackId);
+
+    if (error) throw error;
+    revalidatePath("/admin/settings");
+    return { success: true };
+  } catch (err: any) {
+    return { error: err.message || "Failed to update status." };
+  }
+}
