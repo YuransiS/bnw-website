@@ -95,7 +95,7 @@ export async function getSessionAndAccess(selectedProjectSlug?: string) {
 // Fetch unified CRM dashboard and analytics data
 export async function getUnifiedCRMData(selectedProjectSlug?: string) {
   try {
-    const { isSuperman, allowedProjects, activeSlug, profile } = await getSessionAndAccess(selectedProjectSlug);
+    const { isSuperman, allowedProjects, activeSlug, profile, user } = await getSessionAndAccess(selectedProjectSlug);
 
     const supabase = await createClient();
     const adminSupabase = createAdminClient();
@@ -281,7 +281,7 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
       // Calculate OP Leaderboard
       // Fetch all orders using our page loop instead of truncating at 1000 rows
       const [producersRes, profileProjectsRes, allProjRes, allOrdersForLeaderboard, allCostsRes] = await Promise.all([
-        adminSupabase.from("profiles").select("id, email").eq("role", "producer"),
+        adminSupabase.from("profiles").select("id, email, full_name, avatar_url").eq("role", "producer"),
         adminSupabase.from("profile_projects").select("profile_id, project_id"),
         adminSupabase.from("projects").select("id, name, slug"),
         fetchAllOrdersForSummary(),
@@ -343,6 +343,8 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
         return {
           producerId: prod.id,
           email: prod.email,
+          name: prod.full_name || prod.email,
+          avatar_url: prod.avatar_url || "",
           projectNames,
           spend: totalSpend,
           leadsCount: totalLeads,
@@ -390,17 +392,51 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
 
     const activeProject = allowedProjects.find((p) => p.slug === activeSlug)!;
 
-    // Fetch all orders with automatic pagination to bypass PostgREST 1000 limit
-    const fetchAllOrders = async () => {
+    // Fetch all customers with automatic pagination to bypass PostgREST 1000 limit
+    const fetchAllCustomers = async () => {
       let results: any[] = [];
       let from = 0;
       const limit = 1000;
       let hasMore = true;
       while (hasMore) {
-        const { data, error } = await supabase
+        let query = supabase
+          .from("unified_customers")
+          .select("*")
+          .eq("project_id", activeProject.id);
+
+        if (profile.role === "sales") {
+          query = query.eq("assigned_manager_id", user.id);
+        }
+
+        const { data, error } = await query.range(from, from + limit - 1);
+        if (error) throw error;
+        results = [...results, ...(data || [])];
+        if ((data || []).length < limit) hasMore = false;
+        else from += limit;
+      }
+      return results;
+    };
+
+    // Fetch all orders with automatic pagination to bypass PostgREST 1000 limit
+    const fetchAllOrders = async (customerIds: string[]) => {
+      let results: any[] = [];
+      let from = 0;
+      const limit = 1000;
+      let hasMore = true;
+      while (hasMore) {
+        let query = supabase
           .from("unified_orders")
           .select("*")
-          .eq("project_id", activeProject.id)
+          .eq("project_id", activeProject.id);
+
+        if (profile.role === "sales") {
+          if (customerIds.length === 0) {
+            return [];
+          }
+          query = query.in("customer_id", customerIds);
+        }
+
+        const { data, error } = await query
           .order("created_at", { ascending: false })
           .range(from, from + limit - 1);
         if (error) throw error;
@@ -411,30 +447,10 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
       return results;
     };
 
-    // Fetch all customers with automatic pagination to bypass PostgREST 1000 limit
-    const fetchAllCustomers = async () => {
-      let results: any[] = [];
-      let from = 0;
-      const limit = 1000;
-      let hasMore = true;
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from("unified_customers")
-          .select("*")
-          .eq("project_id", activeProject.id)
-          .range(from, from + limit - 1);
-        if (error) throw error;
-        results = [...results, ...(data || [])];
-        if ((data || []).length < limit) hasMore = false;
-        else from += limit;
-      }
-      return results;
-    };
-
-    // Fetch single project data in parallel
-    const [allOrders, allCustomers, costsRes] = await Promise.all([
-      fetchAllOrders(),
-      fetchAllCustomers(),
+    // Fetch single project data in sequence/parallel
+    const allCustomers = await fetchAllCustomers();
+    const [allOrders, costsRes] = await Promise.all([
+      fetchAllOrders(allCustomers.map((c) => c.id)),
       supabase.from("daily_traffic_and_costs").select("*").eq("project_id", activeProject.id).order("date", { ascending: false }),
     ]);
 
@@ -444,17 +460,48 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
     const leads = allOrders.filter((o) => o.status !== "Клик" && o.status !== "КликФормы");
     const traffic = allOrders.filter((o) => o.status === "Клик" || o.status === "КликФормы");
 
+    // Fetch all profiles to map sales manager names
+    const { data: allProfiles } = await adminSupabase
+      .from("profiles")
+      .select("id, email, full_name");
+    const profilesList = allProfiles || [];
+
     // Format leads with customer fields
     const formattedLeads = leads.map((lead) => {
       const cust = allCustomers.find((c) => c.id === lead.customer_id) || {};
+      const manager = profilesList.find((p) => p.id === cust.assigned_manager_id);
+      const managerName = manager ? (manager.full_name || manager.email) : "";
+
       return {
         ...lead,
         name: cust.name || lead.metadata?.name || lead.metadata?.lead?.name || "Невідомий",
         phone: cust.phone || lead.metadata?.phone || lead.metadata?.lead?.phone || "",
         telegram: cust.telegram || lead.metadata?.telegram || lead.metadata?.lead?.telegram || "",
         email: cust.email || lead.metadata?.email || lead.metadata?.lead?.email || "",
+        managerComment: cust.manager_comment || "",
+        customerId: lead.customer_id || null,
+        assigned_manager_id: cust.assigned_manager_id || null,
+        assigned_manager_name: managerName,
       };
     });
+
+    // Fetch sales managers for the active project
+    let salesManagers: { id: string; email: string; full_name: string }[] = [];
+    if (activeProject && ["admin", "superman", "producer", "rop"].includes(profile.role)) {
+      const { data: assignedSales } = await adminSupabase
+        .from("profile_projects")
+        .select("profile_id, profiles(id, email, role, full_name)")
+        .eq("project_id", activeProject.id);
+
+      salesManagers = (assignedSales || [])
+        .map((item: any) => item.profiles)
+        .filter((p: any) => p && p.role === "sales")
+        .map((p: any) => ({
+          id: p.id,
+          email: p.email,
+          full_name: p.full_name || p.email
+        }));
+    }
 
     return {
       viewType: "single",
@@ -465,6 +512,7 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
       leads: formattedLeads,
       traffic: traffic,
       costs: costs,
+      salesManagers,
     };
   } catch (err: any) {
     console.error("Unified CRM fetching error:", err.message);
@@ -652,4 +700,44 @@ export async function updateLeadStatus(
   }
 
   return { success: true, lead: data };
+}
+
+// Server action to update customer manager comments
+export async function updateCustomerCommentAction(customerId: string, comment: string) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Unauthorized");
+
+    const { error } = await supabase
+      .from("unified_customers")
+      .update({ manager_comment: comment })
+      .eq("id", customerId);
+
+    if (error) throw error;
+    
+    return { success: true };
+  } catch (err: any) {
+    return { error: err.message || "Failed to update comment" };
+  }
+}
+
+// Server action to assign a lead/customer to a sales manager
+export async function assignLeadToManagerAction(customerId: string, managerId: string | null) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Unauthorized");
+
+    const { error } = await supabase
+      .from("unified_customers")
+      .update({ assigned_manager_id: managerId ? managerId : null })
+      .eq("id", customerId);
+
+    if (error) throw error;
+    
+    return { success: true };
+  } catch (err: any) {
+    return { error: err.message || "Failed to assign manager" };
+  }
 }

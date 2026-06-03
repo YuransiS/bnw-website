@@ -41,7 +41,9 @@ import {
 } from "lucide-react";
 import {
   updateUnifiedLeadStatusAction,
-  createUnifiedLeadAction
+  createUnifiedLeadAction,
+  updateCustomerCommentAction,
+  assignLeadToManagerAction
 } from "./actions";
 import { useTheme } from "./ThemeProvider";
 
@@ -134,10 +136,25 @@ const getLeadDate = (lead: any): Date => {
   return new Date(lead.created_at);
 };
 
+const statusPriority = (s: string): number => {
+  if (s === "Купив курс") return 10;
+  if (s === "Вирішив подумати") return 8;
+  if (s === "Дзвінок проведено") return 7;
+  if (s === "Назначено Дзвінок") return 6;
+  if (s === "Купив(-ла) Трипвайер") return 5;
+  if (s === "Списались") return 4;
+  if (s === "Залишив заявку") return 3;
+  if (s === "Зацікавлений лід") return 2;
+  if (s === "Новий лід") return 1;
+  if (s === "Відмова") return -1;
+  return 0;
+};
+
 // Sales pipeline columns mapping
 const PIPELINE_COLUMNS = [
   { key: "Новий лід", label: "Новий лід", dotColor: "bg-blue-500" },
   { key: "Зацікавлений лід", label: "Зацікавлений лід", dotColor: "bg-purple-500" },
+  { key: "Залишив заявку", label: "Залишив заявку", dotColor: "bg-teal-500" },
   { key: "Списались", label: "Списались", dotColor: "bg-yellow-500" },
   { key: "Купив(-ла) Трипвайер", label: "Купив(-ла) Трипвайер", dotColor: "bg-indigo-500" },
   { key: "Назначено Дзвінок", label: "Назначено Дзвінок", dotColor: "bg-orange-500" },
@@ -237,6 +254,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const summaryData = initialData.summaryData || [];
   const campaignsData = initialData.campaignsData || [];
   const producersLeaderboard = initialData.producersLeaderboard || [];
+  const salesManagers = initialData.salesManagers || [];
 
   // Local component states
   const [activeTab, setActiveTab] = useState<string>(
@@ -329,6 +347,22 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const [selectedLeadHistory, setSelectedLeadHistory] = useState<any[] | null>(null);
   const [selectedLeadInfo, setSelectedLeadInfo] = useState<any | null>(null);
 
+  // Comments and manager assignments states
+  const [tempManagerComment, setTempManagerComment] = useState("");
+  const [tempAssignedManagerId, setTempAssignedManagerId] = useState("");
+  const [isSavingComment, setIsSavingComment] = useState(false);
+  const [isAssigningManager, setIsAssigningManager] = useState(false);
+
+  useEffect(() => {
+    if (selectedLeadInfo) {
+      setTempManagerComment(selectedLeadInfo.managerComment || "");
+      setTempAssignedManagerId(selectedLeadInfo.assigned_manager_id || "");
+    } else {
+      setTempManagerComment("");
+      setTempAssignedManagerId("");
+    }
+  }, [selectedLeadInfo]);
+
   // Collapsible UTM Tree States & handlers
   const [expandedUtmNodes, setExpandedUtmNodes] = useState<Record<string, boolean>>({});
 
@@ -368,6 +402,67 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     const tgMap = new Map<string, number>();
     const emailMap = new Map<string, number>();
     const uuidMap = new Map<string, number>();
+
+    const getDiagnosticsComment = (groupLeads: any[]): string => {
+      const answers: string[] = [];
+      groupLeads.forEach((lead) => {
+        const meta = lead.metadata || {};
+        const raw = meta.raw_row || {};
+        
+        const quizFields = [
+          { key: "що турбує", label: "Що турбує" },
+          { key: "Чи колола ботокс, або подібне", label: "Ботокс" },
+          { key: "Тип старіння", label: "Тип старіння" },
+          { key: "Рівень доходу", label: "Дохід" },
+          { key: "Дохід", label: "Дохід" },
+          { key: "Фінансова ціль", label: "Фінансова ціль" },
+          { key: "Ціль", label: "Ціль" },
+          { key: "Борги", label: "Борги" },
+          { key: "Чи є борги зараз", label: "Борги" },
+          { key: "За який термін вийти на 100 000$", label: "Термін 100k$" },
+          { key: "Відповідь 1 (скільки витрачаєш на косметику в міс.)", label: "Витрати на косметику" },
+          { key: "niche", label: "Ніша" },
+          { key: "Коментар", label: "Коментар" }
+        ];
+
+        quizFields.forEach((f) => {
+          const val = raw[f.key] || meta[f.key];
+          if (val && String(val).trim()) {
+            answers.push(`${f.label}: ${String(val).trim()}`);
+          }
+        });
+
+        Object.keys(raw).forEach((k) => {
+          if (k.toLowerCase().includes("питання") || k.toLowerCase().includes("відповідь")) {
+            const val = raw[k];
+            if (val && String(val).trim()) {
+              answers.push(`${k}: ${String(val).trim()}`);
+            }
+          }
+        });
+
+        if (meta.quiz_result) {
+          if (typeof meta.quiz_result === "object") {
+            Object.entries(meta.quiz_result).forEach(([k, v]) => {
+              if (v) answers.push(`${k}: ${v}`);
+            });
+          } else {
+            answers.push(`Quiz: ${meta.quiz_result}`);
+          }
+        }
+        if (meta.query) {
+          if (typeof meta.query === "object") {
+            Object.entries(meta.query).forEach(([k, v]) => {
+              if (v) answers.push(`${k}: ${v}`);
+            });
+          } else {
+            answers.push(`Запит: ${meta.query}`);
+          }
+        }
+      });
+
+      return Array.from(new Set(answers)).join(" | ");
+    };
 
     // Step 1: Cluster leads using exact identifiers
     rawLeads.forEach((lead: any, i: number) => {
@@ -443,11 +538,16 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         lower === "зареєстровано" ||
         lower.includes("очікується") ||
         lower === "новий лід" ||
-        lower === "новий"
+        lower === "новий" ||
+        lower === "передано у вп" ||
+        lower === "очікує оплати"
       ) {
         return "Новий лід";
       }
-      if (lower === "діагностика" || lower === "в роботі" || lower === "списались" || lower === "передано у вп" || lower === "очікує оплати") {
+      if (lower === "діагностика" || lower === "диагностика" || lower === "заявка") {
+        return "Залишив заявку";
+      }
+      if (lower === "в роботі" || lower === "списались") {
         return "Списались";
       }
       if (lower === "зустріч призначена" || lower === "назначено дзвінок" || lower === "діагн. запланована") {
@@ -529,20 +629,6 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         }
       });
 
-      // Determine most mature status
-      const statusPriority = (s: string) => {
-        if (s === "Купив курс") return 10;
-        if (s === "Вирішив подумати") return 8;
-        if (s === "Дзвінок проведено") return 7;
-        if (s === "Назначено Дзвінок") return 6;
-        if (s === "Купив(-ла) Трипвайер") return 5;
-        if (s === "Списались") return 4;
-        if (s === "Зацікавлений лід") return 3;
-        if (s === "Новий лід") return 1;
-        if (s === "Відмова") return -1;
-        return 0;
-      };
-
       const primaryStatus = normalizedGroupLeads.reduce((best, curr) => {
         return statusPriority(curr.status) > statusPriority(best) ? curr.status : best;
       }, "Новий лід");
@@ -586,9 +672,11 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         utm_campaign: utm_campaign || primaryLead.utm_campaign || "",
         utm_content: utm_content || primaryLead.utm_content || "",
         utm_term: utm_term || primaryLead.utm_term || "",
-        history: normalizedGroupLeads, // Attach full multi-touch history logs
+        history: [...normalizedGroupLeads].sort((a, b) => getLeadDate(a).getTime() - getLeadDate(b).getTime()), // Attach full multi-touch history logs sorted chronologically
         isMultiSource,
         touchCount: normalizedGroupLeads.length,
+        diagnosticsComment: getDiagnosticsComment(normalizedGroupLeads),
+        managerComment: primaryLead.managerComment || "",
       };
     });
 
@@ -596,11 +684,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     return allClustered.filter((lead: any) => {
       const nameVal = lead.name?.trim();
       const hasRealName = nameVal && nameVal !== "" && nameVal !== "Невідомий";
-      const hasContacts =
-        hasRealName ||
-        lead.phone?.trim() !== "" ||
-        lead.telegram?.trim() !== "" ||
-        lead.email?.trim() !== "";
+      const hasPhone = !!lead.phone?.trim();
+      const hasTelegram = !!lead.telegram?.trim();
+      const hasEmail = !!lead.email?.trim();
+      const hasContacts = hasRealName || hasPhone || hasTelegram || hasEmail;
       const isPaid = lead.status === "Купив курс" || lead.status === "Купив(-ла) Трипвайер";
       return hasContacts || isPaid;
     });
@@ -744,6 +831,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     const totalLeads = processedLeads.length;
     const totalClicks = filteredTraffic.length;
     const totalSpend = filteredCosts.reduce((sum: number, c: any) => sum + Number(c.spend || 0), 0);
+    const totalApplications = processedLeads.filter((l: any) => 
+      statusPriority(l.status) >= 3 || 
+      l.history.some((h: any) => statusPriority(h.status) >= 3)
+    ).length;
 
     const conversionRate = totalClicks > 0 ? (totalLeads / totalClicks) * 100 : 0;
     const cpl = totalLeads > 0 ? totalSpend / totalLeads : 0;
@@ -790,6 +881,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       totalLeads,
       totalClicks,
       totalSpend,
+      totalApplications,
       conversionRate,
       cpl,
       usdRevenue: totalUsdRevenue,
@@ -1036,6 +1128,48 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     navigator.clipboard.writeText(phone);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleSaveComment = async () => {
+    if (!selectedLeadInfo?.customerId) return;
+    setIsSavingComment(true);
+    try {
+      const res = await updateCustomerCommentAction(selectedLeadInfo.customerId, tempManagerComment);
+      if (res.error) throw new Error(res.error);
+      
+      setSelectedLeadInfo((prev: any) => prev ? { ...prev, managerComment: tempManagerComment } : null);
+      router.refresh();
+    } catch (err: any) {
+      alert("Помилка збереження коментаря: " + err.message);
+    } finally {
+      setIsSavingComment(false);
+    }
+  };
+
+  const handleAssignManager = async (managerId: string) => {
+    if (!selectedLeadInfo?.customerId) return;
+    setIsAssigningManager(true);
+    const val = managerId === "" ? null : managerId;
+    try {
+      const res = await assignLeadToManagerAction(selectedLeadInfo.customerId, val);
+      if (res.error) throw new Error(res.error);
+      
+      const matchedManager = salesManagers.find((m: any) => m.id === val);
+      const matchedName = matchedManager ? (matchedManager.full_name || matchedManager.email) : "";
+
+      setSelectedLeadInfo((prev: any) => prev ? { 
+        ...prev, 
+        assigned_manager_id: val,
+        assigned_manager_name: matchedName
+      } : null);
+      
+      setTempAssignedManagerId(managerId);
+      router.refresh();
+    } catch (err: any) {
+      alert("Помилка призначення менеджера: " + err.message);
+    } finally {
+      setIsAssigningManager(false);
+    }
   };
 
   const renderSocialsLink = (username: string, type: "tg" | "ig") => {
@@ -2010,7 +2144,13 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                       color: "bg-blue-500"
                     },
                     {
-                      label: "3. Продажі (Курс)",
+                      label: "3. Залишили заявку",
+                      val: singleProjectStats.totalApplications,
+                      pct: singleProjectStats.totalLeads > 0 ? (singleProjectStats.totalApplications / singleProjectStats.totalLeads) * 100 : 0,
+                      color: "bg-amber-500"
+                    },
+                    {
+                      label: "4. Продажі (Курс)",
                       val: processedLeads.filter((l) => l.status === "Купив курс").length,
                       pct: singleProjectStats.totalLeads > 0 ? (processedLeads.filter((l) => l.status === "Купив курс").length / singleProjectStats.totalLeads) * 100 : 0,
                       color: "bg-emerald-500"
@@ -2201,7 +2341,29 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                               <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-white/5 text-white/40 border border-white/5 shrink-0">
                                 {lead.utm_source || "direct"}
                               </span>
+                              {lead.assigned_manager_name && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20" title={`Менеджер: ${lead.assigned_manager_name}`}>
+                                  👤 {lead.assigned_manager_name.split(" ").slice(0, 2).map((n: string) => n[0]).join("").toUpperCase()}
+                                </span>
+                              )}
                             </div>
+
+                            {(lead.diagnosticsComment || lead.managerComment) && (
+                              <div className="mt-2 text-[10px] space-y-1 bg-white/[0.02] border border-white/5 p-2 rounded-lg text-white/60">
+                                {lead.diagnosticsComment && (
+                                  <div className="truncate" title={lead.diagnosticsComment}>
+                                    <span className="font-extrabold text-[8px] uppercase tracking-wider text-white/30 mr-1">Запит:</span>
+                                    {lead.diagnosticsComment}
+                                  </div>
+                                )}
+                                {lead.managerComment && (
+                                  <div className="truncate" title={lead.managerComment}>
+                                    <span className="font-extrabold text-[8px] uppercase tracking-wider text-white/30 mr-1">Ком:</span>
+                                    {lead.managerComment}
+                                  </div>
+                                )}
+                              </div>
+                            )}
 
                             {lead.usdPaid > 0 || lead.uahPaid > 0 ? (
                               <p className="text-xs font-black text-emerald-400 mt-1">{formatDualCurrency(lead.usdPaid, lead.uahPaid)}</p>
@@ -2365,13 +2527,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                     <th className="p-4 text-center">Торкання (Touch)</th>
                     <th className="p-4 text-center">Сума</th>
                     <th className="p-4 text-center">Статус</th>
-                    <th className="p-4 text-right">Дії</th>
                   </tr>
                 </thead>
                 <tbody className={`divide-y ${borderClass} ${isLight ? "text-neutral-700" : "text-white/80"}`}>
                   {processedLeads.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="p-8 text-center text-white/20 italic">Заявки за заданими параметрами відсутні</td>
+                      <td colSpan={6} className="p-8 text-center text-white/20 italic">Заявки за заданими параметрами відсутні</td>
                     </tr>
                   ) : (
                     paginatedLeads.map((lead: any) => {
@@ -2490,20 +2651,6 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                               <span className={`w-1.5 h-1.5 rounded-full ${col.dotColor}`} />
                               {lead.status}
                             </span>
-                          </td>
-
-                          {/* Actions */}
-                          <td className="p-4 text-right">
-                            <button
-                              onClick={() => {
-                                setSelectedLeadHistory(lead.history);
-                                setSelectedLeadInfo(lead);
-                              }}
-                              className={`px-3.5 py-1.5 rounded text-[10px] font-black uppercase transition-all cursor-pointer ${isLight ? "bg-neutral-100 hover:bg-neutral-200 text-neutral-800" : "bg-white/5 hover:bg-white/10 text-white"
-                                }`}
-                            >
-                              Історія
-                            </button>
                           </td>
                         </tr>
                       );
@@ -2857,7 +3004,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       {/* Lead journey timeline modal overlay */}
       {selectedLeadHistory && selectedLeadInfo && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="relative w-full max-w-2xl h-[90vh] bg-[#0C0C0F] border border-white/10 rounded-3xl p-6 shadow-2xl flex flex-col space-y-6 animate-in slide-in-from-bottom-4 duration-300">
+          <div className="relative w-full max-w-5xl h-[90vh] bg-[#0C0C0F] border border-white/10 rounded-3xl p-6 shadow-2xl flex flex-col space-y-6 animate-in slide-in-from-bottom-4 duration-300">
             <button
               onClick={() => {
                 setSelectedLeadHistory(null);
@@ -2869,7 +3016,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             </button>
 
             <div className="border-b border-white/5 pb-4">
-              <span className="inline-block px-2.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <span className="inline-block px-2.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-450 border border-emerald-500/20">
                 Карточка Клієнта (DSU)
               </span>
               <h3 className="text-xl font-black uppercase text-white mt-2">{selectedLeadInfo.name}</h3>
@@ -2878,192 +3025,285 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
               </p>
             </div>
 
-            {/* Redesigned Roadmap Timeline */}
-            <div className="flex-grow overflow-y-auto custom-scrollbar space-y-0 pr-2 pt-6">
-              {selectedLeadHistory.map((touch: any, idx: number) => {
-                const isPaidCourse = touch.status === "Купив курс";
-                const isTripwire = touch.status === "Купив(-ла) Трипвайер";
-                const isCall = touch.status === "Назначено Дзвінок" || touch.status === "Дзвінок проведено";
-                const isThink = touch.status === "Вирішив подумати";
-                const isDecline = touch.status === "Відмова";
+            {/* Redesigned Roadmap Timeline Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-grow overflow-hidden">
+              {/* Left Column: Timeline list */}
+              <div className="flex-grow overflow-y-auto custom-scrollbar space-y-0 pr-2 pt-2 h-full">
+                <h4 className="text-[10px] font-black uppercase text-white/40 tracking-widest mb-3">Хронологія шляху клієнта</h4>
+                {selectedLeadHistory.map((touch: any, idx: number) => {
+                  const isPaidCourse = touch.status === "Купив курс";
+                  const isTripwire = touch.status === "Купив(-ла) Трипвайер";
+                  const isCall = touch.status === "Назначено Дзвінок" || touch.status === "Дзвінок проведено";
+                  const isThink = touch.status === "Вирішив подумати";
+                  const isDecline = touch.status === "Відмова";
 
-                // Resolve timeline design tokens
-                let ringColor = "border-white/10 text-white/50 bg-white/5";
-                let glowColor = "bg-white/20";
-                let touchIcon = <Globe className="w-3.5 h-3.5" />;
+                  // Resolve timeline design tokens
+                  let ringColor = "border-white/10 text-white/50 bg-white/5";
+                  let glowColor = "bg-white/20";
+                  let touchIcon = <Globe className="w-3.5 h-3.5" />;
 
-                if (isPaidCourse) {
-                  ringColor = "border-emerald-500/30 text-emerald-450 bg-emerald-500/10 shadow-[0_0_15px_rgba(16,185,129,0.15)] animate-pulse";
-                  glowColor = "bg-emerald-500";
-                  touchIcon = <DollarSign className="w-3.5 h-3.5" />;
-                } else if (isTripwire) {
-                  ringColor = "border-indigo-500/30 text-indigo-400 bg-indigo-500/10 shadow-[0_0_15px_rgba(99,102,241,0.1)]";
-                  glowColor = "bg-indigo-500";
-                  touchIcon = <Sparkles className="w-3.5 h-3.5" />;
-                } else if (isCall) {
-                  ringColor = "border-orange-500/30 text-orange-400 bg-orange-500/10 shadow-[0_0_10px_rgba(249,115,22,0.05)]";
-                  glowColor = "bg-orange-550";
-                  touchIcon = <Calendar className="w-3.5 h-3.5" />;
-                } else if (isThink) {
-                  ringColor = "border-pink-500/30 text-pink-400 bg-pink-550/10";
-                  glowColor = "bg-pink-500";
-                  touchIcon = <HelpCircle className="w-3.5 h-3.5" />;
-                } else if (isDecline) {
-                  ringColor = "border-red-500/30 text-red-400 bg-red-550/10";
-                  glowColor = "bg-red-550";
-                  touchIcon = <X className="w-3.5 h-3.5" />;
-                }
+                  if (isPaidCourse) {
+                    ringColor = "border-emerald-500/30 text-emerald-450 bg-emerald-500/10 shadow-[0_0_15px_rgba(16,185,129,0.15)] animate-pulse";
+                    glowColor = "bg-emerald-500";
+                    touchIcon = <DollarSign className="w-3.5 h-3.5" />;
+                  } else if (isTripwire) {
+                    ringColor = "border-indigo-500/30 text-indigo-400 bg-indigo-500/10 shadow-[0_0_15px_rgba(99,102,241,0.1)]";
+                    glowColor = "bg-indigo-500";
+                    touchIcon = <Sparkles className="w-3.5 h-3.5" />;
+                  } else if (isCall) {
+                    ringColor = "border-orange-500/30 text-orange-400 bg-orange-500/10 shadow-[0_0_10px_rgba(249,115,22,0.05)]";
+                    glowColor = "bg-orange-550";
+                    touchIcon = <Calendar className="w-3.5 h-3.5" />;
+                  } else if (isThink) {
+                    ringColor = "border-pink-500/30 text-pink-400 bg-pink-550/10";
+                    glowColor = "bg-pink-500";
+                    touchIcon = <HelpCircle className="w-3.5 h-3.5" />;
+                  } else if (isDecline) {
+                    ringColor = "border-red-500/30 text-red-400 bg-red-550/10";
+                    glowColor = "bg-red-550";
+                    touchIcon = <X className="w-3.5 h-3.5" />;
+                  }
 
-                return (
-                  <div key={touch.id} className="relative pl-12 pb-8 last:pb-2 group">
-                    {/* Visual connecting line */}
-                    <div className="absolute left-[15px] top-8 bottom-0 w-0.5 bg-gradient-to-b from-white/10 to-transparent group-last:hidden" />
+                  return (
+                    <div key={touch.id} className="relative pl-12 pb-8 last:pb-2 group">
+                      {/* Visual connecting line */}
+                      <div className="absolute left-[15px] top-8 bottom-0 w-0.5 bg-gradient-to-b from-white/10 to-transparent group-last:hidden" />
 
-                    {/* Glorious glowing node */}
-                    <div className={`absolute left-0 top-1.5 w-8 h-8 rounded-full border flex items-center justify-center transition-all duration-300 z-10 ${ringColor}`}>
-                      {touchIcon}
-                      <span className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-[#0C0C0F] ${glowColor}`} />
-                    </div>
-
-                    {/* Milestone card content */}
-                    <div className="p-5 rounded-2xl bg-white/[0.01] border border-white/5 space-y-3.5 hover:border-white/10 hover:bg-white/[0.02] transition-all duration-200">
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-2.5">
-                          <span className="text-[10px] font-black uppercase text-white/30 tracking-widest">Крок #{idx + 1}</span>
-                          <span className={`px-2.5 py-0.5 rounded text-[9px] font-black uppercase border ${isPaidCourse
-                              ? "bg-emerald-500/10 text-emerald-450 border-emerald-500/20"
-                              : isTripwire
-                                ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
-                                : "bg-white/5 text-white/50 border-white/5"
-                            }`}>
-                            {touch.status}
-                          </span>
-                        </div>
-                        <span className="text-[10px] text-white/30 font-bold">
-                          {getLeadDate(touch).toLocaleString("uk-UA")}
-                        </span>
+                      {/* Glorious glowing node */}
+                      <div className={`absolute left-0 top-1.5 w-8 h-8 rounded-full border flex items-center justify-center transition-all duration-300 z-10 ${ringColor}`}>
+                        {touchIcon}
+                        <span className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-[#0C0C0F] ${glowColor}`} />
                       </div>
 
-                      <div className="grid grid-cols-2 gap-4 text-[11px] border-t border-white/5 pt-3">
-                        <div>
-                          <span className="text-white/30 font-bold uppercase text-[9px] block">Джерело</span>
-                          <span className="text-white font-extrabold uppercase tracking-wide bg-white/5 px-2.5 py-0.5 rounded mt-1.5 inline-block">
-                            {touch.utm_source || "direct"}
-                          </span>
-                        </div>
-                        {touch.amount > 0 && (
-                          <div>
-                            <span className="text-white/30 font-bold uppercase text-[9px] block">Сума</span>
-                            <span className="text-emerald-455 font-black text-sm block mt-1">
-                              {(() => {
-                                const amt = Number(touch.amount || 0);
-                                const metaCurrency = touch.metadata?.currency || touch.metadata?.lead?.currency || "";
-                                const isExplicitUah = ["UAH", "uah", "грн", "грн.", "Uah"].includes(String(metaCurrency).trim());
-                                const isExplicitUsd = ["USD", "usd", "Usd", "$"].includes(String(metaCurrency).trim());
-                                const isUah = isExplicitUah || (!isExplicitUsd && amt >= 500);
-                                return isUah ? `${amt} ₴` : `$${amt}`;
-                              })()}
+                      {/* Milestone card content */}
+                      <div className="p-5 rounded-2xl bg-white/[0.01] border border-white/5 space-y-3.5 hover:border-white/10 hover:bg-white/[0.02] transition-all duration-200">
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-[10px] font-black uppercase text-white/30 tracking-widest">Крок #{idx + 1}</span>
+                            <span className={`px-2.5 py-0.5 rounded text-[9px] font-black uppercase border ${isPaidCourse
+                                ? "bg-emerald-500/10 text-emerald-455 border-emerald-500/20"
+                                : isTripwire
+                                  ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
+                                  : "bg-white/5 text-white/50 border-white/5"
+                              }`}>
+                              {touch.status}
                             </span>
                           </div>
-                        )}
-                      </div>
+                          <span className="text-[10px] text-white/30 font-bold">
+                            {getLeadDate(touch).toLocaleString("uk-UA")}
+                          </span>
+                        </div>
 
-                      {(() => {
-                        if (!touch.metadata || Object.keys(touch.metadata).length === 0) return null;
-                        const meta = touch.metadata;
+                        <div className="grid grid-cols-2 gap-4 text-[11px] border-t border-white/5 pt-3">
+                          <div>
+                            <span className="text-white/30 font-bold uppercase text-[9px] block">Джерело</span>
+                            <span className="text-white font-extrabold uppercase tracking-wide bg-white/5 px-2.5 py-0.5 rounded mt-1.5 inline-block">
+                              {touch.utm_source || "direct"}
+                            </span>
+                          </div>
+                          {touch.amount > 0 && (
+                            <div>
+                              <span className="text-white/30 font-bold uppercase text-[9px] block">Сума</span>
+                              <span className="text-emerald-455 font-black text-sm block mt-1">
+                                {(() => {
+                                  const amt = Number(touch.amount || 0);
+                                  const metaCurrency = touch.metadata?.currency || touch.metadata?.lead?.currency || "";
+                                  const isExplicitUah = ["UAH", "uah", "грн", "грн.", "Uah"].includes(String(metaCurrency).trim());
+                                  const isExplicitUsd = ["USD", "usd", "Usd", "$"].includes(String(metaCurrency).trim());
+                                  const isUah = isExplicitUah || (!isExplicitUsd && amt >= 500);
+                                  return isUah ? `${amt} ₴` : `$${amt}`;
+                                })()}
+                              </span>
+                            </div>
+                          )}
+                        </div>
 
-                        const fullUrl = meta.full_url || meta.fullUrl || meta.page_url || "";
-                        const pathVal = meta.path || meta.page_path || "";
-                        const targetSheet = meta.target_sheet || meta.targetSheet || "";
-                        const tariff = meta.tariffName || meta.tariff_name || meta.tariff || "";
-                        const isElt = meta.elt_import === true || meta.elt_import === "true";
-                        const origSheet = meta.original_sheet || "";
-                        const rowIdx = meta.row || "";
+                        {(() => {
+                          if (!touch.metadata || Object.keys(touch.metadata).length === 0) return null;
+                          const meta = touch.metadata;
 
-                        const displayUrl = fullUrl ? fullUrl.replace(/^https?:\/\//, "") : "";
+                          const fullUrl = meta.full_url || meta.fullUrl || meta.page_url || "";
+                          const pathVal = meta.path || meta.page_path || "";
+                          const targetSheet = meta.target_sheet || meta.targetSheet || "";
+                          const tariff = meta.tariffName || meta.tariff_name || meta.tariff || "";
+                          const isElt = meta.elt_import === true || meta.elt_import === "true";
+                          const origSheet = meta.original_sheet || "";
+                          const rowIdx = meta.row || "";
 
-                        const shownKeys = new Set([
-                          "full_url", "fullUrl", "page_url", "path", "page_path", "target_sheet",
-                          "targetSheet", "tariffName", "tariff_name", "tariff", "elt_import",
-                          "original_sheet", "row", "device_info", "user_agent", "visitor_id", "visitorId",
-                          "visitor_uuid", "phone", "email", "telegram", "name", "customerName", "customerPhone",
-                          "customerEmail", "social", "amount", "currency", "failUrl", "successUrl", "utms"
-                        ]);
+                          const displayUrl = fullUrl ? fullUrl.replace(/^https?:\/\//, "") : "";
 
-                        const remainingEntries = Object.entries(meta).filter(([k]) => !shownKeys.has(k));
+                          const shownKeys = new Set([
+                            "full_url", "fullUrl", "page_url", "path", "page_path", "target_sheet",
+                            "targetSheet", "tariffName", "tariff_name", "tariff", "elt_import",
+                            "original_sheet", "row", "device_info", "user_agent", "visitor_id", "visitorId",
+                            "visitor_uuid", "phone", "email", "telegram", "name", "customerName", "customerPhone",
+                            "customerEmail", "social", "amount", "currency", "failUrl", "successUrl", "utms"
+                          ]);
 
-                        return (
-                          <div className="space-y-2.5 border-t border-white/5 pt-3">
-                            <span className="text-[9px] font-black uppercase text-white/30 tracking-widest block">Шлях клієнта & Торкання</span>
+                          const remainingEntries = Object.entries(meta).filter(([k]) => !shownKeys.has(k));
 
-                            <div className="flex flex-wrap gap-2">
-                              {fullUrl && (
-                                <a
-                                  href={fullUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="px-2.5 py-1 rounded-xl bg-blue-500/10 hover:bg-blue-500/15 border border-blue-500/20 text-[10px] font-extrabold text-blue-450 flex items-center gap-1.5 transition-all"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <Globe className="w-3 h-3 shrink-0 text-blue-400" />
-                                  <span className="truncate max-w-[200px]" title={fullUrl}>
-                                    {pathVal ? `Сторінка: ${pathVal}` : displayUrl}
+                          return (
+                            <div className="space-y-2.5 border-t border-white/5 pt-3">
+                              <span className="text-[9px] font-black uppercase text-white/30 tracking-widest block">Шлях клієнта & Торкання</span>
+
+                              <div className="flex flex-wrap gap-2">
+                                {fullUrl && (
+                                  <a
+                                    href={fullUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-2.5 py-1 rounded-xl bg-blue-500/10 hover:bg-blue-500/15 border border-blue-500/20 text-[10px] font-extrabold text-blue-450 flex items-center gap-1.5 transition-all"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <Globe className="w-3 h-3 shrink-0 text-blue-400" />
+                                    <span className="truncate max-w-[200px]" title={fullUrl}>
+                                      {pathVal ? `Сторінка: ${pathVal}` : displayUrl}
+                                    </span>
+                                    <ExternalLink className="w-2.5 h-2.5 opacity-65 shrink-0" />
+                                  </a>
+                                )}
+
+                                {!fullUrl && pathVal && (
+                                  <span className="px-2.5 py-1 rounded-xl bg-blue-500/10 border border-blue-500/20 text-[10px] font-extrabold text-blue-450 flex items-center gap-1.5">
+                                    <Globe className="w-3 h-3 shrink-0 text-blue-400" />
+                                    Шлях: {pathVal}
                                   </span>
-                                  <ExternalLink className="w-2.5 h-2.5 opacity-65 shrink-0" />
-                                </a>
-                              )}
+                                )}
 
-                              {!fullUrl && pathVal && (
-                                <span className="px-2.5 py-1 rounded-xl bg-blue-500/10 border border-blue-500/20 text-[10px] font-extrabold text-blue-450 flex items-center gap-1.5">
-                                  <Globe className="w-3 h-3 shrink-0 text-blue-400" />
-                                  Шлях: {pathVal}
-                                </span>
-                              )}
+                                {targetSheet && (
+                                  <span className="px-2.5 py-1 rounded-xl bg-purple-500/10 border border-purple-500/20 text-[10px] font-extrabold text-purple-400 flex items-center gap-1.5">
+                                    <Briefcase className="w-3 h-3 shrink-0" />
+                                    Форма: {targetSheet}
+                                  </span>
+                                )}
 
-                              {targetSheet && (
-                                <span className="px-2.5 py-1 rounded-xl bg-purple-500/10 border border-purple-500/20 text-[10px] font-extrabold text-purple-400 flex items-center gap-1.5">
-                                  <Briefcase className="w-3 h-3 shrink-0" />
-                                  Форма: {targetSheet}
-                                </span>
-                              )}
+                                {tariff && (
+                                  <span className="px-2.5 py-1 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[10px] font-extrabold text-amber-450 flex items-center gap-1.5">
+                                    <Sparkles className="w-3 h-3 shrink-0 text-amber-450" />
+                                    Тариф: {tariff}
+                                  </span>
+                                )}
 
-                              {tariff && (
-                                <span className="px-2.5 py-1 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[10px] font-extrabold text-amber-450 flex items-center gap-1.5">
-                                  <Sparkles className="w-3 h-3 shrink-0 text-amber-450" />
-                                  Тариф: {tariff}
-                                </span>
-                              )}
+                                {isElt && (
+                                  <span className="px-2.5 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-extrabold text-emerald-400 flex items-center gap-1.5" title="Імпортовано з таблиць Google за допомогою ELT">
+                                    <FileSpreadsheet className="w-3 h-3 shrink-0" />
+                                    Імпорт: {origSheet || "Sheet"} {rowIdx ? `(Рядок ${rowIdx})` : ""}
+                                  </span>
+                                )}
+                              </div>
 
-                              {isElt && (
-                                <span className="px-2.5 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-extrabold text-emerald-400 flex items-center gap-1.5" title="Імпортовано з таблиць Google за допомогою ELT">
-                                  <FileSpreadsheet className="w-3 h-3 shrink-0" />
-                                  Імпорт: {origSheet || "Sheet"} {rowIdx ? `(Рядок ${rowIdx})` : ""}
-                                </span>
+                              {remainingEntries.length > 0 && (
+                                <div className="bg-[#08080A] rounded-xl border border-white/5 p-3.5 text-[10px] space-y-1.5 mt-2">
+                                  <span className="text-[8px] font-black uppercase text-white/20 tracking-wider block mb-1">Додаткові параметри:</span>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-white/50">
+                                    {remainingEntries.map(([k, v]) => (
+                                      <div key={k} className="flex justify-between items-center bg-white/[0.01] border border-white/5 px-2.5 py-1.5 rounded-lg">
+                                        <span className="font-semibold text-white/30 truncate pr-2 uppercase text-[9px]">{k.replace(/_/g, ' ')}</span>
+                                        <span className="font-mono font-bold text-white/80 truncate max-w-[150px]" title={String(v)}>
+                                          {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
                               )}
                             </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
 
-                            {remainingEntries.length > 0 && (
-                              <div className="bg-[#08080A] rounded-xl border border-white/5 p-3.5 text-[10px] space-y-1.5 mt-2">
-                                <span className="text-[8px] font-black uppercase text-white/20 tracking-wider block mb-1">Додаткові параметри:</span>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-white/50">
-                                  {remainingEntries.map(([k, v]) => (
-                                    <div key={k} className="flex justify-between items-center bg-white/[0.01] border border-white/5 px-2.5 py-1.5 rounded-lg">
-                                      <span className="font-semibold text-white/30 truncate pr-2 uppercase text-[9px]">{k.replace(/_/g, ' ')}</span>
-                                      <span className="font-mono font-bold text-white/80 truncate max-w-[150px]" title={String(v)}>
-                                        {typeof v === 'object' ? JSON.stringify(v) : String(v)}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })()}
+              {/* Right Column: Lead info, Questionnaire, comments editor & manager assignments */}
+              <div className="overflow-y-auto custom-scrollbar pl-2 space-y-6 h-full border-t md:border-t-0 md:border-l border-white/5 pt-4 md:pt-0 md:pl-6">
+                {/* Core parameters */}
+                <div className="space-y-3">
+                  <span className="text-[10px] font-black uppercase text-white/40 tracking-widest block">Основні параметри</span>
+                  <div className="grid grid-cols-2 gap-3 text-xs bg-white/[0.01] border border-white/5 p-3.5 rounded-2xl">
+                    <div className="col-span-2 sm:col-span-1">
+                      <span className="text-white/30 uppercase text-[9px] font-bold block">Email</span>
+                      <span className="text-white font-extrabold truncate block">{selectedLeadInfo.email || "—"}</span>
+                    </div>
+                    <div className="col-span-2 sm:col-span-1">
+                      <span className="text-white/30 uppercase text-[9px] font-bold block">Джерело (UTM Source)</span>
+                      <span className="text-white font-extrabold block">{selectedLeadInfo.utm_source || "direct"}</span>
+                    </div>
+                    <div>
+                      <span className="text-white/30 uppercase text-[9px] font-bold block">Канал (UTM Medium)</span>
+                      <span className="text-white font-extrabold block">{selectedLeadInfo.utm_medium || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="text-white/30 uppercase text-[9px] font-bold block">Кампанія (UTM Campaign)</span>
+                      <span className="text-white font-extrabold block">{selectedLeadInfo.utm_campaign || "—"}</span>
+                    </div>
+                    {selectedLeadInfo.utm_content && (
+                      <div className="col-span-2">
+                        <span className="text-white/30 uppercase text-[9px] font-bold block">Вміст (UTM Content)</span>
+                        <span className="text-white font-extrabold block">{selectedLeadInfo.utm_content}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Aggregated Questionnaire */}
+                {selectedLeadInfo.diagnosticsComment && (
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-black uppercase text-white/40 tracking-widest block">Заповнена анкета / Запит</span>
+                    <div className="p-3.5 rounded-2xl bg-white/[0.01] border border-white/5 text-xs text-white/80 max-h-48 overflow-y-auto custom-scrollbar whitespace-pre-wrap font-medium">
+                      {selectedLeadInfo.diagnosticsComment}
                     </div>
                   </div>
-                );
-              })}
+                )}
+
+                {/* Comment Editor */}
+                <div className="space-y-2">
+                  <span className="text-[10px] font-black uppercase text-white/40 tracking-widest block">Коментар менеджера</span>
+                  <textarea
+                    value={tempManagerComment}
+                    onChange={(e) => setTempManagerComment(e.target.value)}
+                    placeholder="Введіть робочі примітки щодо ліда..."
+                    rows={4}
+                    className="w-full px-3.5 py-2.5 bg-white/5 border border-white/10 rounded-2xl focus:outline-none focus:border-emerald-500 text-xs font-semibold text-white placeholder:text-white/20 resize-none"
+                  />
+                  <div className="flex justify-end">
+                    <button
+                      onClick={handleSaveComment}
+                      disabled={isSavingComment || tempManagerComment === (selectedLeadInfo.managerComment || "")}
+                      className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:bg-white/5 text-black disabled:text-white/45 text-xs font-black transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      {isSavingComment ? "Збереження..." : "Зберегти коментар"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Manager assignment selector */}
+                {["admin", "superman", "producer", "rop"].includes(role) && (
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-black uppercase text-white/40 tracking-widest block">Призначити менеджера з продажів</span>
+                    <div className="relative">
+                      <select
+                        value={tempAssignedManagerId || ""}
+                        onChange={(e) => handleAssignManager(e.target.value)}
+                        disabled={isAssigningManager}
+                        className="w-full appearance-none pl-3.5 pr-10 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-xs font-semibold text-white cursor-pointer"
+                      >
+                        <option value="" className="bg-[#0C0C0F] text-white/40">Не призначено</option>
+                        {salesManagers.map((mgr: any) => (
+                          <option key={mgr.id} value={mgr.id} className="bg-[#0C0C0F] text-white">
+                            {mgr.full_name}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none text-white/40" />
+                    </div>
+                    {isAssigningManager && (
+                      <p className="text-[10px] text-emerald-455 animate-pulse font-semibold">Оновлення відповідального...</p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
