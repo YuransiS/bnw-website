@@ -56,7 +56,7 @@ export async function getSessionAndAccess(selectedProjectSlug?: string) {
     allowedProjects = projectsList.filter((p) => {
       if (p.slug === "vova_win") return false;
       if (p.slug === "bw_main") {
-        return assignedProjectIds.has(p.id);
+        return isSuperman || assignedProjectIds.has(p.id);
       }
       return true;
     });
@@ -110,12 +110,12 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
                 COUNT(id) FILTER (WHERE status NOT IN ('Клик', 'КликФормы')) AS total_orders,
                 SUM(amount) FILTER (
                     WHERE LOWER(status) IN ('closed_won', 'approved', 'aprooved', 'оплачено') 
-                    AND COALESCE(metadata->>'original_sheet', '') != 'Практикум'
+                    AND COALESCE(metadata->>'original_sheet', '') NOT IN ('Практикум', 'Practicum_Leads', 'Заявки на практикум', 'Miні-курс')
                     AND (LOWER(COALESCE(metadata->>'currency', metadata->'lead'->>'currency', '')) IN ('usd', '$'))
                 ) AS usd_revenue,
                 SUM(amount) FILTER (
                     WHERE LOWER(status) IN ('closed_won', 'approved', 'aprooved', 'оплачено') 
-                    AND COALESCE(metadata->>'original_sheet', '') != 'Практикум'
+                    AND COALESCE(metadata->>'original_sheet', '') NOT IN ('Практикум', 'Practicum_Leads', 'Заявки на практикум', 'Miні-курс')
                     AND NOT (LOWER(COALESCE(metadata->>'currency', metadata->'lead'->>'currency', '')) IN ('usd', '$'))
                 ) AS uah_revenue
             FROM unified_orders
@@ -154,17 +154,17 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
                 utm_campaign,
                 SUM(amount) FILTER (
                     WHERE LOWER(status) IN ('closed_won', 'approved', 'aprooved', 'оплачено')
-                    AND COALESCE(metadata->>'original_sheet', '') != 'Практикум'
+                    AND COALESCE(metadata->>'original_sheet', '') NOT IN ('Практикум', 'Practicum_Leads', 'Заявки на практикум', 'Miні-курс')
                     AND (LOWER(COALESCE(metadata->>'currency', metadata->'lead'->>'currency', '')) IN ('usd', '$'))
                 ) AS usd_revenue,
                 SUM(amount) FILTER (
                     WHERE LOWER(status) IN ('closed_won', 'approved', 'aprooved', 'оплачено')
-                    AND COALESCE(metadata->>'original_sheet', '') != 'Практикум'
+                    AND COALESCE(metadata->>'original_sheet', '') NOT IN ('Практикум', 'Practicum_Leads', 'Заявки на практикум', 'Miні-курс')
                     AND NOT (LOWER(COALESCE(metadata->>'currency', metadata->'lead'->>'currency', '')) IN ('usd', '$'))
                 ) AS uah_revenue,
                 COUNT(id) FILTER (
                     WHERE LOWER(status) IN ('closed_won', 'approved', 'aprooved', 'оплачено') 
-                    AND COALESCE(metadata->>'original_sheet', '') != 'Практикум'
+                    AND COALESCE(metadata->>'original_sheet', '') NOT IN ('Практикум', 'Practicum_Leads', 'Заявки на практикум', 'Miні-курс')
                 ) AS total_sales
             FROM unified_orders
             WHERE campaign_id IS NOT NULL AND status NOT IN ('Клик', 'КликФормы')
@@ -255,10 +255,8 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
           paidOrders.forEach((o) => {
             const amt = Number(o.amount || 0);
             const metaCurrency = String(o.metadata?.currency || o.metadata?.lead?.currency || "").trim();
-            const origSheet = String(o.metadata?.original_sheet || "").trim();
-            if (origSheet === "Практикум") return; // exclude tripwires from course revenue
 
-            const isUsd = ["usd", "$"].includes(metaCurrency.toLowerCase().trim());
+            const isUsd = ["usd", "$"].includes(metaCurrency.toLowerCase().trim()) || proj.slug === "sofia" || proj.slug === "valeria" || proj.slug === "svitlana";
 
             if (isUsd) {
               usd_revenue += amt;
@@ -324,10 +322,9 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
         prodPaidOrders.forEach((o) => {
           const amt = Number(o.amount || 0);
           const metaCurrency = String(o.metadata?.currency || o.metadata?.lead?.currency || "").trim();
-          const origSheet = String(o.metadata?.original_sheet || "").trim();
-          if (origSheet === "Практикум") return; // exclude tripwires from course revenue
 
-          const isUsd = ["usd", "$"].includes(metaCurrency.toLowerCase().trim());
+          const orderProj = projects.find(p => p.id === o.project_id);
+          const isUsd = ["usd", "$"].includes(metaCurrency.toLowerCase().trim()) || orderProj?.slug === "sofia" || orderProj?.slug === "valeria" || orderProj?.slug === "svitlana";
 
           if (isUsd) {
             usd_revenue += amt;

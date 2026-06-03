@@ -9,6 +9,7 @@ export function HeroDesktop() {
   const { openModal } = useModal();
 
   useEffect(() => {
+    if (window.innerWidth < 768) return;
     const ctx = gsap.context(() => {
       const tl = gsap.timeline();
 
@@ -94,7 +95,7 @@ export function HeroDesktop() {
             <h1 className="hero-elem text-5xl lg:text-6xl font-black tracking-tighter leading-[1.25] mb-6" style={{ textShadow: "0 10px 40px rgba(0,0,0,0.5)" }}>
               <span className="block mb-3">Створюємо під ключ <span className="text-emerald-500 drop-shadow-[0_0_20px_rgba(16,185,129,0.4)] uppercase">систему для експерта</span></span>
               <span className="block mb-3">яка приносить прибуток <span className="text-emerald-500 whitespace-nowrap">$10k–$30k+/місяць</span></span>
-              <span className="block text-white/90 text-2xl lg:text-4xl font-extrabold tracking-tight">через системний маркетинг та продюсування</span>
+              <span className="block text-white/90">через системний маркетинг та продюсування</span>
             </h1>
 
             <p className="hero-elem text-lg lg:text-xl text-white/70 max-w-3xl mb-10 font-medium leading-relaxed">

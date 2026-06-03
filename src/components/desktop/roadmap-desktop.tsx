@@ -39,6 +39,7 @@ export function RoadmapDesktop() {
   const itemsRef = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
+    if (window.innerWidth < 768) return;
     const ctx = gsap.context(() => {
       // Progress line animation
       gsap.to(lineRef.current, {

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient, createAdminClient } from "@/utils/supabase/server";
 import Sidebar from "./Sidebar";
+import { ThemeProvider } from "../ThemeProvider";
 
 export default async function AdminLayout({
   children,
@@ -78,7 +79,7 @@ export default async function AdminLayout({
     allowedProjects = projectsList.filter((p) => {
       if (p.slug === "vova_win") return false;
       if (p.slug === "bw_main") {
-        return assignedProjectIds.has(p.id);
+        return isSuperman || assignedProjectIds.has(p.id);
       }
       return true;
     });
@@ -95,7 +96,7 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-[#060608] text-white flex flex-col md:flex-row font-sans">
+    <ThemeProvider>
       {/* Background visual orb */}
       <div className="fixed top-0 left-0 w-[500px] h-[500px] bg-emerald-500/[0.02] rounded-full blur-[150px] pointer-events-none" />
 
@@ -112,6 +113,6 @@ export default async function AdminLayout({
       <main className="flex-grow p-6 md:p-10 relative z-10 overflow-x-hidden overflow-y-auto min-w-0">
         {children}
       </main>
-    </div>
+    </ThemeProvider>
   );
 }

@@ -28,9 +28,14 @@ export function Comparison() {
 
       gsap.fromTo(
         ".col-left-anim",
-        { x: -50, opacity: 0 },
+        { 
+          x: window.innerWidth < 768 ? 0 : -50, 
+          y: window.innerWidth < 768 ? 30 : 0, 
+          opacity: 0 
+        },
         {
           x: 0,
+          y: 0,
           opacity: 1,
           duration: 1,
           ease: "power3.out",
@@ -43,9 +48,14 @@ export function Comparison() {
 
       gsap.fromTo(
         ".col-right-anim",
-        { x: 50, opacity: 0 },
+        { 
+          x: window.innerWidth < 768 ? 0 : 50, 
+          y: window.innerWidth < 768 ? 30 : 0, 
+          opacity: 0 
+        },
         {
           x: 0,
+          y: 0,
           opacity: 1,
           duration: 1,
           ease: "power3.out",

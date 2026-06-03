@@ -116,8 +116,8 @@ export async function createUserAction(prevState: any, formData: FormData) {
       return { error: "Помилка створення профілю: " + profileError.message };
     }
 
-    // Assign projects if user is a Producer or Sales department
-    if ((role === "producer" || role === "sales") && projectIds.length > 0) {
+    // Assign projects if user is not pending
+    if (role !== "pending" && projectIds.length > 0) {
       const inserts = projectIds.map((pId) => ({
         profile_id: authData.user.id,
         project_id: pId,
@@ -209,8 +209,8 @@ export async function editUserAction(
       .delete()
       .eq("profile_id", profileId);
 
-    // 2. Insert new ones if role is producer or sales
-    if ((role === "producer" || role === "sales") && projectIds.length > 0) {
+    // 2. Insert new ones if user is not pending
+    if (role !== "pending" && projectIds.length > 0) {
       const inserts = projectIds.map((pId) => ({
         profile_id: profileId,
         project_id: pId,

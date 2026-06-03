@@ -43,6 +43,7 @@ import {
   updateUnifiedLeadStatusAction,
   createUnifiedLeadAction
 } from "./actions";
+import { useTheme } from "./ThemeProvider";
 
 // Safe locale number formatting to avoid server/client hydration mismatch
 const formatLocaleNumber = (num: number) => {
@@ -86,6 +87,47 @@ const formatDualProfit = (usdRevenue: number, spend: number, uahRevenue: number)
     parts.push(`${formatLocaleNumber(uahRevenue)} ₴`);
   }
   return parts.join(" + ");
+};
+
+const getLeadDate = (lead: any): Date => {
+  const rawDateStr = 
+    lead.metadata?.raw_row?.Дата || 
+    lead.metadata?.raw_row?.дата || 
+    lead.metadata?.raw_row?.Date || 
+    lead.metadata?.raw_row?.date ||
+    lead.metadata?.created_at ||
+    lead.metadata?.lead?.created_at;
+
+  if (rawDateStr) {
+    const str = String(rawDateStr).trim();
+    
+    // Check dd.mm.yyyy format
+    const dotParts = str.split(" ")[0].split(".");
+    if (dotParts.length === 3) {
+      const day = parseInt(dotParts[0], 10);
+      const month = parseInt(dotParts[1], 10) - 1; // 0-indexed month
+      const year = parseInt(dotParts[2], 10);
+      if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+        // Try parsing time if present
+        const timeStr = str.split(" ")[1];
+        if (timeStr) {
+          const timeParts = timeStr.split(":");
+          const hour = parseInt(timeParts[0], 10) || 0;
+          const min = parseInt(timeParts[1], 10) || 0;
+          const sec = parseInt(timeParts[2], 10) || 0;
+          return new Date(Date.UTC(year, month, day, hour, min, sec));
+        }
+        return new Date(Date.UTC(year, month, day, 12, 0, 0));
+      }
+    }
+    
+    const parsed = Date.parse(str);
+    if (!isNaN(parsed)) {
+      return new Date(parsed);
+    }
+  }
+  
+  return new Date(lead.created_at);
 };
 
 // Sales pipeline columns mapping
@@ -196,7 +238,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const [activeTab, setActiveTab] = useState<string>(
     viewType === "all" ? "hub" : "analytics"
   );
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const { theme, toggleTheme } = useTheme();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [touchCountFilter, setTouchCountFilter] = useState("all");
@@ -248,6 +290,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const tableHeaderClass = isLight ? "bg-neutral-100 text-neutral-500 border-neutral-200" : "bg-white/[0.02] text-white/40 border-white/5";
   const tableRowClass = isLight ? "hover:bg-neutral-50 border-neutral-200 text-neutral-800" : "hover:bg-white/[0.01] border-white/5 text-white/80";
   const modalBgClass = isLight ? "bg-white border border-neutral-300 shadow-2xl text-neutral-900" : "bg-[#0C0C0F] border border-white/10 shadow-2xl text-white";
+  const bgMutedClass = isLight ? "bg-neutral-50" : "bg-white/[0.02]";
+  const bgHoverMutedClass = isLight ? "hover:bg-neutral-100" : "hover:bg-white/[0.05]";
+  const textHeadingClass = isLight ? "text-neutral-900 font-black" : "text-white font-black";
+  const textNormalClass = isLight ? "text-neutral-800" : "text-white/80";
+  const textMutedLightClass = isLight ? "text-neutral-400" : "text-white/20";
+  const optionClass = isLight ? "bg-white text-neutral-900" : "bg-[#0C0C0F] text-white";
 
   // Reset page number on filter changes
   useEffect(() => {
@@ -296,22 +344,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     }
   }, [viewType]);
 
-  // Load and apply theme selection
-  useEffect(() => {
-    const savedTheme = localStorage.getItem("crm-theme") as "dark" | "light";
-    if (savedTheme) {
-      setTheme(savedTheme);
-    } else {
-      const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      setTheme(isDark ? "dark" : "light");
-    }
-  }, []);
-
-  const handleToggleTheme = () => {
-    const newTheme = theme === "dark" ? "light" : "dark";
-    setTheme(newTheme);
-    localStorage.setItem("crm-theme", newTheme);
-  };
+  const handleToggleTheme = toggleTheme;
 
   // Safe navigation scope switcher
   const handleScopeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -365,10 +398,29 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       groups.get(root)!.push(i);
     }
 
-    const normalizeStatus = (s: string, originalSheet?: string): string => {
+    const normalizeStatus = (lead: any): string => {
+      const s = lead.status;
       if (!s) return "Новий лід";
       const lower = s.toLowerCase().trim();
-      const isTripwire = originalSheet === "Практикум";
+      const originalSheet = String(lead.metadata?.original_sheet || lead.metadata?.lead?.original_sheet || "").trim();
+      const targetSheet = String(lead.metadata?.target_sheet || lead.metadata?.lead?.target_sheet || "").trim();
+      const courseName = String(lead.metadata?.leadData?.course || lead.metadata?.lead?.leadData?.course || "").trim();
+
+      const leadProj = allowedProjects.find((p: any) => p.id === lead.project_id);
+      const leadSlug = leadProj?.slug || "";
+
+      const isTripwire = 
+        ["Практикум", "Practicum_Leads", "Заявки на практикум", "Miні-курс"].includes(originalSheet) ||
+        ["Практикум", "Practicum_Leads", "Заявки на практикум", "Miні-курс"].includes(targetSheet) ||
+        courseName.includes("Mini-Course") || 
+        courseName.includes("Practicum") || 
+        courseName.includes("Практикум") ||
+        courseName.includes("Міні-курс") ||
+        leadSlug === "sofia" ||
+        leadSlug === "valeria" ||
+        leadSlug === "svitlana" ||
+        activeProject?.slug === "sofia" ||
+        activeProject?.slug === "valeria";
 
       if (lower === "closed_won" || lower === "approved" || lower === "aprooved" || lower === "оплачено") {
         return isTripwire ? "Купив(-ла) Трипвайер" : "Купив курс";
@@ -416,10 +468,9 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
       // Normalize statuses of individual touchpoints in history
       const normalizedGroupLeads = groupLeads.map((item) => {
-        const origSheet = String(item.metadata?.original_sheet || item.metadata?.lead?.original_sheet || "").trim();
         return {
           ...item,
-          status: normalizeStatus(item.status, origSheet)
+          status: normalizeStatus(item)
         };
       });
 
@@ -443,7 +494,14 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         if (amt === 0) return;
 
         const metaCurrency = String(item.metadata?.currency || item.metadata?.lead?.currency || "").trim();
-        const isUsd = ["usd", "$"].includes(metaCurrency.toLowerCase().trim());
+        const orderProj = allowedProjects.find((p: any) => p.id === item.project_id);
+        const orderSlug = orderProj?.slug || "";
+        const isUsd = ["usd", "$"].includes(metaCurrency.toLowerCase().trim()) || 
+                      orderSlug === "sofia" || 
+                      orderSlug === "valeria" || 
+                      orderSlug === "svitlana" ||
+                      activeProject?.slug === "sofia" || 
+                      activeProject?.slug === "valeria";
 
         if (item.status === "Купив курс") {
           if (isUsd) usdCoursePaid += amt;
@@ -532,7 +590,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       const isPaid = lead.status === "Купив курс" || lead.status === "Купив(-ла) Трипвайер";
       return hasContacts || isPaid;
     });
-  }, [rawLeads, viewType]);
+  }, [rawLeads, viewType, allowedProjects]);
 
   // --- Filtering and Query calculations ---
   const processedLeads = useMemo(() => {
@@ -575,11 +633,11 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
       // 6. Date Range filter
       if (startDate) {
-        const leadDate = new Date(lead.created_at);
+        const leadDate = getLeadDate(lead);
         if (leadDate < new Date(startDate)) return false;
       }
       if (endDate) {
-        const leadDate = new Date(lead.created_at);
+        const leadDate = getLeadDate(lead);
         const end = new Date(endDate);
         end.setHours(23, 59, 59, 999);
         if (leadDate > end) return false;
@@ -681,10 +739,13 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     const usdTripwireRevenue = processedLeads.reduce((sum, l) => sum + Number(l.usdTripwirePaid || 0), 0);
     const uahTripwireRevenue = processedLeads.reduce((sum, l) => sum + Number(l.uahTripwirePaid || 0), 0);
 
-    const netProfitUsd = usdCourseRevenue - totalSpend;
+    const totalUsdRevenue = usdCourseRevenue + usdTripwireRevenue;
+    const totalUahRevenue = uahCourseRevenue + uahTripwireRevenue;
+
+    const netProfitUsd = totalUsdRevenue - totalSpend;
 
     // Blended ROI using rate 41.0
-    const blendedRevenue = usdCourseRevenue + (uahCourseRevenue / 41.0);
+    const blendedRevenue = totalUsdRevenue + (totalUahRevenue / 41.0);
     const roi = totalSpend > 0 ? (blendedRevenue / totalSpend) * 100 : 0;
 
     const paidLeads = processedLeads.filter((l) => l.status === "Купив курс");
@@ -717,8 +778,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       totalSpend,
       conversionRate,
       cpl,
-      usdRevenue: usdCourseRevenue,
-      uahRevenue: uahCourseRevenue,
+      usdRevenue: totalUsdRevenue,
+      uahRevenue: totalUahRevenue,
       usdCourseRevenue,
       uahCourseRevenue,
       usdTripwireRevenue,
@@ -742,15 +803,17 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     let end = endDate ? new Date(endDate) : new Date();
 
     if (!start) {
-      const leadDates = processedLeads.map((l: any) => new Date(l.created_at).getTime());
+      const leadDates = processedLeads.map((l: any) => getLeadDate(l).getTime());
       const trafficDates = filteredTraffic.map((t: any) => new Date(t.created_at).getTime());
       const allDates = [...leadDates, ...trafficDates];
       const minTime = allDates.length > 0 ? Math.min(...allDates) : Date.now();
       start = new Date(minTime);
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      if (start < thirtyDaysAgo) {
-        start = thirtyDaysAgo;
+      if (dateRangePreset !== "all") {
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        if (start < thirtyDaysAgo) {
+          start = thirtyDaysAgo;
+        }
       }
     }
 
@@ -766,7 +829,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     }
 
     processedLeads.forEach((l) => {
-      const str = new Date(l.created_at).toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" });
+      const str = getLeadDate(l).toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" });
       if (dayLeads[str] !== undefined) {
         dayLeads[str] += 1;
       }
@@ -1037,7 +1100,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   };
 
   return (
-    <div className={`${bgClass} min-h-screen transition-all font-sans w-full max-w-full pb-20`}>
+    <div className={`${bgClass} min-h-screen transition-all font-sans w-full max-w-full pb-20 ${isLight ? "theme-light" : ""}`}>
       {/* Visual background style sheet inject */}
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar {
@@ -1050,6 +1113,62 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         .custom-scrollbar::-webkit-scrollbar-thumb {
           background: rgba(120, 120, 120, 0.2);
           border-radius: 9px;
+        }
+        
+        /* Light Theme Overrides */
+        .theme-light .bg-\\[\\#0C0C0F\\] {
+          background-color: #ffffff !important;
+          color: #171717 !important;
+        }
+        .theme-light .border-white\\/5 {
+          border-color: #e5e5e5 !important;
+        }
+        .theme-light .border-white\\/10 {
+          border-color: #d4d4d4 !important;
+        }
+        .theme-light .text-white {
+          color: #171717 !important;
+        }
+        .theme-light .text-white\\/80 {
+          color: #262626 !important;
+        }
+        .theme-light .text-white\\/70 {
+          color: #404040 !important;
+        }
+        .theme-light .text-white\\/60 {
+          color: #525252 !important;
+        }
+        .theme-light .text-white\\/50 {
+          color: #737373 !important;
+        }
+        .theme-light .text-white\\/45 {
+          color: #737373 !important;
+        }
+        .theme-light .text-white\\/40 {
+          color: #737373 !important;
+        }
+        .theme-light .text-white\\/30 {
+          color: #a3a3a3 !important;
+        }
+        .theme-light .text-white\\/20 {
+          color: #e5e5e5 !important;
+        }
+        .theme-light .bg-white\\/5 {
+          background-color: #f5f5f6 !important;
+          border-color: #e5e5e5 !important;
+        }
+        .theme-light .bg-white\\/\\[0\\.02\\] {
+          background-color: #f9fafb !important;
+        }
+        .theme-light .bg-white\\/\\[0\\.01\\] {
+          background-color: #f9fafb !important;
+        }
+        .theme-light .bg-\\[\\#050507\\] {
+          background-color: #f3f4f6 !important;
+        }
+        .theme-light select option {
+          background-color: #ffffff !important;
+          color: #171717 !important;
         }
       `}</style>
 
@@ -1582,15 +1701,15 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           {/* Scoped Project KPI Grid */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             {/* Spend card */}
-            <div className="bg-[#0C0C0F] border border-white/5 p-6 rounded-2xl shadow-2xl backdrop-blur-md">
-              <p className="text-[10px] text-white/40 font-black uppercase tracking-widest">Витрати на рекламу ($)</p>
+            <div className={`${cardClass} p-6 rounded-2xl shadow-2xl backdrop-blur-md`}>
+              <p className={`text-[10px] ${textMutedClass} font-black uppercase tracking-widest`}>Витрати на рекламу ($)</p>
               <p className="text-3xl font-black text-red-400 mt-4">${singleProjectStats?.totalSpend.toFixed(2)}</p>
-              <p className="text-[11px] text-white/30 mt-1 font-semibold">Сумарний бюджет усього періоду</p>
+              <p className={`text-[11px] ${textMutedClass} mt-1 font-semibold`}>Сумарний бюджет усього періоду</p>
             </div>
 
             {/* Course Revenue Card */}
-            <div className="bg-[#0C0C0F] border border-white/5 p-6 rounded-2xl shadow-2xl backdrop-blur-md">
-              <p className="text-[10px] text-white/40 font-black uppercase tracking-widest">Виручка за курс</p>
+            <div className={`${cardClass} p-6 rounded-2xl shadow-2xl backdrop-blur-md`}>
+              <p className={`text-[10px] ${textMutedClass} font-black uppercase tracking-widest`}>Виручка за курс</p>
               <div className="mt-4 space-y-1">
                 {singleProjectStats && singleProjectStats.uahCourseRevenue > 0 && (
                   <p className="text-2xl font-black text-emerald-450">
@@ -1598,20 +1717,20 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                   </p>
                 )}
                 {singleProjectStats && singleProjectStats.usdCourseRevenue > 0 && (
-                  <p className="text-2xl font-black text-emerald-450">
+                  <p className="text-2xl font-black text-emerald-455">
                     ${formatLocaleNumber(singleProjectStats.usdCourseRevenue)}
                   </p>
                 )}
                 {(!singleProjectStats || (singleProjectStats.uahCourseRevenue === 0 && singleProjectStats.usdCourseRevenue === 0)) && (
-                  <p className="text-2xl font-black text-white/20">—</p>
+                  <p className={`text-2xl font-black ${textMutedLightClass}`}>—</p>
                 )}
               </div>
-              <p className="text-[11px] text-white/30 mt-2 font-semibold">Виручка тільки від продажу основного курсу</p>
+              <p className={`text-[11px] ${textMutedClass} mt-2 font-semibold`}>Виручка тільки від продажу основного курсу</p>
             </div>
 
             {/* Tripwire Revenue Card */}
-            <div className="bg-[#0C0C0F] border border-white/5 p-6 rounded-2xl shadow-2xl backdrop-blur-md">
-              <p className="text-[10px] text-white/40 font-black uppercase tracking-widest">Виручка за трипвайєри</p>
+            <div className={`${cardClass} p-6 rounded-2xl shadow-2xl backdrop-blur-md`}>
+              <p className={`text-[10px] ${textMutedClass} font-black uppercase tracking-widest`}>Виручка за трипвайєри</p>
               <div className="mt-4 space-y-1">
                 {singleProjectStats && singleProjectStats.uahTripwireRevenue > 0 && (
                   <p className="text-2xl font-black text-indigo-400">
@@ -1624,26 +1743,26 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                   </p>
                 )}
                 {(!singleProjectStats || (singleProjectStats.uahTripwireRevenue === 0 && singleProjectStats.usdTripwireRevenue === 0)) && (
-                  <p className="text-2xl font-black text-white/20">—</p>
+                  <p className={`text-2xl font-black ${textMutedLightClass}`}>—</p>
                 )}
               </div>
-              <p className="text-[11px] text-white/30 mt-2 font-semibold">Виручка від міні-продуктів та практикуму</p>
+              <p className={`text-[11px] ${textMutedClass} mt-2 font-semibold`}>Виручка від міні-продуктів та практикуму</p>
             </div>
 
             {/* Clean Profit & ROI Card */}
-            <div className="bg-[#0C0C0F] border border-white/5 p-6 rounded-2xl shadow-2xl backdrop-blur-md">
-              <p className="text-[10px] text-white/40 font-black uppercase tracking-widest">Чистий Прибуток (Маржа)</p>
+            <div className={`${cardClass} p-6 rounded-2xl shadow-2xl backdrop-blur-md`}>
+              <p className={`text-[10px] ${textMutedClass} font-black uppercase tracking-widest`}>Чистий Прибуток (Маржа)</p>
               <div className="mt-4 space-y-1">
                 {singleProjectStats && (
                   <>
                     {/* Net profit in UAH */}
                     {singleProjectStats.uahCourseRevenue > 0 && (
-                      <p className="text-xl font-black text-emerald-450">
+                      <p className="text-xl font-black text-emerald-455">
                         {formatLocaleNumber(singleProjectStats.uahCourseRevenue)} ₴
                       </p>
                     )}
                     {/* Net profit in USD (Revenue USD - Spend) */}
-                    <p className={`text-xl font-black ${singleProjectStats.netProfitUsd >= 0 ? "text-emerald-450" : "text-red-400"}`}>
+                    <p className={`text-xl font-black ${singleProjectStats.netProfitUsd >= 0 ? "text-emerald-455" : "text-red-400"}`}>
                       {singleProjectStats.netProfitUsd >= 0 ? "" : "-"}${formatLocaleNumber(Math.abs(singleProjectStats.netProfitUsd))}
                     </p>
                   </>
@@ -1655,28 +1774,28 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             </div>
 
             {/* Row 2 */}
-            <div className="bg-[#0C0C0F] border border-white/5 p-6 rounded-2xl shadow-2xl backdrop-blur-md">
-              <p className="text-[10px] text-white/40 font-black uppercase tracking-widest">Трафік (Кліки)</p>
-              <p className="text-3xl font-black text-white mt-4">{singleProjectStats?.totalClicks}</p>
-              <p className="text-[11px] text-white/30 mt-1 font-semibold">Загальна кількість переходів на сайт</p>
+            <div className={`${cardClass} p-6 rounded-2xl shadow-2xl backdrop-blur-md`}>
+              <p className={`text-[10px] ${textMutedClass} font-black uppercase tracking-widest`}>Трафік (Кліки)</p>
+              <p className={`text-3xl font-black ${isLight ? "text-neutral-900" : "text-white"} mt-4`}>{singleProjectStats?.totalClicks}</p>
+              <p className={`text-[11px] ${textMutedClass} mt-1 font-semibold`}>Загальна кількість переходів на сайт</p>
             </div>
-            <div className="bg-[#0C0C0F] border border-white/5 p-6 rounded-2xl shadow-2xl backdrop-blur-md">
-              <p className="text-[10px] text-white/40 font-black uppercase tracking-widest">Реєстрації (Ліди)</p>
-              <p className="text-3xl font-black text-white mt-4">{singleProjectStats?.totalLeads}</p>
-              <p className="text-[11px] text-white/30 mt-1 font-semibold">Конверсія клік-лід: {singleProjectStats?.conversionRate.toFixed(1)}%</p>
+            <div className={`${cardClass} p-6 rounded-2xl shadow-2xl backdrop-blur-md`}>
+              <p className={`text-[10px] ${textMutedClass} font-black uppercase tracking-widest`}>Реєстрації (Ліди)</p>
+              <p className={`text-3xl font-black ${isLight ? "text-neutral-900" : "text-white"} mt-4`}>{singleProjectStats?.totalLeads}</p>
+              <p className={`text-[11px] ${textMutedClass} mt-1 font-semibold`}>Конверсія клік-лід: {singleProjectStats?.conversionRate.toFixed(1)}%</p>
             </div>
-            <div className="bg-[#0C0C0F] border border-white/5 p-6 rounded-2xl shadow-2xl backdrop-blur-md">
-              <p className="text-[10px] text-white/40 font-black uppercase tracking-widest">Успішні Оплати (Кількість)</p>
+            <div className={`${cardClass} p-6 rounded-2xl shadow-2xl backdrop-blur-md`}>
+              <p className={`text-[10px] ${textMutedClass} font-black uppercase tracking-widest`}>Успішні Оплати (Кількість)</p>
               <p className="text-3xl font-black text-emerald-400 mt-4">{singleProjectStats?.totalSales}</p>
-              <p className="text-[11px] text-white/30 mt-1 font-semibold">Кількість зафіксованих продажів</p>
+              <p className={`text-[11px] ${textMutedClass} mt-1 font-semibold`}>Кількість зафіксованих продажів</p>
             </div>
-            <div className="bg-[#0C0C0F] border border-white/5 p-6 rounded-2xl shadow-2xl backdrop-blur-md">
-              <p className="text-[10px] text-white/40 font-black uppercase tracking-widest">Конверсія & Середній Чек</p>
+            <div className={`${cardClass} p-6 rounded-2xl shadow-2xl backdrop-blur-md`}>
+              <p className={`text-[10px] ${textMutedClass} font-black uppercase tracking-widest`}>Конверсія & Середній Чек</p>
               <div className="mt-4 space-y-3">
                 {/* UAH Row */}
                 {singleProjectStats && (singleProjectStats.aovUah > 0 || singleProjectStats.leadToSaleConvUah > 0) && (
-                  <div className="space-y-0.5 border-b border-white/5 pb-2">
-                    <span className="text-[9px] text-white/30 font-black uppercase tracking-wider block">Гривневі замовлення (UAH)</span>
+                  <div className={`space-y-0.5 border-b ${borderClass} pb-2`}>
+                    <span className={`text-[9px] ${textMutedClass} font-black uppercase tracking-wider block`}>Гривневі замовлення (UAH)</span>
                     <div className="flex justify-between items-baseline gap-2 mt-1">
                       <p className="text-lg font-black text-emerald-450">
                         {singleProjectStats.aovUah > 0 ? `${formatLocaleNumber(singleProjectStats.aovUah)} ₴` : "—"}
@@ -1691,7 +1810,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                 {/* USD Row */}
                 {singleProjectStats && (singleProjectStats.aovUsd > 0 || singleProjectStats.leadToSaleConvUsd > 0) && (
                   <div className="space-y-0.5 pt-1">
-                    <span className="text-[9px] text-white/30 font-black uppercase tracking-wider block">Доларові замовлення (USD)</span>
+                    <span className={`text-[9px] ${textMutedClass} font-black uppercase tracking-wider block`}>Доларові замовлення (USD)</span>
                     <div className="flex justify-between items-baseline gap-2 mt-1">
                       <p className="text-lg font-black text-emerald-450">
                         {singleProjectStats.aovUsd > 0 ? `$${formatLocaleNumber(singleProjectStats.aovUsd)}` : "—"}
@@ -1705,7 +1824,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
                 {/* Fallback empty */}
                 {(!singleProjectStats || (singleProjectStats.aovUah === 0 && singleProjectStats.aovUsd === 0)) && (
-                  <p className="text-lg font-black text-white/20">—</p>
+                  <p className={`text-lg font-black ${textMutedLightClass}`}>—</p>
                 )}
               </div>
             </div>
@@ -1713,7 +1832,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Smooth SVG Spline Area Chart */}
-            <div className="bg-[#0C0C0F] border border-white/5 rounded-2xl p-6 shadow-2xl backdrop-blur-md space-y-6">
+            <div className={`${cardClass} rounded-2xl p-6 shadow-2xl backdrop-blur-md space-y-6`}>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div>
                   <h3 className="text-sm font-black uppercase tracking-widest text-white">Тренд реєстрацій заявок</h3>
@@ -1855,7 +1974,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             </div>
 
             {/* Conversion Funnel visual stacked bars */}
-            <div className="bg-[#0C0C0F] border border-white/5 rounded-2xl p-6 shadow-2xl backdrop-blur-md space-y-6">
+            <div className={`${cardClass} rounded-2xl p-6 shadow-2xl backdrop-blur-md space-y-6`}>
               <div>
                 <h3 className="text-sm font-black uppercase tracking-widest text-white">Воронка конверсії</h3>
                 <p className="text-xs text-white/30 mt-1 font-semibold">Співвідношення кроків реєстрації до кліків</p>
@@ -1906,7 +2025,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           </div>
 
           {/* Scoped UTM Attribution analysis */}
-          <div className="bg-[#0C0C0F] border border-white/5 rounded-2xl p-6 shadow-2xl backdrop-blur-md space-y-6">
+          <div className={`${cardClass} rounded-2xl p-6 shadow-2xl backdrop-blur-md space-y-6`}>
             <h2 className="text-sm font-black uppercase tracking-widest text-white flex items-center gap-2">
               <MousePointerClick className="w-5 h-5 text-emerald-500" />
               Ефективність UTM Джерел
@@ -1960,7 +2079,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           </div>
 
           {/* Kanban local isolated filtering controls */}
-          <div className="bg-[#0C0C0F] border border-white/5 p-4 rounded-2xl shadow-xl flex flex-col sm:flex-row gap-4 items-center animate-in fade-in duration-300">
+          <div className={`${cardClass} p-4 rounded-2xl shadow-xl flex flex-col sm:flex-row gap-4 items-center animate-in fade-in duration-300`}>
             {/* Search */}
             <div className="relative flex-grow w-full sm:w-auto">
               <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-white/30">
@@ -1980,13 +2099,13 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
               <select
                 value={kanbanTouchFilter}
                 onChange={(e) => setKanbanTouchFilter(e.target.value)}
-                className="w-full appearance-none pl-4 pr-10 py-2.5 bg-[#050507] border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-xs font-extrabold text-white cursor-pointer"
+                className={`w-full appearance-none pl-4 pr-10 py-2.5 rounded-xl focus:outline-none text-xs font-extrabold cursor-pointer ${selectClass}`}
               >
-                <option value="all" className="bg-[#0C0C0F]">🎯 Торкання: Всі</option>
-                <option value="multi" className="bg-[#0C0C0F]">⚡ Мульти (2+)</option>
-                <option value="single" className="bg-[#0C0C0F]">👤 Одиночні (1)</option>
+                <option value="all" className={optionClass}>🎯 Торкання: Всі</option>
+                <option value="multi" className={optionClass}>⚡ Мульти (2+)</option>
+                <option value="single" className={optionClass}>👤 Одиночні (1)</option>
               </select>
-              <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none" />
+              <ChevronDown className={`absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${isLight ? "text-neutral-500" : "text-white/40"}`} />
             </div>
 
             {/* Source sheet select */}
@@ -1994,14 +2113,14 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
               <select
                 value={kanbanSourceFilter}
                 onChange={(e) => setKanbanSourceFilter(e.target.value)}
-                className="w-full appearance-none pl-4 pr-10 py-2.5 bg-[#050507] border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-xs font-extrabold text-white cursor-pointer"
+                className={`w-full appearance-none pl-4 pr-10 py-2.5 rounded-xl focus:outline-none text-xs font-extrabold cursor-pointer ${selectClass}`}
               >
-                <option value="all" className="bg-[#0C0C0F]">📊 Воронка: Всі</option>
+                <option value="all" className={optionClass}>📊 Воронка: Всі</option>
                 {uniqueSources.map((source) => (
-                  <option key={source} value={source} className="bg-[#0C0C0F]">{source}</option>
+                  <option key={source} value={source} className={optionClass}>{source}</option>
                 ))}
               </select>
-              <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none" />
+              <ChevronDown className={`absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${isLight ? "text-neutral-500" : "text-white/40"}`} />
             </div>
           </div>
 
@@ -2015,7 +2134,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                   key={col.key}
                   onDragOver={handleDragOver}
                   onDrop={(e) => handleDrop(e, col.key)}
-                  className="w-72 shrink-0 bg-[#0C0C0F] border border-white/5 rounded-2xl p-4 flex flex-col space-y-4 hover:border-white/10 transition-all"
+                  className={`w-72 shrink-0 ${cardClass} rounded-2xl p-4 flex flex-col space-y-4 hover:border-white/10 transition-all`}
                 >
                   {/* Column Header */}
                   <div className="flex justify-between items-center border-b border-white/5 pb-3">
@@ -2121,7 +2240,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Пошук (ім'я, телефон, tg)..."
-                  className="w-full pl-10 pr-4 py-3.5 bg-white/[0.02] border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-xs font-semibold"
+                  className={`w-full pl-10 pr-4 py-3.5 rounded-xl focus:outline-none text-xs font-semibold ${inputClass}`}
                 />
               </div>
 
@@ -2130,16 +2249,16 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="w-full appearance-none pl-4 pr-10 py-3.5 bg-[#050507] border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-xs font-extrabold cursor-pointer"
+                  className={`w-full appearance-none pl-4 pr-10 py-3.5 rounded-xl focus:outline-none text-xs font-extrabold cursor-pointer ${selectClass}`}
                 >
-                  <option value="all" className="bg-[#0C0C0F]">🎯 Фільтр: Всі статуси</option>
+                  <option value="all" className={optionClass}>🎯 Фільтр: Всі статуси</option>
                   {PIPELINE_COLUMNS.map((col) => (
-                    <option key={col.key} value={col.key} className="bg-[#0C0C0F]">
+                    <option key={col.key} value={col.key} className={optionClass}>
                       {col.label}
                     </option>
                   ))}
                 </select>
-                <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none" />
+                <ChevronDown className={`absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${isLight ? "text-neutral-500" : "text-white/40"}`} />
               </div>
 
               {/* Touch Count select */}
@@ -2147,13 +2266,13 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                 <select
                   value={touchCountFilter}
                   onChange={(e) => setTouchCountFilter(e.target.value)}
-                  className="w-full appearance-none pl-4 pr-10 py-3.5 bg-[#050507] border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-xs font-extrabold cursor-pointer"
+                  className={`w-full appearance-none pl-4 pr-10 py-3.5 rounded-xl focus:outline-none text-xs font-extrabold cursor-pointer ${selectClass}`}
                 >
-                  <option value="all" className="bg-[#0C0C0F]">🔥 Фільтр: Всі торкання</option>
-                  <option value="multi" className="bg-[#0C0C0F]">⚡ Мульти-торкання (2+)</option>
-                  <option value="single" className="bg-[#0C0C0F]">👤 Одиночні ліди (1)</option>
+                  <option value="all" className={optionClass}>🔥 Фільтр: Всі торкання</option>
+                  <option value="multi" className={optionClass}>⚡ Мульти-торкання (2+)</option>
+                  <option value="single" className={optionClass}>👤 Одиночні ліди (1)</option>
                 </select>
-                <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none" />
+                <ChevronDown className={`absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${isLight ? "text-neutral-500" : "text-white/40"}`} />
               </div>
 
               {/* Source sheet select */}
@@ -2161,14 +2280,14 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                 <select
                   value={sourceFilter}
                   onChange={(e) => setSourceFilter(e.target.value)}
-                  className="w-full appearance-none pl-4 pr-10 py-3.5 bg-[#050507] border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-xs font-extrabold cursor-pointer"
+                  className={`w-full appearance-none pl-4 pr-10 py-3.5 rounded-xl focus:outline-none text-xs font-extrabold cursor-pointer ${selectClass}`}
                 >
-                  <option value="all" className="bg-[#0C0C0F]">📊 Фільтр: Всі воронки</option>
+                  <option value="all" className={optionClass}>📊 Фільтр: Всі воронки</option>
                   {uniqueSources.map((source) => (
-                    <option key={source} value={source} className="bg-[#0C0C0F]">{source}</option>
+                    <option key={source} value={source} className={optionClass}>{source}</option>
                   ))}
                 </select>
-                <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none" />
+                <ChevronDown className={`absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${isLight ? "text-neutral-500" : "text-white/40"}`} />
               </div>
             </div>
 
@@ -2450,16 +2569,16 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                     value={payAmount}
                     onChange={(e) => setPayAmount(e.target.value)}
                     placeholder="1000"
-                    className="flex-grow px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-xs font-extrabold"
+                    className={`flex-grow px-4 py-3 rounded-xl focus:outline-none text-xs font-extrabold ${inputClass}`}
                     required
                   />
                   <select
                     value={payCurrency}
                     onChange={(e) => setPayCurrency(e.target.value)}
-                    className="px-3 bg-white/5 border border-white/10 rounded-xl text-xs font-black focus:outline-none"
+                    className={`px-3 rounded-xl text-xs font-black focus:outline-none ${selectClass}`}
                   >
-                    <option value="UAH" className="bg-[#0C0C0F]">₴ UAH</option>
-                    <option value="USD" className="bg-[#0C0C0F]">$ USD</option>
+                    <option value="UAH" className={optionClass}>₴ UAH</option>
+                    <option value="USD" className={optionClass}>$ USD</option>
                   </select>
                 </div>
               </div>
@@ -2688,7 +2807,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                     value={newLeadAmount}
                     onChange={(e) => setNewLeadAmount(e.target.value)}
                     placeholder="0"
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-xs font-semibold"
+                    className={`w-full px-4 py-3 rounded-xl focus:outline-none text-xs font-semibold ${inputClass}`}
                   />
                 </div>
                 <div>
@@ -2698,10 +2817,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                   <select
                     value={newLeadStatus}
                     onChange={(e) => setNewLeadStatus(e.target.value)}
-                    className="w-full pl-3 pr-8 py-3.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-xs font-bold"
+                    className={`w-full pl-3 pr-8 py-3.5 rounded-xl focus:outline-none text-xs font-bold ${selectClass}`}
                   >
                     {PIPELINE_COLUMNS.map((col) => (
-                      <option key={col.key} value={col.key} className="bg-[#0C0C0F]">
+                      <option key={col.key} value={col.key} className={optionClass}>
                         {col.label}
                       </option>
                     ))}
@@ -2807,7 +2926,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                           </span>
                         </div>
                         <span className="text-[10px] text-white/30 font-bold">
-                          {new Date(touch.created_at).toLocaleString("uk-UA")}
+                          {getLeadDate(touch).toLocaleString("uk-UA")}
                         </span>
                       </div>
 

@@ -16,6 +16,7 @@ export function AboutDesktop() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (window.innerWidth < 768) return;
     const ctx = gsap.context(() => {
       gsap.fromTo(
         ".principle-card",

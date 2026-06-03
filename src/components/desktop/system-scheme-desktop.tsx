@@ -30,6 +30,7 @@ export function SystemSchemeDesktop() {
   const pathsGroupRef = useRef<SVGGElement>(null);
 
   useEffect(() => {
+    if (window.innerWidth < 768) return;
     const ctx = gsap.context(() => {
       // Heading animation
       gsap.fromTo(

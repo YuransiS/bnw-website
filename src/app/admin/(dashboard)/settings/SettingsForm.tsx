@@ -301,7 +301,7 @@ export default function SettingsForm({
                     type="button"
                     onClick={() => {
                       setRole(item.key);
-                      if (item.key === "pending" || item.key === "superman" || item.key === "admin") {
+                      if (item.key === "pending") {
                         setSelectedProjects([]);
                       }
                     }}
@@ -318,8 +318,8 @@ export default function SettingsForm({
               </div>
             </div>
 
-            {/* Project selection - only show for Producer and Sales */}
-            {(role === "producer" || role === "sales") && (
+            {/* Project selection - show for all roles except pending */}
+            {role !== "pending" && (
               <div className="space-y-2 border-t border-white/5 pt-4 animate-in fade-in slide-in-from-top-2 duration-300">
                 <label className="block text-[10px] font-bold text-white/40 uppercase tracking-widest">
                   Прив'язати проекти (Доступ)

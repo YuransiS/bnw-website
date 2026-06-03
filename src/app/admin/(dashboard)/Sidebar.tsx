@@ -24,6 +24,7 @@ import {
   Loader2
 } from "lucide-react";
 import { signOutAction } from "../actions";
+import { useTheme } from "../ThemeProvider";
 
 interface Project {
   id: string;
@@ -61,6 +62,7 @@ export default function Sidebar({
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const [isPending, startTransition] = useTransition();
+  const { theme } = useTheme();
 
   const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault();
@@ -105,16 +107,28 @@ export default function Sidebar({
     return name.slice(0, 2).toUpperCase();
   };
 
+  const isLight = theme === "light";
+  const bgClass = isLight ? "bg-white border-neutral-200 text-neutral-900" : "bg-[#0C0C0F] border-white/5 text-white";
+  const textClass = isLight ? "text-neutral-900" : "text-white";
+  const textMutedClass = isLight ? "text-neutral-500" : "text-white/45";
+  const borderClass = isLight ? "border-neutral-200" : "border-white/5";
+
   return (
     <>
       {/* Mobile Top Bar */}
-      <div className="md:hidden w-full bg-[#0C0C0F] border-b border-white/5 px-6 py-4 flex justify-between items-center z-50 shrink-0 relative">
-        <span className="text-lg font-black tracking-tighter uppercase text-white">
+      <div className={`md:hidden w-full px-6 py-4 flex justify-between items-center z-50 shrink-0 relative border-b ${
+        isLight ? "bg-white border-neutral-200 text-neutral-900" : "bg-[#0C0C0F] border-white/5 text-white"
+      }`}>
+        <span className={`text-lg font-black tracking-tighter uppercase ${isLight ? "text-neutral-900" : "text-white"}`}>
           B&W <span className="text-emerald-500">CRM</span>
         </span>
         <button
           onClick={() => setIsMobileOpen(!isMobileOpen)}
-          className="p-2 bg-white/5 border border-white/10 rounded-xl cursor-pointer hover:bg-white/10 transition-all text-white/80 hover:text-white"
+          className={`p-2 rounded-xl cursor-pointer transition-all border ${
+            isLight
+              ? "bg-neutral-100 border-neutral-200 text-neutral-800 hover:bg-neutral-200 hover:text-neutral-950"
+              : "bg-white/5 border border-white/10 text-white/80 hover:text-white hover:bg-white/10"
+          }`}
         >
           {isMobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
@@ -130,7 +144,8 @@ export default function Sidebar({
 
       {/* Sidebar Container */}
       <aside
-        className={`fixed md:sticky top-0 bottom-0 left-0 h-screen z-50 flex flex-col justify-between border-r border-white/5 bg-[#0C0C0F] p-5 shrink-0 transition-all duration-300 ease-in-out select-none
+        className={`fixed md:sticky top-0 bottom-0 left-0 h-screen z-50 flex flex-col justify-between border-r p-5 shrink-0 transition-all duration-300 ease-in-out select-none
+          ${isLight ? "bg-white border-neutral-200 text-neutral-900" : "bg-[#0C0C0F] border-white/5 text-white"}
           ${isCollapsed ? "md:w-20" : "md:w-64"}
           ${isMobileOpen ? "translate-x-0 w-64" : "-translate-x-full md:translate-x-0"}
         `}
@@ -138,7 +153,11 @@ export default function Sidebar({
         {/* Toggle Collapse Desktop button */}
         <button
           onClick={toggleCollapse}
-          className="absolute -right-3.5 top-8 bg-neutral-900 border border-white/10 hover:border-emerald-500/40 rounded-full p-1.5 cursor-pointer transition-all z-50 text-white/60 hover:text-white hidden md:flex hover:scale-105 active:scale-95 duration-200"
+          className={`absolute -right-3.5 top-8 rounded-full p-1.5 cursor-pointer transition-all z-50 hidden md:flex hover:scale-105 active:scale-95 duration-200 border ${
+            isLight
+              ? "bg-white border-neutral-300 text-neutral-600 hover:text-neutral-900 hover:border-emerald-500"
+              : "bg-neutral-900 border border-white/10 text-white/60 hover:text-white hover:border-emerald-500/40"
+          }`}
           title={isCollapsed ? "Розгорнути меню" : "Згорнути меню"}
         >
           {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
@@ -147,8 +166,8 @@ export default function Sidebar({
         {/* Upper Side Panel block */}
         <div className="space-y-8">
           {/* Logo & Branding */}
-          <div className={`flex items-center gap-2 border-b border-white/5 pb-5 ${isCollapsed ? "justify-center" : ""}`}>
-            <span className="text-xl font-black tracking-tighter uppercase text-white transition-all">
+          <div className={`flex items-center gap-2 border-b pb-5 ${isCollapsed ? "justify-center" : ""} ${isLight ? "border-neutral-200" : "border-white/5"}`}>
+            <span className={`text-xl font-black tracking-tighter uppercase transition-all ${isLight ? "text-neutral-900" : "text-white"}`}>
               {isCollapsed ? (
                 <span className="text-emerald-500">B&W</span>
               ) : (
@@ -161,25 +180,36 @@ export default function Sidebar({
 
           {/* Primary & Navigation sections */}
           <nav className="space-y-6">
+            {/* Main Landing Page (B&W Main) section at the very top */}
             {allowedProjects.some((p) => p.slug === "bw_main") && (
               <div className="space-y-1">
-                {/* Home website link - now maps to main site statistics */}
+                {!isCollapsed && (
+                  <p className={`text-[10px] font-bold uppercase tracking-widest px-4 mb-2 ${isLight ? "text-neutral-400" : "text-white/40"}`}>
+                    Головний лендінг
+                  </p>
+                )}
                 <div className="relative group">
                   <Link
                     href="/admin?slug=bw_main"
                     onClick={(e) => handleLinkClick(e, "/admin?slug=bw_main")}
                     className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all font-semibold text-sm cursor-pointer ${
                       activeSlug === "bw_main"
-                        ? "bg-white text-black shadow-lg border-white font-extrabold"
+                        ? isLight
+                          ? "bg-neutral-900 text-white border-neutral-900 shadow-md font-extrabold"
+                          : "bg-white text-black shadow-lg border-white font-extrabold"
+                        : isLight
+                        ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-neutral-700 hover:text-neutral-900"
                         : "border-white/5 hover:border-white/10 bg-white/5 hover:bg-white/10 text-white"
                     } ${isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : ""}`}
                   >
-                    <Globe className="w-4 h-4 text-emerald-400 shrink-0" />
-                    {!isCollapsed && <span>Головний сайт</span>}
+                    <Crown className="w-4 h-4 text-emerald-400 shrink-0" />
+                    {!isCollapsed && <span>B&W Main (Лендінг /)</span>}
                   </Link>
                   {isCollapsed && (
-                    <div className="absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 bg-neutral-900 border border-white/10 text-white text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl">
-                      Головний сайт
+                    <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl ${
+                      isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
+                    }`}>
+                      B&W Main (Лендінг /)
                     </div>
                   )}
                 </div>
@@ -189,7 +219,7 @@ export default function Sidebar({
             {/* Projects list container */}
             <div className="space-y-2">
               {!isCollapsed && (
-                <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest px-4">
+                <p className={`text-[10px] font-bold uppercase tracking-widest px-4 ${isLight ? "text-neutral-400" : "text-white/40"}`}>
                   Проекти
                 </p>
               )}
@@ -202,7 +232,11 @@ export default function Sidebar({
                       onClick={(e) => handleLinkClick(e, "/admin?slug=all")}
                       className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border transition-all text-xs font-black cursor-pointer ${
                         activeSlug === "all"
-                          ? "bg-white text-black shadow-lg border-white"
+                          ? isLight
+                            ? "bg-neutral-900 text-white border-neutral-900 font-extrabold shadow-md"
+                            : "bg-white text-black shadow-lg border-white font-extrabold"
+                          : isLight
+                          ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-neutral-700 hover:text-neutral-900"
                           : "bg-white/5 hover:bg-white/10 border-white/5 text-white/70 hover:text-white"
                       } ${isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : ""}`}
                     >
@@ -210,37 +244,13 @@ export default function Sidebar({
                       {!isCollapsed && <span className="truncate">Всі експерти</span>}
                     </Link>
                     {isCollapsed && (
-                      <div className="absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 bg-neutral-900 border border-white/10 text-white text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl">
+                      <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl ${
+                        isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
+                      }`}>
                         Всі експерти
                       </div>
                     )}
                   </div>
-                )}
-
-                {/* Core Project "B&W Main" - featured at the top with custom divider */}
-                {allowedProjects.some((p) => p.slug === "bw_main") && (
-                  <>
-                    <div className="relative group">
-                      <Link
-                        href="/admin?slug=bw_main"
-                        onClick={(e) => handleLinkClick(e, "/admin?slug=bw_main")}
-                        className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border transition-all text-xs font-black cursor-pointer ${
-                          activeSlug === "bw_main"
-                            ? "bg-white text-black shadow-lg border-white font-extrabold"
-                            : "bg-white/5 hover:bg-white/10 border-white/5 text-white/70 hover:text-white"
-                        } ${isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : ""}`}
-                      >
-                        <Crown className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        {!isCollapsed && <span className="truncate">B&W Main</span>}
-                      </Link>
-                      {isCollapsed && (
-                        <div className="absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 bg-neutral-900 border border-white/10 text-white text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl">
-                          B&W Main
-                        </div>
-                      )}
-                    </div>
-                    <div className="border-b border-white/5 my-2" />
-                  </>
                 )}
 
                 {/* Individual dynamic projects - excludes main site */}
@@ -254,7 +264,11 @@ export default function Sidebar({
                         onClick={(e) => handleLinkClick(e, `/admin?slug=${proj.slug}`)}
                         className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border transition-all text-xs font-black cursor-pointer ${
                           isCurrent
-                            ? "bg-white text-black shadow-lg border-white"
+                            ? isLight
+                              ? "bg-neutral-900 text-white border-neutral-900 font-extrabold shadow-md"
+                              : "bg-white text-black shadow-lg border-white font-extrabold"
+                            : isLight
+                            ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-neutral-700 hover:text-neutral-900"
                             : "bg-white/5 hover:bg-white/10 border-white/5 text-white/70 hover:text-white"
                         } ${isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : ""}`}
                       >
@@ -262,7 +276,9 @@ export default function Sidebar({
                         {!isCollapsed && <span className="truncate">{proj.name}</span>}
                       </Link>
                       {isCollapsed && (
-                        <div className="absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 bg-neutral-900 border border-white/10 text-white text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl">
+                        <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl ${
+                          isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
+                        }`}>
                           {proj.name}
                         </div>
                       )}
@@ -275,7 +291,7 @@ export default function Sidebar({
         </div>
 
         {/* Lower/Bottom block: Settings, Profile & Logout */}
-        <div className="pt-6 border-t border-white/5 space-y-4 shrink-0">
+        <div className={`pt-6 border-t space-y-4 shrink-0 ${isLight ? "border-neutral-200" : "border-white/5"}`}>
           {/* Relocated settings route link */}
           {isSuperman && (
             <div className="relative group">
@@ -284,7 +300,11 @@ export default function Sidebar({
                 onClick={(e) => handleLinkClick(e, "/admin/settings")}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all font-semibold text-sm cursor-pointer ${
                   isSettingsPage
-                    ? "bg-white text-black shadow-lg border-white font-extrabold"
+                    ? isLight
+                      ? "bg-neutral-900 text-white border-neutral-900 font-extrabold shadow-md"
+                      : "bg-white text-black shadow-lg border-white font-extrabold"
+                    : isLight
+                    ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-neutral-700 hover:text-neutral-900"
                     : "border-white/5 hover:border-emerald-500/25 bg-white/5 hover:bg-white/10 text-white"
                 } ${isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : ""}`}
               >
@@ -292,7 +312,9 @@ export default function Sidebar({
                 {!isCollapsed && <span>Налаштування</span>}
               </Link>
               {isCollapsed && (
-                <div className="absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 bg-neutral-900 border border-white/10 text-white text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl">
+                <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl ${
+                  isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
+                }`}>
                   Налаштування
                 </div>
               )}
@@ -307,18 +329,18 @@ export default function Sidebar({
                 title={`${fullName || userEmail} (${getRoleLabel(userRole)})`}
               >
                 {getUserInitials()}
-                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-[#0C0C0F]" />
+                <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 ${isLight ? "border-white" : "border-[#0C0C0F]"}`} />
               </div>
             ) : (
               <div>
-                <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">
+                <p className={`text-[10px] font-bold uppercase tracking-widest ${isLight ? "text-neutral-400" : "text-white/40"}`}>
                   Співробітник
                 </p>
-                <p className="text-sm font-black truncate max-w-full text-white mt-1" title={fullName || userEmail}>
+                <p className={`text-sm font-black truncate max-w-full mt-1 ${isLight ? "text-neutral-900" : "text-white"}`} title={fullName || userEmail}>
                   {fullName || userEmail}
                 </p>
                 {fullName && (
-                  <p className="text-[11px] text-white/45 truncate max-w-full mt-0.5" title={userEmail}>
+                  <p className={`text-[11px] truncate max-w-full mt-0.5 ${isLight ? "text-neutral-500" : "text-white/45"}`} title={userEmail}>
                     {userEmail}
                   </p>
                 )}
@@ -345,7 +367,9 @@ export default function Sidebar({
                 >
                   <LogOut className="w-4 h-4" />
                 </button>
-                <div className="absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 bg-neutral-900 border border-white/10 text-white text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl">
+                <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl ${
+                  isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
+                }`}>
                   Вийти з системи
                 </div>
               </div>
@@ -355,7 +379,7 @@ export default function Sidebar({
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold text-sm border border-red-500/15 cursor-pointer transition-all hover:scale-[1.01] duration-150"
               >
                 <LogOut className="w-4 h-4" />
-                Вийти з системи
+                Вийти з системы
               </button>
             )}
           </form>
@@ -364,16 +388,18 @@ export default function Sidebar({
 
       {/* Loading Overlay for Next.js Page transitions */}
       {isPending && (
-        <div className="fixed inset-0 bg-[#060608]/70 backdrop-blur-md z-[9999] flex flex-col items-center justify-center gap-4 transition-all duration-300 animate-in fade-in">
+        <div className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-4 transition-all duration-300 animate-in fade-in ${
+          isLight ? "bg-white/85" : "bg-[#060608]/80 backdrop-blur-md"
+        }`}>
           <div className="relative">
-            {/* Outer pulsating glow orb */}
+            {/* Pulsating glow orb */}
             <div className="absolute inset-0 bg-emerald-500/25 rounded-full blur-2xl animate-pulse" />
             <div className="relative inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
               <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
             </div>
           </div>
           <div className="flex flex-col items-center gap-1.5">
-            <p className="text-sm font-black uppercase tracking-widest text-white">
+            <p className={`text-sm font-black uppercase tracking-widest ${isLight ? "text-neutral-900" : "text-white"}`}>
               Завантаження даних
             </p>
             <p className="text-[10px] uppercase font-bold tracking-wider text-emerald-400/80 animate-pulse">

@@ -44,7 +44,7 @@ export function HeroMobile() {
               $10k–$30k+/місяць
             </span>
           </span>
-          <span className="block text-white/90 text-[21px] font-bold tracking-tight mt-3.5 leading-snug">
+          <span className="block text-white/90">
             через системний маркетинг та продюсування
           </span>
         </h1>
