@@ -121,7 +121,11 @@ const getLeadDate = (lead: any): Date => {
       }
     }
     
-    const parsed = Date.parse(str);
+    let cleanStr = str;
+    if (str.includes("(")) {
+      cleanStr = str.split("(")[0].trim();
+    }
+    const parsed = Date.parse(cleanStr);
     if (!isNaN(parsed)) {
       return new Date(parsed);
     }
@@ -420,10 +424,15 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         leadSlug === "valeria" ||
         leadSlug === "svitlana" ||
         activeProject?.slug === "sofia" ||
-        activeProject?.slug === "valeria";
+        activeProject?.slug === "valeria" ||
+        activeProject?.slug === "svitlana";
+
+      const isProjectAlwaysTripwire = 
+        ["sofia", "valeria", "svitlana"].includes(leadSlug) || 
+        ["sofia", "valeria", "svitlana"].includes(activeProject?.slug || "");
 
       if (lower === "closed_won" || lower === "approved" || lower === "aprooved" || lower === "оплачено") {
-        return isTripwire ? "Купив(-ла) Трипвайер" : "Купив курс";
+        return (isTripwire || isProjectAlwaysTripwire) ? "Купив(-ла) Трипвайер" : "Купив курс";
       }
       if (lower === "declined" || lower === "expired" || lower === "відмова") {
         return "Відмова";
@@ -454,7 +463,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         return "Купив(-ла) Трипвайер";
       }
       if (lower === "купив курс" || lower === "купив_курс") {
-        return "Купив курс";
+        return isProjectAlwaysTripwire ? "Купив(-ла) Трипвайер" : "Купив курс";
       }
       if (lower === "зацікавлений лід" || lower === "зацікавлений") {
         return "Зацікавлений лід";
@@ -501,12 +510,17 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                       orderSlug === "valeria" || 
                       orderSlug === "svitlana" ||
                       activeProject?.slug === "sofia" || 
-                      activeProject?.slug === "valeria";
+                      activeProject?.slug === "valeria" ||
+                      activeProject?.slug === "svitlana";
 
-        if (item.status === "Купив курс") {
+        const isProjectAlwaysTripwire = 
+          ["sofia", "valeria", "svitlana"].includes(orderSlug) || 
+          ["sofia", "valeria", "svitlana"].includes(activeProject?.slug || "");
+
+        if (item.status === "Купив курс" && !isProjectAlwaysTripwire) {
           if (isUsd) usdCoursePaid += amt;
           else uahCoursePaid += amt;
-        } else if (item.status === "Купив(-ла) Трипвайер") {
+        } else if (item.status === "Купив(-ла) Трипвайер" || (item.status === "Купив курс" && isProjectAlwaysTripwire)) {
           if (isUsd) usdTripwirePaid += amt;
           else uahTripwirePaid += amt;
         } else {

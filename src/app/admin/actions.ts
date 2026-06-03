@@ -109,14 +109,12 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
                 project_id,
                 COUNT(id) FILTER (WHERE status NOT IN ('Клик', 'КликФормы')) AS total_orders,
                 SUM(amount) FILTER (
-                    WHERE LOWER(status) IN ('closed_won', 'approved', 'aprooved', 'оплачено') 
-                    AND COALESCE(metadata->>'original_sheet', '') NOT IN ('Практикум', 'Practicum_Leads', 'Заявки на практикум', 'Miні-курс')
-                    AND (LOWER(COALESCE(metadata->>'currency', metadata->'lead'->>'currency', '')) IN ('usd', '$'))
+                    WHERE LOWER(status) IN ('closed_won', 'approved', 'aprooved', 'оплачено', 'купив курс', 'купив_курс', 'купив трипвайєр', 'купив трипвайер', 'купив(-ла) трипвайер') 
+                    AND (LOWER(COALESCE(metadata->>'currency', metadata->'lead'->>'currency', '')) IN ('usd', '$') OR project_id IN (SELECT id FROM projects WHERE slug IN ('sofia', 'valeria', 'svitlana')))
                 ) AS usd_revenue,
                 SUM(amount) FILTER (
-                    WHERE LOWER(status) IN ('closed_won', 'approved', 'aprooved', 'оплачено') 
-                    AND COALESCE(metadata->>'original_sheet', '') NOT IN ('Практикум', 'Practicum_Leads', 'Заявки на практикум', 'Miні-курс')
-                    AND NOT (LOWER(COALESCE(metadata->>'currency', metadata->'lead'->>'currency', '')) IN ('usd', '$'))
+                    WHERE LOWER(status) IN ('closed_won', 'approved', 'aprooved', 'оплачено', 'купив курс', 'купив_курс', 'купив трипвайєр', 'купив трипвайер', 'купив(-ла) трипвайер') 
+                    AND NOT (LOWER(COALESCE(metadata->>'currency', metadata->'lead'->>'currency', '')) IN ('usd', '$') OR project_id IN (SELECT id FROM projects WHERE slug IN ('sofia', 'valeria', 'svitlana')))
                 ) AS uah_revenue
             FROM unified_orders
             GROUP BY project_id
@@ -153,18 +151,15 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
                 campaign_id,
                 utm_campaign,
                 SUM(amount) FILTER (
-                    WHERE LOWER(status) IN ('closed_won', 'approved', 'aprooved', 'оплачено')
-                    AND COALESCE(metadata->>'original_sheet', '') NOT IN ('Практикум', 'Practicum_Leads', 'Заявки на практикум', 'Miні-курс')
-                    AND (LOWER(COALESCE(metadata->>'currency', metadata->'lead'->>'currency', '')) IN ('usd', '$'))
+                    WHERE LOWER(status) IN ('closed_won', 'approved', 'aprooved', 'оплачено', 'купив курс', 'купив_курс', 'купив трипвайєр', 'купив трипвайер', 'купив(-ла) трипвайер')
+                    AND (LOWER(COALESCE(metadata->>'currency', metadata->'lead'->>'currency', '')) IN ('usd', '$') OR project_id IN (SELECT id FROM projects WHERE slug IN ('sofia', 'valeria', 'svitlana')))
                 ) AS usd_revenue,
                 SUM(amount) FILTER (
-                    WHERE LOWER(status) IN ('closed_won', 'approved', 'aprooved', 'оплачено')
-                    AND COALESCE(metadata->>'original_sheet', '') NOT IN ('Практикум', 'Practicum_Leads', 'Заявки на практикум', 'Miні-курс')
-                    AND NOT (LOWER(COALESCE(metadata->>'currency', metadata->'lead'->>'currency', '')) IN ('usd', '$'))
+                    WHERE LOWER(status) IN ('closed_won', 'approved', 'aprooved', 'оплачено', 'купив курс', 'купив_курс', 'купив трипвайєр', 'купив трипвайер', 'купив(-ла) трипвайер')
+                    AND NOT (LOWER(COALESCE(metadata->>'currency', metadata->'lead'->>'currency', '')) IN ('usd', '$') OR project_id IN (SELECT id FROM projects WHERE slug IN ('sofia', 'valeria', 'svitlana')))
                 ) AS uah_revenue,
                 COUNT(id) FILTER (
-                    WHERE LOWER(status) IN ('closed_won', 'approved', 'aprooved', 'оплачено') 
-                    AND COALESCE(metadata->>'original_sheet', '') NOT IN ('Практикум', 'Practicum_Leads', 'Заявки на практикум', 'Miні-курс')
+                    WHERE LOWER(status) IN ('closed_won', 'approved', 'aprooved', 'оплачено', 'купив курс', 'купив_курс', 'купив трипвайєр', 'купив трипвайер', 'купив(-ла) трипвайер')
                 ) AS total_sales
             FROM unified_orders
             WHERE campaign_id IS NOT NULL AND status NOT IN ('Клик', 'КликФормы')
@@ -246,7 +241,7 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
           const paidOrders = projOrders.filter((o) => {
             if (!o.status) return false;
             const sLower = o.status.toLowerCase().trim();
-            return ["closed_won", "approved", "aprooved", "оплачено"].includes(sLower);
+            return ["closed_won", "approved", "aprooved", "оплачено", "купив курс", "купив_курс", "купив трипвайєр", "купив трипвайер", "купив(-ла) трипвайер"].includes(sLower);
           });
           
           let usd_revenue = 0;
@@ -313,7 +308,7 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
         const prodPaidOrders = prodOrders.filter((o) => {
           if (!o.status) return false;
           const sLower = o.status.toLowerCase().trim();
-          return ["closed_won", "approved", "aprooved", "оплачено"].includes(sLower);
+          return ["closed_won", "approved", "aprooved", "оплачено", "купив курс", "купив_курс", "купив трипвайєр", "купив трипвайер", "купив(-ла) трипвайер"].includes(sLower);
         });
         
         let usd_revenue = 0;

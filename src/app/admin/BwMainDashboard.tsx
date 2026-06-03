@@ -20,6 +20,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { getDashboardData, updateLeadStatus } from "./actions";
+import { useTheme } from "./ThemeProvider";
 
 interface Lead {
   id: string;
@@ -170,6 +171,17 @@ export default function BwMainDashboard({
   initialPageViews,
   initialClicks,
 }: BwMainDashboardProps) {
+  const { theme } = useTheme();
+  const isLight = theme === "light";
+  const bgClass = isLight ? "bg-[#F8F9FC] text-neutral-900" : "bg-[#060608] text-white";
+  const cardClass = isLight ? "bg-white border border-neutral-200/85 text-neutral-900 shadow-sm" : "bg-[#0C0C0F] border border-white/5 text-white";
+  const textMutedClass = isLight ? "text-neutral-500" : "text-white/40";
+  const borderClass = isLight ? "border-neutral-200" : "border-white/5";
+  const tableHeaderClass = isLight ? "bg-neutral-100 text-neutral-500 border-neutral-200" : "bg-white/[0.02] text-white/40 border-white/5";
+  const tableRowClass = isLight ? "hover:bg-neutral-50 border-neutral-200 text-neutral-800" : "hover:bg-white/[0.01] border-white/5 text-white/80";
+  const inputClass = isLight ? "bg-white border border-neutral-300 text-neutral-900 placeholder:text-neutral-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-xs" : "bg-white/[0.03] border border-white/10 text-white placeholder:text-white/20 focus:border-emerald-500 text-xs";
+  const dropdownClass = isLight ? "bg-white border border-neutral-200 shadow-2xl text-neutral-900" : "bg-[#0C0C0F]/95 border border-white/10 text-white shadow-2xl";
+
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
   const [pageViews, setPageViews] = useState<PageView[]>(initialPageViews);
   const [clicks, setClicks] = useState<ButtonClick[]>(initialClicks);
@@ -408,11 +420,11 @@ export default function BwMainDashboard({
       {/* Dashboard Top Title */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-black uppercase tracking-tight text-white flex items-center gap-2">
+          <h1 className={`text-3xl font-black uppercase tracking-tight flex items-center gap-2 ${isLight ? "text-neutral-900" : "text-white"}`}>
             Панель аналітики головного сайту
             <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
           </h1>
-          <p className="text-white/40 text-sm mt-1">
+          <p className={`text-sm mt-1 ${textMutedClass}`}>
             Конверсії, CTA-кнопки та керування лідами в реальному часі (автооновлення кожні 10с)
           </p>
         </div>
@@ -421,63 +433,63 @@ export default function BwMainDashboard({
       {/* 1. Main Aggregate Metrics Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Metric 1 */}
-        <div className="bg-[#0C0C0F] border border-white/5 p-6 rounded-2xl relative overflow-hidden shadow-2xl backdrop-blur-md">
+        <div className={`${cardClass} p-6 rounded-2xl relative overflow-hidden shadow-2xl backdrop-blur-md`}>
           <div className="absolute top-4 right-4 text-emerald-500 bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20">
             <TrendingUp className="w-5 h-5" />
           </div>
-          <p className="text-xs text-white/40 font-bold uppercase tracking-widest">
+          <p className={`text-xs font-bold uppercase tracking-widest ${textMutedClass}`}>
             Конверсія сайту (CR)
           </p>
-          <p className="text-3xl font-black text-white mt-4">
+          <p className={`text-3xl font-black mt-4 ${isLight ? "text-neutral-900" : "text-white"}`}>
             {metrics.conversionRate.toFixed(2)}%
           </p>
-          <p className="text-xs text-white/30 mt-2 font-medium">
+          <p className={`text-xs mt-2 font-medium ${isLight ? "text-neutral-450" : "text-white/30"}`}>
             Співвідношення унікальних лідів до відвідувачів
           </p>
         </div>
 
         {/* Metric 2 */}
-        <div className="bg-[#0C0C0F] border border-white/5 p-6 rounded-2xl relative overflow-hidden shadow-2xl backdrop-blur-md">
+        <div className={`${cardClass} p-6 rounded-2xl relative overflow-hidden shadow-2xl backdrop-blur-md`}>
           <div className="absolute top-4 right-4 text-emerald-400 bg-emerald-400/10 p-3 rounded-xl border border-emerald-400/20">
             <Users className="w-5 h-5" />
           </div>
-          <p className="text-xs text-white/40 font-bold uppercase tracking-widest">
+          <p className={`text-xs font-bold uppercase tracking-widest ${textMutedClass}`}>
             Унікальні візити
           </p>
-          <p className="text-3xl font-black text-white mt-4">
+          <p className={`text-3xl font-black mt-4 ${isLight ? "text-neutral-900" : "text-white"}`}>
             {metrics.uniqueVisitors}
           </p>
-          <p className="text-xs text-white/30 mt-2 font-medium">
+          <p className={`text-xs mt-2 font-medium ${isLight ? "text-neutral-450" : "text-white/30"}`}>
             Унікальні visitor_id зафіксовані системою
           </p>
         </div>
 
         {/* Metric 3 */}
-        <div className="bg-[#0C0C0F] border border-white/5 p-6 rounded-2xl relative overflow-hidden shadow-2xl backdrop-blur-md">
+        <div className={`${cardClass} p-6 rounded-2xl relative overflow-hidden shadow-2xl backdrop-blur-md`}>
           <div className="absolute top-4 right-4 text-white bg-white/5 p-3 rounded-xl border border-white/10">
             <Briefcase className="w-5 h-5" />
           </div>
-          <p className="text-xs text-white/40 font-bold uppercase tracking-widest">
+          <p className={`text-xs font-bold uppercase tracking-widest ${textMutedClass}`}>
             Загальна кількість лідів
           </p>
-          <p className="text-3xl font-black text-white mt-4">
+          <p className={`text-3xl font-black mt-4 ${isLight ? "text-neutral-900" : "text-white"}`}>
             {metrics.totalLeads}
           </p>
-          <p className="text-xs text-white/30 mt-2 font-medium">
+          <p className={`text-xs mt-2 font-medium ${isLight ? "text-neutral-450" : "text-white/30"}`}>
             Всього відправлених заявок на діагностику
           </p>
         </div>
       </div>
 
       {/* 2. CTA Buttons Conversion breakdown */}
-      <div className="bg-[#0C0C0F] border border-white/5 rounded-2xl p-6 shadow-2xl backdrop-blur-md">
-        <h2 className="text-lg font-black uppercase tracking-tight text-white mb-6 flex items-center gap-2">
+      <div className={`${cardClass} rounded-2xl p-6 shadow-2xl backdrop-blur-md`}>
+        <h2 className={`text-lg font-black uppercase tracking-tight mb-6 flex items-center gap-2 ${isLight ? "text-neutral-900" : "text-white"}`}>
           <MousePointerClick className="w-5 h-5 text-emerald-500" />
           Ефективність CTA-кнопок
         </h2>
 
         {buttonPerformance.length === 0 ? (
-          <div className="text-center py-6 text-white/30 text-sm flex items-center justify-center gap-2">
+          <div className={`text-center py-6 text-sm flex items-center justify-center gap-2 ${isLight ? "text-neutral-500" : "text-white/30"}`}>
             <Info className="w-4 h-4" /> Немає зафіксованих кліків по кнопках
           </div>
         ) : (
@@ -485,10 +497,14 @@ export default function BwMainDashboard({
             {buttonPerformance.map((btn) => (
               <div
                 key={btn.id}
-                className="p-5 rounded-xl bg-white/[0.01] border border-white/5 hover:border-emerald-500/20 transition-all space-y-3"
+                className={`p-5 rounded-xl border transition-all space-y-3 ${
+                  isLight 
+                    ? "bg-neutral-50/50 border-neutral-200/85 hover:border-emerald-500" 
+                    : "bg-white/[0.01] border-white/5 hover:border-emerald-500/20"
+                }`}
               >
                 <div className="flex justify-between items-start">
-                  <p className="text-sm font-bold text-white/90 truncate pr-2" title={btn.label}>
+                  <p className={`text-sm font-bold truncate pr-2 ${isLight ? "text-neutral-800" : "text-white/90"}`} title={btn.label}>
                     {btn.label}
                   </p>
                   <span className="text-xs font-black text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
@@ -496,13 +512,13 @@ export default function BwMainDashboard({
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 text-xs text-white/40">
-                  <div>Кліки: <span className="font-bold text-white">{btn.clicks}</span></div>
-                  <div>Ліди: <span className="font-bold text-white">{btn.leads}</span></div>
+                <div className={`grid grid-cols-2 gap-2 text-xs ${textMutedClass}`}>
+                  <div>Кліки: <span className={`font-bold ${isLight ? "text-neutral-950" : "text-white"}`}>{btn.clicks}</span></div>
+                  <div>Ліди: <span className={`font-bold ${isLight ? "text-neutral-950" : "text-white"}`}>{btn.leads}</span></div>
                 </div>
 
                 {/* Micro progress bar */}
-                <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                <div className={`w-full h-1.5 rounded-full overflow-hidden ${isLight ? "bg-neutral-100" : "bg-white/5"}`}>
                   <div
                     className="h-full bg-emerald-500 rounded-full transition-all duration-500"
                     style={{ width: `${Math.min(btn.cr, 100)}%` }}
@@ -515,9 +531,9 @@ export default function BwMainDashboard({
       </div>
 
       {/* 3. Interactive Leads Base / Monitor Tabs */}
-      <div className="bg-[#0C0C0F] border border-white/5 rounded-2xl p-6 space-y-6 shadow-2xl backdrop-blur-md">
+      <div className={`${cardClass} rounded-2xl p-6 space-y-6 shadow-2xl backdrop-blur-md`}>
         {/* Navigation Tabs Selector */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-white/5 pb-4">
+        <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b ${borderClass} pb-4`}>
           <div className="flex gap-6">
             <button
               onClick={() => {
@@ -526,8 +542,8 @@ export default function BwMainDashboard({
               }}
               className={`text-sm font-black uppercase tracking-wider pb-2 border-b-2 transition-all cursor-pointer ${
                 activeTab === "leads"
-                  ? "border-emerald-500 text-white"
-                  : "border-transparent text-white/40 hover:text-white/70"
+                  ? `border-emerald-500 ${isLight ? "text-neutral-900" : "text-white"}`
+                  : `border-transparent ${textMutedClass} hover:text-emerald-500/70`
               }`}
             >
               База лідів
@@ -536,8 +552,8 @@ export default function BwMainDashboard({
               onClick={() => setActiveTab("regular_customers")}
               className={`text-sm font-black uppercase tracking-wider pb-2 border-b-2 transition-all cursor-pointer flex items-center gap-2 ${
                 activeTab === "regular_customers"
-                  ? "border-emerald-500 text-white"
-                  : "border-transparent text-white/40 hover:text-white/70"
+                  ? `border-emerald-500 ${isLight ? "text-neutral-900" : "text-white"}`
+                  : `border-transparent ${textMutedClass} hover:text-emerald-500/70`
               }`}
             >
               <Sparkles className="w-4 h-4 text-emerald-400 animate-pulse" />
@@ -545,8 +561,8 @@ export default function BwMainDashboard({
             </button>
           </div>
 
-          <h2 className="text-sm font-bold uppercase tracking-tight text-white/40">
-            {activeTab === "leads" ? "Активний перегляд & Управління" : "Режим тільки перегляду"}
+          <h2 className={`text-sm font-bold uppercase tracking-tight ${textMutedClass}`}>
+            {activeTab === "leads" ? "Активний перегляд & Управління" : "Режим только просмотра"}
           </h2>
         </div>
 
@@ -554,7 +570,7 @@ export default function BwMainDashboard({
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           {/* Search Input */}
           <div className="relative w-full lg:w-80">
-            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-white/30">
+            <span className={`absolute inset-y-0 left-0 pl-3 flex items-center ${isLight ? "text-neutral-400" : "text-white/30"}`}>
               <Search className="w-4 h-4" />
             </span>
             <input
@@ -562,13 +578,13 @@ export default function BwMainDashboard({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Пошук клієнтів (ім'я, телефон, tg, ig)..."
-              className="w-full pl-9 pr-4 py-2.5 bg-white/[0.03] border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white placeholder:text-white/20 text-xs"
+              className={`w-full pl-9 pr-4 py-2.5 rounded-xl focus:outline-none focus:border-emerald-500 text-xs ${inputClass}`}
             />
           </div>
 
           {/* CRM status pills - Hidden for Regular Customers tab */}
           {activeTab === "leads" && (
-            <div className="flex flex-wrap gap-1 bg-white/[0.02] border border-white/5 p-1 rounded-xl">
+            <div className={`flex flex-wrap gap-1 p-1 rounded-xl ${isLight ? "bg-neutral-100 border border-neutral-200" : "bg-white/[0.02] border border-white/5"}`}>
               {[
                 { id: "all", label: "Всі" },
                 { id: "new", label: "Нові" },
@@ -580,7 +596,11 @@ export default function BwMainDashboard({
                   onClick={() => setStatusFilter(btn.id)}
                   className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
                     statusFilter === btn.id
-                      ? "bg-white text-black font-extrabold shadow-lg"
+                      ? isLight
+                        ? "bg-neutral-950 text-white font-extrabold shadow-lg"
+                        : "bg-white text-black font-extrabold shadow-lg"
+                      : isLight
+                      ? "text-neutral-500 hover:text-neutral-900"
                       : "text-white/50 hover:text-white"
                   }`}
                 >
@@ -605,7 +625,11 @@ export default function BwMainDashboard({
                 {filteredLeads.map((lead) => (
                   <div
                     key={lead.id}
-                    className="relative bg-[#0C0C0F]/80 border border-emerald-500/20 hover:border-emerald-500/40 p-6 rounded-2xl transition-all shadow-xl hover:shadow-emerald-500/[0.05] group"
+                    className={`relative p-6 rounded-2xl transition-all shadow-xl hover:shadow-emerald-500/[0.05] group ${
+                      isLight 
+                        ? "bg-white border border-emerald-500/30 hover:border-emerald-500" 
+                        : "bg-[#0C0C0F]/80 border border-emerald-500/20 hover:border-emerald-500/40"
+                    }`}
                   >
                     {/* Shiny Premium Orb Badge */}
                     <div className="absolute top-4 right-4 flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[9px] font-black text-emerald-400 uppercase tracking-widest animate-pulse">
@@ -616,20 +640,20 @@ export default function BwMainDashboard({
                     <div className="space-y-4">
                       {/* Name and ID */}
                       <div>
-                        <h3 className="font-extrabold text-base text-white tracking-tight group-hover:text-emerald-400 transition-colors">
+                        <h3 className={`font-extrabold text-base tracking-tight group-hover:text-emerald-400 transition-colors ${isLight ? "text-neutral-900" : "text-white"}`}>
                           {lead.name}
                         </h3>
-                        <p className="text-[9px] text-white/30 mt-1 truncate" title={lead.visitor_id}>
+                        <p className={`text-[9px] mt-1 truncate ${isLight ? "text-neutral-400" : "text-white/30"}`} title={lead.visitor_id}>
                           id: {lead.visitor_id}
                         </p>
                       </div>
 
                       {/* Phone and Clipboard Copy */}
-                      <div className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/5">
-                        <div className="text-xs font-semibold text-white/80">{lead.phone}</div>
+                      <div className={`flex items-center justify-between p-3 rounded-xl border ${isLight ? "bg-neutral-50/50 border-neutral-200" : "bg-white/[0.02] border-white/5"}`}>
+                        <div className={`text-xs font-semibold ${isLight ? "text-neutral-800" : "text-white/80"}`}>{lead.phone}</div>
                         <button
                           onClick={() => handleCopyPhone(lead.phone, lead.id)}
-                          className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition-all cursor-pointer flex items-center justify-center"
+                          className={`p-2 rounded-lg transition-all cursor-pointer flex items-center justify-center ${isLight ? "bg-neutral-100 hover:bg-neutral-200 text-neutral-500 hover:text-neutral-850" : "bg-white/5 hover:bg-white/10 text-white/50 hover:text-white"}`}
                           title="Скопіювати номер телефону"
                         >
                           {copiedId === lead.id ? (
@@ -641,21 +665,21 @@ export default function BwMainDashboard({
                       </div>
 
                       {/* Social Nickname Links */}
-                      <div className="flex flex-wrap gap-2 pt-1 border-t border-white/5">
+                      <div className={`flex flex-wrap gap-2 pt-1 border-t ${borderClass}`}>
                         {lead.telegram ? (
                           renderTelegramLink(lead.telegram)
                         ) : (
-                          <span className="text-[9px] text-white/20 uppercase tracking-wider font-bold">tg: немає</span>
+                          <span className={`text-[9px] uppercase tracking-wider font-bold ${isLight ? "text-neutral-300" : "text-white/20"}`}>tg: немає</span>
                         )}
                         {lead.instagram ? (
                           renderInstagramLink(lead.instagram)
                         ) : (
-                          <span className="text-[9px] text-white/20 uppercase tracking-wider font-bold">ig: немає</span>
+                          <span className={`text-[9px] uppercase tracking-wider font-bold ${isLight ? "text-neutral-300" : "text-white/20"}`}>ig: немає</span>
                         )}
                       </div>
 
                       {/* Footer Details */}
-                      <div className="flex justify-between items-center text-[10px] text-white/40 mt-2 font-medium">
+                      <div className={`flex justify-between items-center text-[10px] mt-2 font-medium ${textMutedClass}`}>
                         <span>Джерело: {BUTTON_LABELS[getBaseButtonId(lead.button_id)] || getBaseButtonId(lead.button_id)}</span>
                         <span>
                           {new Date(lead.created_at).toLocaleDateString("uk-UA", {
@@ -673,7 +697,7 @@ export default function BwMainDashboard({
           </div>
         ) : (
           /* Standard Leads Table view with premium features & custom select */
-          <div className="overflow-x-auto border border-white/5 rounded-xl">
+          <div className={`overflow-x-auto border rounded-xl ${borderClass}`}>
             {/* Click Outside overlay when dropdown is open */}
             {activeDropdownId && (
               <div
@@ -684,7 +708,7 @@ export default function BwMainDashboard({
 
             <table className="w-full border-collapse text-left text-xs relative">
               <thead>
-                <tr className="bg-white/[0.02] text-white/40 uppercase tracking-widest font-black border-b border-white/5">
+                <tr className={`${tableHeaderClass} uppercase tracking-widest font-black border-b`}>
                   <th className="p-4">Клієнт</th>
                   <th className="p-4">Контакти & Скорочення</th>
                   <th className="p-4">Джерело (CTA)</th>
@@ -692,10 +716,10 @@ export default function BwMainDashboard({
                   <th className="p-4 text-center">Статус</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5 text-white/80">
+              <tbody className={`divide-y ${borderClass} ${isLight ? "text-neutral-700" : "text-white/80"}`}>
                 {filteredLeads.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="p-8 text-center text-white/30 text-sm font-medium">
+                    <td colSpan={5} className={`p-8 text-center text-sm font-medium ${isLight ? "text-neutral-400" : "text-white/30"}`}>
                       Заявки не знайдені
                     </td>
                   </tr>
@@ -707,14 +731,14 @@ export default function BwMainDashboard({
                       PIPELINE_STATUSES[0];
 
                     return (
-                      <tr key={lead.id} className="hover:bg-white/[0.01] transition-all group">
+                      <tr key={lead.id} className={`${tableRowClass} transition-all group`}>
                         {/* Client Name & ID */}
                         <td className="p-4">
-                          <div className="font-extrabold text-sm text-white group-hover:text-emerald-400 transition-colors">
+                          <div className={`font-extrabold text-sm group-hover:text-emerald-400 transition-colors ${isLight ? "text-neutral-900" : "text-white"}`}>
                             {lead.name}
                           </div>
                           <div
-                            className="text-[10px] text-white/30 truncate max-w-[120px] mt-1"
+                            className={`text-[10px] truncate max-w-[120px] mt-1 ${isLight ? "text-neutral-400" : "text-white/30"}`}
                             title={lead.visitor_id}
                           >
                             id: {lead.visitor_id}
@@ -724,10 +748,10 @@ export default function BwMainDashboard({
                         {/* Phones & Socials */}
                         <td className="p-4 space-y-2">
                           <div className="flex items-center gap-2">
-                            <span className="font-semibold text-white/90">{lead.phone}</span>
+                            <span className={`font-semibold ${isLight ? "text-neutral-800" : "text-white/90"}`}>{lead.phone}</span>
                             <button
                               onClick={() => handleCopyPhone(lead.phone, lead.id)}
-                              className="p-1 rounded bg-white/5 hover:bg-white/10 text-white/40 hover:text-white transition-all cursor-pointer relative"
+                              className={`p-1 rounded transition-all cursor-pointer relative ${isLight ? "bg-neutral-100 hover:bg-neutral-200 text-neutral-500 hover:text-neutral-800" : "bg-white/5 hover:bg-white/10 text-white/40 hover:text-white"}`}
                               title="Скопіювати номер"
                             >
                               {copiedId === lead.id ? (
@@ -744,12 +768,12 @@ export default function BwMainDashboard({
                         </td>
 
                         {/* CTA Button Source */}
-                        <td className="p-4 font-semibold text-white/60">
+                        <td className={`p-4 font-semibold ${isLight ? "text-neutral-600" : "text-white/60"}`}>
                           {BUTTON_LABELS[getBaseButtonId(lead.button_id)] || getBaseButtonId(lead.button_id)}
                         </td>
 
                         {/* Created Date */}
-                        <td className="p-4 text-white/50">
+                        <td className={`p-4 ${isLight ? "text-neutral-500" : "text-white/50"}`}>
                           {new Date(lead.created_at).toLocaleString("uk-UA", {
                             day: "2-digit",
                             month: "2-digit",
@@ -780,8 +804,8 @@ export default function BwMainDashboard({
 
                             {/* Dropdown Menu Container */}
                             {activeDropdownId === lead.id && (
-                              <div className="absolute right-0 mt-2 w-56 rounded-2xl border border-white/10 bg-[#0C0C0F]/95 p-2 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2 duration-200 z-50">
-                                <div className="text-[10px] font-black uppercase tracking-wider text-white/30 px-3 py-1.5 border-b border-white/5 mb-1.5">
+                              <div className={`absolute right-0 mt-2 w-56 rounded-2xl p-2 animate-in fade-in slide-in-from-top-2 duration-200 z-50 ${dropdownClass}`}>
+                                <div className={`text-[10px] font-black uppercase tracking-wider px-3 py-1.5 border-b mb-1.5 ${isLight ? "text-neutral-400 border-neutral-100" : "text-white/30 border-white/5"}`}>
                                   Змінити статус
                                 </div>
                                 <div className="space-y-0.5 max-h-60 overflow-y-auto custom-scrollbar">
@@ -800,8 +824,8 @@ export default function BwMainDashboard({
                                         }}
                                         className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs font-bold transition-all duration-150 cursor-pointer ${
                                           isSelected
-                                            ? "bg-white/10 text-white"
-                                            : "text-white/60 hover:text-white hover:bg-white/5"
+                                            ? isLight ? "bg-neutral-100 text-neutral-900" : "bg-white/10 text-white"
+                                            : isLight ? "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50" : "text-white/60 hover:text-white hover:bg-white/5"
                                         }`}
                                       >
                                         <div className="flex items-center gap-2">

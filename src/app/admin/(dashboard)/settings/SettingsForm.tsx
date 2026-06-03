@@ -3,6 +3,7 @@
 import React, { useState, useTransition, useEffect } from "react";
 import { createUserAction, editUserAction, deleteUserAction } from "./actions";
 import { UserPlus, Trash2, Shield, User, Loader2, Edit3, X, Save, CheckSquare, Square, Check } from "lucide-react";
+import { useTheme } from "../../ThemeProvider";
 
 interface Profile {
   id: string;
@@ -34,6 +35,22 @@ export default function SettingsForm({
   projects,
   profileProjects,
 }: SettingsFormProps) {
+  const { theme } = useTheme();
+  const isLight = theme === "light";
+
+  const cardClass = isLight ? "bg-white border border-neutral-200/85 text-neutral-900 shadow-sm" : "bg-[#0C0C0F] border border-white/5 text-white";
+  const borderClass = isLight ? "border-neutral-200" : "border-white/5";
+  const textMutedClass = isLight ? "text-neutral-500" : "text-white/40";
+  const textSubtleClass = isLight ? "text-neutral-400" : "text-white/20";
+  const tableHeaderClass = isLight ? "bg-neutral-100 text-neutral-500 border-neutral-200" : "bg-white/[0.02] text-white/40 border-white/5";
+  const tableRowClass = isLight ? "hover:bg-neutral-50 border-neutral-200 text-neutral-800" : "hover:bg-white/[0.01] border-white/5 text-white/80";
+  const inputClass = isLight ? "bg-white border border-neutral-300 text-neutral-900 placeholder:text-neutral-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" : "bg-white/5 border border-white/10 text-white placeholder:text-white/20 focus:border-emerald-500";
+  const rolePanelClass = isLight ? "bg-neutral-50 border border-neutral-200" : "bg-white/[0.01] border border-white/5";
+  const activeRoleBtnClass = isLight ? "bg-neutral-900 text-white font-extrabold" : "bg-white text-black font-extrabold";
+  const inactiveRoleBtnClass = isLight ? "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100" : "text-white/50 hover:text-white hover:bg-white/[0.02]";
+  const projectBtnClass = isLight ? "bg-white hover:bg-neutral-50 border-neutral-200" : "bg-white/[0.01] hover:bg-white/5 border-white/5";
+  const employeeIconClass = isLight ? "bg-neutral-100 text-neutral-600 border-neutral-200" : "bg-white/5 text-white/60 border-white/10";
+
   const [editingUser, setEditingUser] = useState<Profile | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -202,18 +219,18 @@ export default function SettingsForm({
   return (
     <div className="space-y-10 font-sans">
       <div>
-        <h1 className="text-3xl font-black uppercase tracking-tight text-white flex items-center gap-3">
+        <h1 className={`text-3xl font-black uppercase tracking-tight flex items-center gap-3 ${isLight ? "text-neutral-900" : "text-white"}`}>
           Налаштування CRM
         </h1>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Unified Create / Edit Form */}
-        <div className="lg:col-span-1 bg-[#0C0C0F] border border-white/5 p-6 rounded-2xl h-fit space-y-6 relative overflow-hidden">
+        <div className={`lg:col-span-1 p-6 rounded-2xl h-fit space-y-6 relative overflow-hidden ${cardClass}`}>
           <div className={`absolute -top-12 -left-12 w-28 h-28 ${editingUser ? "bg-indigo-500/5" : "bg-emerald-500/5"} rounded-full blur-xl pointer-events-none`} />
 
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-black uppercase tracking-tight text-white flex items-center gap-2">
+            <h2 className={`text-lg font-black uppercase tracking-tight flex items-center gap-2 ${isLight ? "text-neutral-900" : "text-white"}`}>
               {editingUser ? (
                 <>
                   <Edit3 className="w-5 h-5 text-indigo-400" />
@@ -229,7 +246,9 @@ export default function SettingsForm({
             {editingUser && (
               <button
                 onClick={resetForm}
-                className="p-1 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all cursor-pointer"
+                className={`p-1 rounded-lg transition-all cursor-pointer ${
+                  isLight ? "text-neutral-400 hover:text-neutral-800 hover:bg-neutral-100" : "text-white/40 hover:text-white hover:bg-white/5"
+                }`}
                 title="Скасувати редагування"
               >
                 <X className="w-4 h-4" />
@@ -251,7 +270,7 @@ export default function SettingsForm({
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1.5">
+              <label className={`block text-[10px] font-bold uppercase tracking-widest mb-1.5 ${textMutedClass}`}>
                 Електронна пошта
               </label>
               <input
@@ -259,18 +278,18 @@ export default function SettingsForm({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="email@bnwprod.com"
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all text-white placeholder:text-white/20 text-sm"
+                className={`w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all text-sm ${inputClass}`}
                 required
               />
             </div>
 
             <div>
               <div className="flex justify-between items-center mb-1.5">
-                <label className="block text-[10px] font-bold text-white/40 uppercase tracking-widest">
+                <label className={`block text-[10px] font-bold uppercase tracking-widest ${textMutedClass}`}>
                   Пароль
                 </label>
                 {editingUser && (
-                  <span className="text-[9px] text-white/30 italic">
+                  <span className={`text-[9px] italic ${isLight ? "text-neutral-400" : "text-white/30"}`}>
                     Залиште порожнім, щоб не змінювати
                   </span>
                 )}
@@ -279,17 +298,17 @@ export default function SettingsForm({
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={editingUser ? "Новий пароль (необов'язково)" : "Мінімум 6 символів"}
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all text-white placeholder:text-white/20 text-sm"
+                placeholder={editingUser ? "Новий пароль (необов'язково)" : "Мінімум 6 symbols"}
+                className={`w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all text-sm ${inputClass}`}
                 required={!editingUser}
               />
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold text-white/40 uppercase tracking-widest mb-2">
+              <label className={`block text-[10px] font-bold uppercase tracking-widest mb-2 ${textMutedClass}`}>
                 Рівень доступу (Роль)
               </label>
-              <div className="space-y-1 bg-white/[0.01] border border-white/5 p-1 rounded-xl">
+              <div className={`space-y-1 p-1 rounded-xl ${rolePanelClass}`}>
                 {[
                   { key: "pending", label: "Очікує схвалення (Pending)" },
                   { key: "superman", label: "Супермен (Superman)" },
@@ -307,8 +326,8 @@ export default function SettingsForm({
                     }}
                     className={`w-full py-2 px-3 rounded-lg text-xs font-semibold cursor-pointer text-left transition-all flex items-center justify-between ${
                       role === item.key || (item.key === "superman" && role === "admin")
-                        ? "bg-white text-black font-extrabold"
-                        : "text-white/50 hover:text-white hover:bg-white/[0.02]"
+                        ? activeRoleBtnClass
+                        : inactiveRoleBtnClass
                     }`}
                   >
                     <span>{item.label}</span>
@@ -320,13 +339,13 @@ export default function SettingsForm({
 
             {/* Project selection - show for all roles except pending */}
             {role !== "pending" && (
-              <div className="space-y-2 border-t border-white/5 pt-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                <label className="block text-[10px] font-bold text-white/40 uppercase tracking-widest">
+              <div className={`space-y-2 border-t pt-4 animate-in fade-in slide-in-from-top-2 duration-300 ${borderClass}`}>
+                <label className={`block text-[10px] font-bold uppercase tracking-widest ${textMutedClass}`}>
                   Прив'язати проекти (Доступ)
                 </label>
                 
                 {projects.length === 0 ? (
-                  <p className="text-white/20 text-xs italic">Проекти не знайдені в БД.</p>
+                  <p className={`text-xs italic ${textSubtleClass}`}>Проекти не знайдені в БД.</p>
                 ) : (
                   <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar p-1">
                     {projects.map((proj) => {
@@ -336,16 +355,16 @@ export default function SettingsForm({
                           key={proj.id}
                           type="button"
                           onClick={() => handleToggleProject(proj.id)}
-                          className="w-full flex items-center gap-2.5 p-2 rounded-lg bg-white/[0.01] hover:bg-white/5 border border-white/5 text-left transition-all cursor-pointer"
+                          className={`w-full flex items-center gap-2.5 p-2 rounded-lg text-left transition-all cursor-pointer ${projectBtnClass}`}
                         >
                           {isChecked ? (
                             <CheckSquare className="w-4 h-4 text-emerald-400 shrink-0" />
                           ) : (
-                            <Square className="w-4 h-4 text-white/20 shrink-0" />
+                            <Square className={`w-4 h-4 shrink-0 ${isLight ? "text-neutral-300" : "text-white/20"}`} />
                           )}
                           <div className="min-w-0">
-                            <p className="text-xs font-bold text-white/90 truncate">{proj.name}</p>
-                            <p className="text-[9px] text-white/30 font-semibold uppercase">{proj.slug}</p>
+                            <p className={`text-xs font-bold truncate ${isLight ? "text-neutral-800" : "text-white/90"}`}>{proj.name}</p>
+                            <p className={`text-[9px] font-semibold uppercase ${isLight ? "text-neutral-400" : "text-white/30"}`}>{proj.slug}</p>
                           </div>
                         </button>
                       );
@@ -385,23 +404,23 @@ export default function SettingsForm({
         </div>
 
         {/* Staff Members List */}
-        <div className="lg:col-span-2 bg-[#0C0C0F] border border-white/5 p-6 rounded-2xl space-y-6">
-          <h2 className="text-lg font-black uppercase tracking-tight text-white flex items-center gap-2">
+        <div className={`lg:col-span-2 p-6 rounded-2xl space-y-6 ${cardClass}`}>
+          <h2 className={`text-lg font-black uppercase tracking-tight flex items-center gap-2 ${isLight ? "text-neutral-900" : "text-white"}`}>
             <Shield className="w-5 h-5 text-emerald-500" />
             Команда B&W Prod
           </h2>
 
-          <div className="overflow-x-auto border border-white/5 rounded-xl">
+          <div className={`overflow-x-auto border rounded-xl ${borderClass}`}>
             <table className="w-full border-collapse text-left text-xs">
               <thead>
-                <tr className="bg-white/[0.02] text-white/40 uppercase tracking-widest font-black border-b border-white/5">
+                <tr className={`uppercase tracking-widest font-black border-b ${tableHeaderClass}`}>
                   <th className="p-4">Співробітник</th>
                   <th className="p-4">Рівень доступу</th>
                   <th className="p-4">Дозволені проекти</th>
                   <th className="p-4 text-right">Дії</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5 text-white/80">
+              <tbody className={`divide-y ${isLight ? "divide-neutral-200" : "divide-white/5"}`}>
                 {profiles.map((profile) => {
                   // Find all projects assigned to this user
                   const userProjIds = profileProjects
@@ -413,14 +432,14 @@ export default function SettingsForm({
                     .map((proj) => proj.name);
 
                   return (
-                    <tr key={profile.id} className="hover:bg-white/[0.01] transition-all">
+                    <tr key={profile.id} className={`transition-all ${tableRowClass}`}>
                       {/* Employee Identity */}
                       <td className="p-4 flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-white/5 flex items-center justify-center text-white/60 border border-white/10 shrink-0">
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center border shrink-0 ${employeeIconClass}`}>
                           <User className="w-4 h-4" />
                         </div>
                         <div className="min-w-0">
-                          <div className="font-extrabold text-sm text-white truncate max-w-[150px] md:max-w-xs" title={profile.email}>
+                          <div className={`font-extrabold text-sm truncate max-w-[150px] md:max-w-xs ${isLight ? "text-neutral-900" : "text-white"}`} title={profile.email}>
                             {profile.email}
                           </div>
                           {profile.id === currentUserId && (
@@ -449,14 +468,16 @@ export default function SettingsForm({
                             {assignedNames.map((name) => (
                               <span
                                 key={name}
-                                className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-white/5 text-white/70 border border-white/5"
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${
+                                  isLight ? "bg-neutral-100 text-neutral-700 border-neutral-200" : "bg-white/5 text-white/70 border-white/5"
+                                }`}
                               >
                                 {name}
                               </span>
                             ))}
                           </div>
                         ) : (
-                          <span className="text-[10px] text-white/20 italic">Немає доступу</span>
+                          <span className={`text-[10px] italic ${textSubtleClass}`}>Немає доступу</span>
                         )}
                       </td>
 
