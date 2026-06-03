@@ -42,7 +42,7 @@ export async function getSessionAndAccess(selectedProjectSlug?: string) {
     // Superman role sees all projects except isolated 'bw_main' unless explicitly assigned
     const { data: allProj } = await supabase
       .from("projects")
-      .select("id, name, slug")
+      .select("id, name, slug, is_active")
       .order("name");
     const projectsList = allProj || [];
 
@@ -54,7 +54,7 @@ export async function getSessionAndAccess(selectedProjectSlug?: string) {
     const assignedProjectIds = new Set((explicitAssignments || []).map((a) => a.project_id));
 
     allowedProjects = projectsList.filter((p) => {
-      if (p.slug === "vova_win") return false;
+      if (!p.is_active) return false;
       if (p.slug === "bw_main") {
         return isSuperman || assignedProjectIds.has(p.id);
       }
@@ -63,13 +63,13 @@ export async function getSessionAndAccess(selectedProjectSlug?: string) {
   } else {
     const { data } = await supabase
       .from("profile_projects")
-      .select("projects(id, name, slug)")
+      .select("projects(id, name, slug, is_active)")
       .eq("profile_id", user.id);
 
     allowedProjects = (data || [])
       .map((item: any) => item.projects)
       .filter(Boolean)
-      .filter((p: any) => p.slug !== "vova_win");
+      .filter((p: any) => p.is_active !== false);
   }
 
   // Resolve current active project slug
@@ -283,14 +283,14 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
       const [producersRes, profileProjectsRes, allProjRes, allOrdersForLeaderboard, allCostsRes] = await Promise.all([
         adminSupabase.from("profiles").select("id, email, full_name, avatar_url").eq("role", "producer"),
         adminSupabase.from("profile_projects").select("profile_id, project_id"),
-        adminSupabase.from("projects").select("id, name, slug"),
+        adminSupabase.from("projects").select("id, name, slug, is_active"),
         fetchAllOrdersForSummary(),
         adminSupabase.from("daily_traffic_and_costs").select("project_id, spend"),
       ]);
 
       const producers = producersRes.data || [];
       const mappings = profileProjectsRes.data || [];
-      const projects = allProjRes.data || [];
+      const projects = (allProjRes.data || []).filter((p) => p.is_active !== false);
       const orders = (allOrdersForLeaderboard || []).filter((o) => o.status !== "Клик" && o.status !== "КликФормы");
       const costs = allCostsRes.data || [];
 

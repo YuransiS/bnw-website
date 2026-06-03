@@ -73,8 +73,8 @@ export default async function AdminSettingsPage() {
   // 4. Fetch team members profiles, projects list, and mapping in parallel
   // Use admin client to bypass RLS for administrative commands
   const [profilesRes, projectsRes, mappingRes] = await Promise.all([
-    adminSupabase.from("profiles").select("id, email, role").order("email"),
-    adminSupabase.from("projects").select("id, name, slug").order("name"),
+    adminSupabase.from("profiles").select("id, email, role, full_name").order("email"),
+    adminSupabase.from("projects").select("id, name, slug, is_active").order("name"),
     adminSupabase.from("profile_projects").select("profile_id, project_id"),
   ]);
 

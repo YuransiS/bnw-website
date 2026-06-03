@@ -1717,7 +1717,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                     producersLeaderboard.map((prod: any) => (
                       <tr key={prod.producerId} className={`${tableRowClass} transition-all`}>
                         <td className="p-4 font-black text-sm">
-                          {prod.email}
+                          {prod.name || prod.email}
                         </td>
                         <td className="p-4 font-semibold">
                           {prod.projectNames}

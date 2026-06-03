@@ -65,7 +65,7 @@ export default async function AdminLayout({
   if (isSuperman) {
     const { data: allProj } = await supabase
       .from("projects")
-      .select("id, name, slug")
+      .select("id, name, slug, is_active")
       .order("name");
     const projectsList = allProj || [];
 
@@ -77,7 +77,7 @@ export default async function AdminLayout({
     const assignedProjectIds = new Set((explicitAssignments || []).map((a) => a.project_id));
 
     allowedProjects = projectsList.filter((p) => {
-      if (p.slug === "vova_win") return false;
+      if (!p.is_active) return false;
       if (p.slug === "bw_main") {
         return isSuperman || assignedProjectIds.has(p.id);
       }
@@ -86,13 +86,13 @@ export default async function AdminLayout({
   } else {
     const { data } = await supabase
       .from("profile_projects")
-      .select("projects(id, name, slug)")
+      .select("projects(id, name, slug, is_active)")
       .eq("profile_id", user.id);
 
     allowedProjects = (data || [])
       .map((item: any) => item.projects)
       .filter(Boolean)
-      .filter((p: any) => p.slug !== "vova_win");
+      .filter((p: any) => p.is_active !== false);
   }
 
   return (

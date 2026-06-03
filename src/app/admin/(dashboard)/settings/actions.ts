@@ -70,6 +70,7 @@ export async function createUserAction(prevState: any, formData: FormData) {
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
     const role = formData.get("role") as string;
+    const fullName = formData.get("fullName") as string;
     const projectIdsJson = formData.get("projectIds") as string;
     const projectIds: string[] = projectIdsJson ? JSON.parse(projectIdsJson) : [];
 
@@ -103,11 +104,12 @@ export async function createUserAction(prevState: any, formData: FormData) {
       return { error: "Не вдалося створити акаунт користувача." };
     }
 
-    // Insert profile record with role
+    // Insert profile record with role and full_name
     const { error: profileError } = await supabaseAdmin.from("profiles").insert({
       id: authData.user.id,
       email: email.trim(),
       role: role,
+      full_name: fullName?.trim() || "",
     });
 
     if (profileError) {
@@ -144,7 +146,8 @@ export async function editUserAction(
   email: string,
   password?: string,
   role?: string,
-  projectIds: string[] = []
+  projectIds: string[] = [],
+  fullName?: string
 ) {
   try {
     const currentUserId = await verifyAdminAccess();
@@ -181,10 +184,14 @@ export async function editUserAction(
     }
 
     // Prepare update parameters for Profiles table
-    const profileParams: { email: string; role?: string } = {
+    const profileParams: { email: string; role?: string; full_name?: string } = {
       email: email.trim(),
     };
     
+    if (fullName !== undefined) {
+      profileParams.full_name = fullName.trim();
+    }
+
     // Prevent self-demoting from admin/superman role to maintain system integrity
     if (role) {
       if (profileId === currentUserId && role !== "admin" && role !== "superman") {
@@ -253,5 +260,26 @@ export async function deleteUserAction(profileId: string) {
     return { success: true, message: "Користувача видалено." };
   } catch (err: any) {
     return { error: err.message || "Невідома помилка" };
+  }
+}
+
+// 6. Enable / Disable a project
+export async function toggleProjectActiveAction(projectId: string, isActive: boolean) {
+  try {
+    await verifyAdminAccess();
+
+    const supabaseAdmin = createAdminClient();
+    const { error } = await supabaseAdmin
+      .from("projects")
+      .update({ is_active: isActive })
+      .eq("id", projectId);
+
+    if (error) throw error;
+
+    revalidatePath("/admin/settings");
+    revalidatePath("/admin");
+    return { success: true, message: "Статус проекту успішно оновлено!" };
+  } catch (err: any) {
+    return { error: err.message || "Невідома помилка на сервері." };
   }
 }

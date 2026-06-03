@@ -1,20 +1,22 @@
 "use client";
 
 import React, { useState, useTransition, useEffect } from "react";
-import { createUserAction, editUserAction, deleteUserAction } from "./actions";
-import { UserPlus, Trash2, Shield, User, Loader2, Edit3, X, Save, CheckSquare, Square, Check } from "lucide-react";
+import { createUserAction, editUserAction, deleteUserAction, toggleProjectActiveAction } from "./actions";
+import { UserPlus, Trash2, Shield, User, Loader2, Edit3, X, Save, CheckSquare, Square, Check, Briefcase } from "lucide-react";
 import { useTheme } from "../../ThemeProvider";
 
 interface Profile {
   id: string;
   email: string;
   role: string;
+  full_name?: string;
 }
 
 interface Project {
   id: string;
   name: string;
   slug: string;
+  is_active?: boolean;
 }
 
 interface ProfileProjectMapping {
@@ -53,6 +55,7 @@ export default function SettingsForm({
 
   const [editingUser, setEditingUser] = useState<Profile | null>(null);
   const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<string>("pending");
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
@@ -65,6 +68,7 @@ export default function SettingsForm({
   const resetForm = () => {
     setEditingUser(null);
     setEmail("");
+    setFullName("");
     setPassword("");
     setRole("pending");
     setSelectedProjects([]);
@@ -75,6 +79,7 @@ export default function SettingsForm({
   const handleEditClick = (profile: Profile) => {
     setEditingUser(profile);
     setEmail(profile.email);
+    setFullName(profile.full_name || "");
     setPassword("");
     setRole(profile.role);
     
@@ -111,7 +116,7 @@ export default function SettingsForm({
       return;
     }
 
-    if ((role === "producer" || role === "sales" || role === "rop") && selectedProjects.length === 0) {
+    if ((role === "producer" || role === "sales") && selectedProjects.length === 0) {
       setError("Будь ласка, оберіть хоча б один проект для Продюсера чи Відділу продажів.");
       return;
     }
@@ -124,7 +129,8 @@ export default function SettingsForm({
           email,
           password.trim() || undefined,
           role,
-          selectedProjects
+          selectedProjects,
+          fullName
         );
         if (res.error) {
           setError(res.error);
@@ -146,6 +152,7 @@ export default function SettingsForm({
         // Reconstruct form data to send to server action
         const formData = new FormData();
         formData.append("email", email);
+        formData.append("fullName", fullName);
         formData.append("password", password);
         formData.append("role", role);
         formData.append("projectIds", JSON.stringify(selectedProjects));
@@ -184,6 +191,19 @@ export default function SettingsForm({
     }
   };
 
+  const handleToggleProjectActive = (projectId: string, currentStatus: boolean) => {
+    setError(null);
+    setSuccess(null);
+    startTransition(async () => {
+      const res = await toggleProjectActiveAction(projectId, !currentStatus);
+      if (res.error) {
+        setError(res.error);
+      } else {
+        setSuccess(res.message || "Статус проекту успішно оновлено!");
+      }
+    });
+  };
+
   const getRoleLabel = (roleKey: string) => {
     switch (roleKey) {
       case "admin":
@@ -191,8 +211,6 @@ export default function SettingsForm({
         return "Супермен";
       case "producer":
         return "Операційний продюсер";
-      case "rop":
-        return "Керівник відділу продажів (РОП)";
       case "sales":
         return "Відділ продажів";
       case "pending":
@@ -209,8 +227,6 @@ export default function SettingsForm({
         return "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
       case "producer":
         return "bg-purple-500/10 text-purple-400 border border-purple-500/20";
-      case "rop":
-        return "bg-orange-500/10 text-orange-400 border border-orange-500/20";
       case "sales":
         return "bg-blue-500/10 text-blue-400 border border-blue-500/20";
       case "pending":
@@ -275,6 +291,19 @@ export default function SettingsForm({
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className={`block text-[10px] font-bold uppercase tracking-widest mb-1.5 ${textMutedClass}`}>
+                Ім'я та Прізвище
+              </label>
+              <input
+                type="text"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="Ім'я Прізвище"
+                className={`w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all text-sm ${inputClass}`}
+              />
+            </div>
+
+            <div>
+              <label className={`block text-[10px] font-bold uppercase tracking-widest mb-1.5 ${textMutedClass}`}>
                 Електронна пошта
               </label>
               <input
@@ -302,7 +331,7 @@ export default function SettingsForm({
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={editingUser ? "Новий пароль (необов'язково)" : "Мінімум 6 symbols"}
+                placeholder={editingUser ? "Новий пароль (необов'язково)" : "Мінімум 6 символів"}
                 className={`w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all text-sm ${inputClass}`}
                 required={!editingUser}
               />
@@ -317,7 +346,6 @@ export default function SettingsForm({
                   { key: "pending", label: "Очікує схвалення (Pending)" },
                   { key: "superman", label: "Супермен (Superman)" },
                   { key: "producer", label: "Операційний продюсер (Producer)" },
-                  { key: "rop", label: "Керівник відділу продажів (РОП)" },
                   { key: "sales", label: "Відділ продажів (Sales)" }
                 ].map((item) => (
                   <button
@@ -349,11 +377,11 @@ export default function SettingsForm({
                   Прив'язати проекти (Доступ)
                 </label>
                 
-                {projects.length === 0 ? (
-                  <p className={`text-xs italic ${textSubtleClass}`}>Проекти не знайдені в БД.</p>
+                {projects.filter(p => p.is_active !== false).length === 0 ? (
+                  <p className={`text-xs italic ${textSubtleClass}`}>Немає активних проектів в БД.</p>
                 ) : (
                   <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar p-1">
-                    {projects.map((proj) => {
+                    {projects.filter(p => p.is_active !== false).map((proj) => {
                       const isChecked = selectedProjects.includes(proj.id);
                       return (
                         <button
@@ -433,7 +461,7 @@ export default function SettingsForm({
                     .map((mapping) => mapping.project_id);
 
                   const assignedNames = projects
-                    .filter((proj) => userProjIds.includes(proj.id))
+                    .filter((proj) => userProjIds.includes(proj.id) && proj.is_active !== false)
                     .map((proj) => proj.name);
 
                   return (
@@ -444,9 +472,14 @@ export default function SettingsForm({
                           <User className="w-4 h-4" />
                         </div>
                         <div className="min-w-0">
-                          <div className={`font-extrabold text-sm truncate max-w-[150px] md:max-w-xs ${isLight ? "text-neutral-900" : "text-white"}`} title={profile.email}>
-                            {profile.email}
+                          <div className={`font-extrabold text-sm truncate max-w-[150px] md:max-w-xs ${isLight ? "text-neutral-900" : "text-white"}`} title={profile.full_name || profile.email}>
+                            {profile.full_name || profile.email}
                           </div>
+                          {profile.full_name && (
+                            <div className={`text-[10px] truncate max-w-[150px] md:max-w-xs ${textMutedClass}`} title={profile.email}>
+                              {profile.email}
+                            </div>
+                          )}
                           {profile.id === currentUserId && (
                             <span className="text-[9px] text-emerald-400 font-bold uppercase tracking-wider block mt-0.5">
                               (Ваш акаунт)
@@ -513,6 +546,55 @@ export default function SettingsForm({
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        {/* Projects Management Section */}
+        <div className={`lg:col-span-3 p-6 rounded-2xl space-y-6 ${cardClass}`}>
+          <h2 className={`text-lg font-black uppercase tracking-tight flex items-center gap-2 ${isLight ? "text-neutral-900" : "text-white"}`}>
+            <Briefcase className="w-5 h-5 text-emerald-500" />
+            Проекти холдингу B&W
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {projects.map((proj) => {
+              const isActive = proj.is_active !== false;
+              return (
+                <div
+                  key={proj.id}
+                  className={`p-4 rounded-xl border flex items-center justify-between transition-all ${
+                    isActive
+                      ? isLight
+                        ? "bg-neutral-50/50 border-neutral-200"
+                        : "bg-white/[0.01] border-white/5"
+                      : isLight
+                      ? "bg-neutral-100/50 border-neutral-200 opacity-60"
+                      : "bg-white/[0.002] border-white/2 opacity-40"
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <p className={`font-extrabold text-sm ${isLight ? "text-neutral-900" : "text-white"}`}>
+                      {proj.name}
+                    </p>
+                    <p className={`text-[10px] font-semibold uppercase ${textMutedClass}`}>
+                      {proj.slug}
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => handleToggleProjectActive(proj.id, isActive)}
+                    disabled={isPending}
+                    className={`px-3 py-1.5 rounded-full text-xs font-black uppercase tracking-wider transition-all duration-300 cursor-pointer ${
+                      isActive
+                        ? "bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white border border-emerald-500/20"
+                        : "bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20"
+                    }`}
+                  >
+                    {isActive ? "Активний" : "Вимкнений"}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
