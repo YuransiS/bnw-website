@@ -90,7 +90,66 @@ export function useModal() {
   return context;
 }
 
-import { createLeadAction } from "@/app/actions/leads";
+import { createLeadAction, getClientCountry } from "@/app/actions/leads";
+
+const COUNTRY_PREFIXES: Record<string, string> = {
+  UA: "+380",
+  PL: "+48",
+  US: "+1",
+  CA: "+1",
+  GB: "+44",
+  DE: "+49",
+  FR: "+33",
+  IT: "+39",
+  ES: "+34",
+  NL: "+31",
+  BE: "+32",
+  AT: "+43",
+  CH: "+41",
+  SE: "+46",
+  NO: "+47",
+  FI: "+358",
+  DK: "+45",
+  IE: "+353",
+  PT: "+351",
+  GR: "+30",
+  IL: "+972",
+  KZ: "+7",
+  GE: "+995",
+  AM: "+374",
+  AZ: "+994",
+  MD: "+373",
+  LT: "+370",
+  LV: "+371",
+  EE: "+372",
+  RO: "+40",
+  BG: "+359",
+  HU: "+36",
+  CZ: "+420",
+  SK: "+421",
+  HR: "+385",
+  SI: "+386",
+  RS: "+381",
+  CY: "+357",
+  AE: "+971",
+  TR: "+90",
+  TH: "+66",
+  ID: "+62",
+  MY: "+60",
+  SG: "+65",
+  VN: "+84",
+  PH: "+63",
+  IN: "+91",
+  AU: "+61",
+  NZ: "+64",
+  ZA: "+27",
+  BR: "+55",
+  MX: "+52",
+  AR: "+54",
+  CL: "+56",
+  CO: "+57",
+  PE: "+51",
+};
 
 function LeadModal() {
   const { isOpen, activeButtonId, closeModal } = useModal();
@@ -102,7 +161,7 @@ function LeadModal() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  // Clear fields on open/close
+  // Clear fields on open/close & fetch prefix
   useEffect(() => {
     if (isOpen) {
       setName("");
@@ -111,6 +170,17 @@ function LeadModal() {
       setInstagram("");
       setError(null);
       setIsSuccess(false);
+
+      const fetchCountryPrefix = async () => {
+        try {
+          const country = await getClientCountry();
+          const prefix = COUNTRY_PREFIXES[country.toUpperCase()] || "+380";
+          setPhone(prefix);
+        } catch (err) {
+          setPhone("+380");
+        }
+      };
+      fetchCountryPrefix();
     }
   }, [isOpen]);
 
@@ -136,6 +206,15 @@ function LeadModal() {
       setError("Будь ласка, вкажіть ваш номер телефону");
       return;
     }
+
+    // Phone format validation
+    const cleanPhone = phone.trim().replace(/[\s\-\(\)]/g, "");
+    const phoneRegex = /^\+\d{9,15}$/;
+    if (!phoneRegex.test(cleanPhone)) {
+      setError("Некоректний формат номера телефону. Номер має починатися з '+' та містити від 9 до 15 цифр.");
+      return;
+    }
+
     if (!telegram.trim() && !instagram.trim()) {
       setError("Вкажіть хоча б один спосіб зв'язку (Telegram або Instagram)");
       return;
@@ -148,7 +227,7 @@ function LeadModal() {
       // Call Server Action
       const res = await createLeadAction({
         name: name.trim(),
-        phone: phone.trim(),
+        phone: cleanPhone,
         telegram: telegram.trim() || undefined,
         instagram: instagram.trim() || undefined,
         buttonId: activeButtonId || "unknown",

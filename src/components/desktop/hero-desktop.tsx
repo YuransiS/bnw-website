@@ -93,7 +93,7 @@ export function HeroDesktop() {
         <div className="flex flex-row items-center gap-12">
           <div className="max-w-4xl space-y-6">
             <h1 className="hero-elem text-5xl lg:text-6xl font-black tracking-tighter leading-[1.25] mb-6" style={{ textShadow: "0 10px 40px rgba(0,0,0,0.5)" }}>
-              <span className="block mb-3">Створюємо під ключ <span className="text-emerald-500 drop-shadow-[0_0_20px_rgba(16,185,129,0.4)] uppercase">систему для експерта</span></span>
+              <span className="block mb-3">Створюємо під ключ <span className="text-emerald-500 drop-shadow-[0_0_20px_rgba(16,185,129,0.4)] uppercase">систему</span></span>
               <span className="block mb-3">яка приносить прибуток <span className="text-emerald-500 whitespace-nowrap">$10k–$30k+/місяць</span></span>
               <span className="block text-white/90">через системний маркетинг та продюсування</span>
             </h1>

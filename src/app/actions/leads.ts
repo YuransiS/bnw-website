@@ -2,6 +2,19 @@
 
 import { createAdminClient } from "@/utils/supabase/server";
 import { NotificationService } from "@/lib/notifications";
+import { headers } from "next/headers";
+
+export async function getClientCountry() {
+  try {
+    const headersList = await headers();
+    const country = headersList.get("x-vercel-ip-country") || "UA";
+    return country;
+  } catch (err) {
+    console.error("Error getting client country:", err);
+    return "UA";
+  }
+}
+
 
 interface LeadInput {
   name: string;
@@ -22,6 +35,11 @@ export async function createLeadAction(input: LeadInput) {
     }
     if (!phone || !phone.trim()) {
       return { error: "Номер телефону є обов'язковим." };
+    }
+    const cleanPhone = phone.trim().replace(/[\s\-\(\)]/g, "");
+    const phoneRegex = /^\+\d{9,15}$/;
+    if (!phoneRegex.test(cleanPhone)) {
+      return { error: "Некоректний формат номера телефону. Номер має починатися з '+' та містити від 9 до 15 цифр." };
     }
     if (!telegram?.trim() && !instagram?.trim()) {
       return { error: "Будь ласка, вкажіть хоча б один спосіб зв'язку (Telegram або Instagram)." };

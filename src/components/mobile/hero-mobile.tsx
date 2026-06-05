@@ -35,7 +35,7 @@ export function HeroMobile() {
           <span className="block mb-2">
             Створюємо під ключ{" "}
             <span className="text-emerald-500 drop-shadow-[0_0_15px_rgba(16,185,129,0.35)] uppercase">
-              систему для експерта
+              систему
             </span>
           </span>
           <span className="block mb-2">
