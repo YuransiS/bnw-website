@@ -100,105 +100,57 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
     const supabase = await createClient();
     const adminSupabase = createAdminClient();
 
+    // Fetch unresolved transactions (amount > 0 and missing/invalid currency metadata)
+    let unresolvedOrders: any[] = [];
+    if (["admin", "superman", "producer", "rop"].includes(profile.role)) {
+      try {
+        const { data: rawUnresolved, error: unresolvedErr } = await adminSupabase
+          .from("unified_orders")
+          .select("id, amount, status, created_at, customer_id, project_id, metadata")
+          .not("status", "in", "('Клик', 'КликФормы')")
+          .gt("amount", 0);
+
+        if (!unresolvedErr && rawUnresolved) {
+          const filtered = rawUnresolved.filter((o: any) => {
+            const metaCurrency = String(o.metadata?.currency || o.metadata?.lead?.currency || "").trim().toLowerCase();
+            return !["usd", "$", "uah", "₴", "eur", "€"].includes(metaCurrency);
+          });
+
+          if (filtered.length > 0) {
+            const customerIds = Array.from(new Set(filtered.map((o) => o.customer_id).filter(Boolean)));
+            const projectIds = Array.from(new Set(filtered.map((o) => o.project_id).filter(Boolean)));
+
+            const [custs, projs] = await Promise.all([
+              customerIds.length > 0
+                ? adminSupabase.from("unified_customers").select("id, name, phone").in("id", customerIds).then((r) => r.data || [])
+                : Promise.resolve([]),
+              projectIds.length > 0
+                ? adminSupabase.from("projects").select("id, name").in("id", projectIds).then((r) => r.data || [])
+                : Promise.resolve([]),
+            ]);
+
+            unresolvedOrders = filtered.map((o) => {
+              const customer = (custs.find((c: any) => c.id === o.customer_id) || {}) as any;
+              const project = (projs.find((p: any) => p.id === o.project_id) || {}) as any;
+              return {
+                id: o.id,
+                amount: Number(o.amount || 0),
+                status: o.status,
+                created_at: o.created_at,
+                projectName: project.name || "Невідомий проект",
+                customerName: customer.name || "Невідомий клієнт",
+                customerPhone: customer.phone || "",
+              };
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch unresolved orders:", err);
+      }
+    }
+
     // 1. Superman Global Hub mode
     if (isSuperman && activeSlug === "all") {
-      // Run Запрос 1: Cross-project summary
-      const summaryQuery = `
-        WITH project_leads AS (
-            SELECT 
-                project_id,
-                COUNT(id) FILTER (WHERE status NOT IN ('Клик', 'КликФормы')) AS total_orders,
-                SUM(amount) FILTER (
-                    WHERE LOWER(status) IN ('closed_won', 'approved', 'aprooved', 'оплачено', 'купив курс', 'купив_курс', 'купив трипвайєр', 'купив трипвайер', 'купив(-ла) трипвайер') 
-                    AND (LOWER(COALESCE(metadata->>'currency', metadata->'lead'->>'currency', '')) IN ('usd', '$') OR project_id IN (SELECT id FROM projects WHERE slug IN ('sofia', 'valeria', 'svitlana')))
-                ) AS usd_revenue,
-                SUM(amount) FILTER (
-                    WHERE LOWER(status) IN ('closed_won', 'approved', 'aprooved', 'оплачено', 'купив курс', 'купив_курс', 'купив трипвайєр', 'купив трипвайер', 'купив(-ла) трипвайер') 
-                    AND NOT (LOWER(COALESCE(metadata->>'currency', metadata->'lead'->>'currency', '')) IN ('usd', '$') OR project_id IN (SELECT id FROM projects WHERE slug IN ('sofia', 'valeria', 'svitlana')))
-                ) AS uah_revenue
-            FROM unified_orders
-            GROUP BY project_id
-        ),
-        project_costs AS (
-            SELECT 
-                project_id,
-                SUM(spend) AS total_spend
-            FROM daily_traffic_and_costs
-            GROUP BY project_id
-        )
-        SELECT 
-            p.id AS project_id,
-            p.name AS "project_name",
-            p.slug AS "project_slug",
-            COALESCE(c.total_spend, 0) AS "spend",
-            COALESCE(l.total_orders, 0) AS "leads_count",
-            CASE 
-                WHEN COALESCE(l.total_orders, 0) > 0 THEN ROUND(COALESCE(c.total_spend, 0) / l.total_orders, 2)
-                ELSE 0 
-            END AS "cpl",
-            COALESCE(l.usd_revenue, 0) AS "usd_revenue",
-            COALESCE(l.uah_revenue, 0) AS "uah_revenue"
-        FROM projects p
-        LEFT JOIN project_leads l ON l.project_id = p.id
-        LEFT JOIN project_costs c ON c.project_id = p.id
-        ORDER BY "usd_revenue" DESC, "uah_revenue" DESC;
-      `;
-
-      const campaignQuery = `
-        WITH campaign_revenue AS (
-            SELECT 
-                project_id,
-                campaign_id,
-                utm_campaign,
-                SUM(amount) FILTER (
-                    WHERE LOWER(status) IN ('closed_won', 'approved', 'aprooved', 'оплачено', 'купив курс', 'купив_курс', 'купив трипвайєр', 'купив трипвайер', 'купив(-ла) трипвайер')
-                    AND (LOWER(COALESCE(metadata->>'currency', metadata->'lead'->>'currency', '')) IN ('usd', '$') OR project_id IN (SELECT id FROM projects WHERE slug IN ('sofia', 'valeria', 'svitlana')))
-                ) AS usd_revenue,
-                SUM(amount) FILTER (
-                    WHERE LOWER(status) IN ('closed_won', 'approved', 'aprooved', 'оплачено', 'купив курс', 'купив_курс', 'купив трипвайєр', 'купив трипвайер', 'купив(-ла) трипвайер')
-                    AND NOT (LOWER(COALESCE(metadata->>'currency', metadata->'lead'->>'currency', '')) IN ('usd', '$') OR project_id IN (SELECT id FROM projects WHERE slug IN ('sofia', 'valeria', 'svitlana')))
-                ) AS uah_revenue,
-                COUNT(id) FILTER (
-                    WHERE LOWER(status) IN ('closed_won', 'approved', 'aprooved', 'оплачено', 'купив курс', 'купив_курс', 'купив трипвайєр', 'купив трипвайер', 'купив(-ла) трипвайер')
-                ) AS total_sales
-            FROM unified_orders
-            WHERE campaign_id IS NOT NULL AND status NOT IN ('Клик', 'КликФормы')
-            GROUP BY project_id, campaign_id, utm_campaign
-        ),
-        campaign_spend AS (
-            SELECT 
-                project_id,
-                campaign_id,
-                campaign_name,
-                SUM(spend) AS total_spend,
-                SUM(clicks) AS total_clicks
-            FROM daily_traffic_and_costs
-            GROUP BY project_id, campaign_id, campaign_name
-        )
-        SELECT 
-            p.name AS "project_name",
-            p.slug AS "project_slug",
-            COALESCE(s.campaign_name, r.utm_campaign) AS "campaign_name",
-            s.campaign_id AS "campaign_id",
-            COALESCE(s.total_spend, 0) AS "spend",
-            COALESCE(s.total_clicks, 0) AS "clicks",
-            COALESCE(r.total_sales, 0) AS "sales",
-            COALESCE(r.usd_revenue, 0) AS "usd_revenue",
-            COALESCE(r.uah_revenue, 0) AS "uah_revenue",
-            (COALESCE(r.usd_revenue, 0) + COALESCE(r.uah_revenue, 0) / 41.0) - COALESCE(s.total_spend, 0) AS "profit",
-            CASE 
-                WHEN COALESCE(s.total_spend, 0) > 0 THEN ROUND(((COALESCE(r.usd_revenue, 0) + COALESCE(r.uah_revenue, 0) / 41.0) / s.total_spend) * 100, 2)
-                ELSE 0 
-            END AS "roi"
-        FROM projects p
-        LEFT JOIN campaign_spend s ON s.project_id = p.id
-        LEFT JOIN campaign_revenue r ON r.campaign_id = s.campaign_id AND r.project_id = p.id
-        WHERE s.campaign_id IS NOT NULL OR r.campaign_id IS NOT NULL
-        ORDER BY "profit" DESC
-        LIMIT 50;
-      `;
-
-      // Fetch all orders with automatic pagination to bypass PostgREST 1000 limit
       const fetchAllOrdersForSummary = async () => {
         let results: any[] = [];
         let from = 0;
@@ -246,15 +198,19 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
           
           let usd_revenue = 0;
           let uah_revenue = 0;
+          let eur_revenue = 0;
 
           paidOrders.forEach((o) => {
             const amt = Number(o.amount || 0);
-            const metaCurrency = String(o.metadata?.currency || o.metadata?.lead?.currency || "").trim();
+            const metaCurrency = String(o.metadata?.currency || o.metadata?.lead?.currency || "").trim().toLowerCase();
 
-            const isUsd = ["usd", "$"].includes(metaCurrency.toLowerCase().trim()) || proj.slug === "sofia" || proj.slug === "valeria" || proj.slug === "svitlana";
+            const isUsd = ["usd", "$"].includes(metaCurrency) || proj.slug === "sofia" || proj.slug === "valeria" || proj.slug === "svitlana";
+            const isEur = ["eur", "€"].includes(metaCurrency);
 
             if (isUsd) {
               usd_revenue += amt;
+            } else if (isEur) {
+              eur_revenue += amt;
             } else {
               uah_revenue += amt;
             }
@@ -274,12 +230,12 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
             cpl,
             usd_revenue,
             uah_revenue,
+            eur_revenue,
           };
         }).sort((a, b) => b.usd_revenue - a.usd_revenue || b.uah_revenue - a.uah_revenue);
       }
 
       // Calculate OP Leaderboard
-      // Fetch all orders using our page loop instead of truncating at 1000 rows
       const [producersRes, profileProjectsRes, allProjRes, allOrdersForLeaderboard, allCostsRes] = await Promise.all([
         adminSupabase.from("profiles").select("id, email, full_name, avatar_url").eq("role", "producer"),
         adminSupabase.from("profile_projects").select("profile_id, project_id"),
@@ -313,16 +269,20 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
         
         let usd_revenue = 0;
         let uah_revenue = 0;
+        let eur_revenue = 0;
 
         prodPaidOrders.forEach((o) => {
           const amt = Number(o.amount || 0);
-          const metaCurrency = String(o.metadata?.currency || o.metadata?.lead?.currency || "").trim();
+          const metaCurrency = String(o.metadata?.currency || o.metadata?.lead?.currency || "").trim().toLowerCase();
 
           const orderProj = projects.find(p => p.id === o.project_id);
-          const isUsd = ["usd", "$"].includes(metaCurrency.toLowerCase().trim()) || orderProj?.slug === "sofia" || orderProj?.slug === "valeria" || orderProj?.slug === "svitlana";
+          const isUsd = ["usd", "$"].includes(metaCurrency) || orderProj?.slug === "sofia" || orderProj?.slug === "valeria" || orderProj?.slug === "svitlana";
+          const isEur = ["eur", "€"].includes(metaCurrency);
 
           if (isUsd) {
             usd_revenue += amt;
+          } else if (isEur) {
+            eur_revenue += amt;
           } else {
             uah_revenue += amt;
           }
@@ -335,7 +295,7 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
         const prodCosts = costs.filter((c) => assignedIds.includes(c.project_id));
         const totalSpend = prodCosts.reduce((sum, c) => sum + Number(c.spend || 0), 0);
 
-        const blendedRevenue = usd_revenue + (uah_revenue / 41.0);
+        const blendedRevenue = usd_revenue + (uah_revenue / 41.0) + (eur_revenue * 1.08);
         const netProfit = blendedRevenue - totalSpend;
         const roi = totalSpend > 0 ? (blendedRevenue / totalSpend) * 100 : 0;
         const cpl = totalLeads > 0 ? totalSpend / totalLeads : 0;
@@ -351,6 +311,7 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
           cpl,
           usd_revenue,
           uah_revenue,
+          eur_revenue,
           blended_revenue: blendedRevenue,
           profit: netProfit,
           roi,
@@ -374,6 +335,7 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
         summaryData: summary,
         campaignsData: campaigns,
         producersLeaderboard: leaderboard,
+        unresolvedOrders,
       };
     }
 
@@ -387,6 +349,7 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
         leads: [],
         traffic: [],
         costs: [],
+        unresolvedOrders,
       };
     }
 
@@ -513,6 +476,7 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
       traffic: traffic,
       costs: costs,
       salesManagers,
+      unresolvedOrders,
     };
   } catch (err: any) {
     console.error("Unified CRM fetching error:", err.message);
@@ -806,5 +770,41 @@ export async function updateFeedbackStatusAction(feedbackId: string, status: str
     return { success: true };
   } catch (err: any) {
     return { error: err.message || "Failed to update status." };
+  }
+}
+
+// Server action to update currency of a transaction
+export async function updateOrderCurrencyAction(orderId: string, currency: "usd" | "uah" | "eur") {
+  try {
+    const supabase = await createClient();
+    const adminSupabase = createAdminClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Unauthorized");
+
+    // Fetch existing order metadata
+    const { data: order, error: fetchError } = await adminSupabase
+      .from("unified_orders")
+      .select("metadata")
+      .eq("id", orderId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    const newMetadata = {
+      ...(order?.metadata || {}),
+      currency: currency,
+    };
+
+    const { error: updateError } = await adminSupabase
+      .from("unified_orders")
+      .update({ metadata: newMetadata })
+      .eq("id", orderId);
+
+    if (updateError) throw updateError;
+
+    revalidatePath("/admin");
+    return { success: true };
+  } catch (err: any) {
+    return { error: err.message || "Failed to update order currency." };
   }
 }

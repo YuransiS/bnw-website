@@ -37,22 +37,25 @@ export class NotificationService {
     const cleanTg = lead.telegram ? lead.telegram.trim().replace(/^@/, "").replace(/^https?:\/\/t\.me\//, "") : "";
     const cleanInst = lead.instagram ? lead.instagram.trim().replace(/^@/, "").replace(/^https?:\/\/(www\.)?instagram\.com\//, "") : "";
 
-    const tgLink = cleanTg ? `t.me/${cleanTg}` : "не вказано";
-    const instLink = cleanInst ? `instagram.com/${cleanInst}` : "не вказано";
-
-    // Format the HTML message according to the exact template specification
+    // Format the HTML message according to the exact template specification in Ukrainian
     const text = [
-      `🔔 <b>Новая заявка на сайте!</b>`,
-      `• <b>Имя:</b> ${lead.name}`,
+      `🔔 <b>Нова заявка на сайті!</b>`,
+      `• <b>Ім'я:</b> ${lead.name}`,
       `• <b>Телефон:</b> ${lead.phone}`,
       cleanTg ? `• <b>Telegram:</b> <a href="https://t.me/${cleanTg}">t.me/${cleanTg}</a>` : `• <b>Telegram:</b> не вказано`,
-      cleanInst ? `• <b>Instagram:</b> <a href="https://instagram.com/${cleanInst}">instagram.com/</a>${cleanInst}` : `• <b>Instagram:</b> не вказано`
+      cleanInst ? `• <b>Instagram:</b> <a href="https://instagram.com/${cleanInst}">instagram.com/${cleanInst}</a>` : `• <b>Instagram:</b> не вказано`
     ].join("\n");
 
     try {
       const url = `https://api.telegram.org/bot${token}/sendMessage`;
       
-      const payload: any = {
+      const payload: {
+        chat_id: string;
+        text: string;
+        parse_mode: string;
+        disable_web_page_preview: boolean;
+        message_thread_id?: number;
+      } = {
         chat_id: chatId,
         text: text,
         parse_mode: "HTML",
@@ -80,10 +83,11 @@ export class NotificationService {
       } else {
         console.log(`[NotificationService] Telegram notification dispatched successfully for lead: ${lead.name}`);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const error = err as Error;
       console.error(
         "[NotificationService] Failed to send Telegram notification (network error/timeout):",
-        err.message || err
+        error.message || error
       );
     }
   }

@@ -43,7 +43,8 @@ import {
   updateUnifiedLeadStatusAction,
   createUnifiedLeadAction,
   updateCustomerCommentAction,
-  assignLeadToManagerAction
+  assignLeadToManagerAction,
+  updateOrderCurrencyAction
 } from "./actions";
 import { useTheme } from "./ThemeProvider";
 
@@ -70,23 +71,37 @@ const formatLocaleNumber = (num: number) => {
 };
 
 // Currency formatting helper functions
-const formatDualCurrency = (usd: number, uah: number) => {
+const formatDualCurrency = (usd: number, uah: number, eur: number = 0) => {
   const parts = [];
-  if (usd > 0 || (usd === 0 && uah === 0)) {
+  if (usd > 0) {
     parts.push(`$${formatLocaleNumber(usd)}`);
   }
   if (uah > 0) {
     parts.push(`${formatLocaleNumber(uah)} ₴`);
   }
+  if (eur > 0) {
+    parts.push(`${formatLocaleNumber(eur)} €`);
+  }
+  if (parts.length === 0) {
+    return "0 ₴";
+  }
   return parts.join(" + ");
 };
 
-const formatDualProfit = (usdRevenue: number, spend: number, uahRevenue: number) => {
+const formatDualProfit = (usdRevenue: number, spend: number, uahRevenue: number, eurRevenue: number = 0) => {
   const usdProfit = usdRevenue - spend;
   const parts = [];
-  parts.push(`${usdProfit >= 0 ? "" : "-"}$${formatLocaleNumber(Math.abs(usdProfit))}`);
+  if (usdRevenue > 0 || spend > 0) {
+    parts.push(`${usdProfit >= 0 ? "" : "-"}$${formatLocaleNumber(Math.abs(usdProfit))}`);
+  }
   if (uahRevenue > 0) {
     parts.push(`${formatLocaleNumber(uahRevenue)} ₴`);
+  }
+  if (eurRevenue > 0) {
+    parts.push(`${formatLocaleNumber(eurRevenue)} €`);
+  }
+  if (parts.length === 0) {
+    return "0 ₴";
   }
   return parts.join(" + ");
 };
@@ -255,6 +270,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const campaignsData = initialData.campaignsData || [];
   const producersLeaderboard = initialData.producersLeaderboard || [];
   const salesManagers = initialData.salesManagers || [];
+  const unresolvedOrders = initialData.unresolvedOrders || [];
 
   // Local component states
   const [activeTab, setActiveTab] = useState<string>(
@@ -262,6 +278,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   );
   const { theme, toggleTheme } = useTheme();
   const [searchQuery, setSearchQuery] = useState("");
+  const [showUnresolvedModal, setShowUnresolvedModal] = useState(false);
+  const [updatingCurrencyId, setUpdatingCurrencyId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [touchCountFilter, setTouchCountFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
@@ -593,25 +611,30 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       // Sum split payments by currency for paid and attempted states
       let usdCoursePaid = 0;
       let uahCoursePaid = 0;
+      let eurCoursePaid = 0;
       let usdTripwirePaid = 0;
       let uahTripwirePaid = 0;
+      let eurTripwirePaid = 0;
       let usdAttempted = 0;
       let uahAttempted = 0;
+      let eurAttempted = 0;
 
       normalizedGroupLeads.forEach((item) => {
         const amt = Number(item.amount || 0);
         if (amt === 0) return;
 
-        const metaCurrency = String(item.metadata?.currency || item.metadata?.lead?.currency || "").trim();
+        const metaCurrency = String(item.metadata?.currency || item.metadata?.lead?.currency || "").trim().toLowerCase();
         const orderProj = allowedProjects.find((p: any) => p.id === item.project_id);
         const orderSlug = orderProj?.slug || "";
-        const isUsd = ["usd", "$"].includes(metaCurrency.toLowerCase().trim()) || 
+        
+        const isEur = ["eur", "€"].includes(metaCurrency);
+        const isUsd = !isEur && (["usd", "$"].includes(metaCurrency) || 
                       orderSlug === "sofia" || 
                       orderSlug === "valeria" || 
                       orderSlug === "svitlana" ||
                       activeProject?.slug === "sofia" || 
                       activeProject?.slug === "valeria" ||
-                      activeProject?.slug === "svitlana";
+                      activeProject?.slug === "svitlana");
 
         const isProjectAlwaysTripwire = 
           ["sofia", "valeria", "svitlana"].includes(orderSlug) || 
@@ -619,12 +642,15 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
         if (item.status === "Купив курс" && !isProjectAlwaysTripwire) {
           if (isUsd) usdCoursePaid += amt;
+          else if (isEur) eurCoursePaid += amt;
           else uahCoursePaid += amt;
         } else if (item.status === "Купив(-ла) Трипвайер" || (item.status === "Купив курс" && isProjectAlwaysTripwire)) {
           if (isUsd) usdTripwirePaid += amt;
+          else if (isEur) eurTripwirePaid += amt;
           else uahTripwirePaid += amt;
         } else {
           if (isUsd) usdAttempted += amt;
+          else if (isEur) eurAttempted += amt;
           else uahAttempted += amt;
         }
       });
@@ -659,14 +685,19 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         status: finalStatus,
         usdPaid: usdCoursePaid,
         uahPaid: uahCoursePaid,
+        eurPaid: eurCoursePaid,
         usdTripwirePaid,
         uahTripwirePaid,
+        eurTripwirePaid,
         usdAttempted,
         uahAttempted,
+        eurAttempted,
         amount: usdCoursePaid,
         uahAmount: uahCoursePaid,
+        eurAmount: eurCoursePaid,
         attemptedAmount: usdAttempted,
         uahAttemptedAmount: uahAttempted,
+        eurAttemptedAmount: eurAttempted,
         utm_source: utm_source || primaryLead.utm_source || "",
         utm_medium: utm_medium || primaryLead.utm_medium || "",
         utm_campaign: utm_campaign || primaryLead.utm_campaign || "",
@@ -841,16 +872,19 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
     const usdCourseRevenue = processedLeads.reduce((sum, l) => sum + Number(l.usdPaid || 0), 0);
     const uahCourseRevenue = processedLeads.reduce((sum, l) => sum + Number(l.uahPaid || 0), 0);
+    const eurCourseRevenue = processedLeads.reduce((sum, l) => sum + Number(l.eurPaid || 0), 0);
     const usdTripwireRevenue = processedLeads.reduce((sum, l) => sum + Number(l.usdTripwirePaid || 0), 0);
     const uahTripwireRevenue = processedLeads.reduce((sum, l) => sum + Number(l.uahTripwirePaid || 0), 0);
+    const eurTripwireRevenue = processedLeads.reduce((sum, l) => sum + Number(l.eurTripwirePaid || 0), 0);
 
     const totalUsdRevenue = usdCourseRevenue + usdTripwireRevenue;
     const totalUahRevenue = uahCourseRevenue + uahTripwireRevenue;
+    const totalEurRevenue = eurCourseRevenue + eurTripwireRevenue;
 
     const netProfitUsd = totalUsdRevenue - totalSpend;
 
-    // Blended ROI using rate 41.0
-    const blendedRevenue = totalUsdRevenue + (totalUahRevenue / 41.0);
+    // Blended ROI using rate 41.0 and 1.08 exchange rate for EUR to USD
+    const blendedRevenue = totalUsdRevenue + (totalUahRevenue / 41.0) + (totalEurRevenue * 1.08);
     const roi = totalSpend > 0 ? (blendedRevenue / totalSpend) * 100 : 0;
 
     const paidLeads = processedLeads.filter((l) => l.status === "Купив курс");
@@ -864,18 +898,24 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     const uahSales = processedLeads.filter(
       (l) => (l.status === "Купив курс" || l.status === "Купив(-ла) Трипвайер") && (Number(l.uahPaid || 0) + Number(l.uahTripwirePaid || 0) > 0)
     );
+    const eurSales = processedLeads.filter(
+      (l) => (l.status === "Купив курс" || l.status === "Купив(-ла) Трипвайер") && (Number(l.eurPaid || 0) + Number(l.eurTripwirePaid || 0) > 0)
+    );
 
     const usdSalesCount = usdSales.length;
     const uahSalesCount = uahSales.length;
+    const eurSalesCount = eurSales.length;
 
     const leadToSaleConv = totalLeads > 0 ? (totalSales / totalLeads) * 100 : 0;
     const leadToSaleConvUsd = totalLeads > 0 ? (usdSalesCount / totalLeads) * 100 : 0;
     const leadToSaleConvUah = totalLeads > 0 ? (uahSalesCount / totalLeads) * 100 : 0;
+    const leadToSaleConvEur = totalLeads > 0 ? (eurSalesCount / totalLeads) * 100 : 0;
 
     // Average Order Value (AOV) strictly divided by currency-specific sales count
     // and counting both course + tripwire revenue for that currency
     const aovUsd = usdSalesCount > 0 ? (usdCourseRevenue + usdTripwireRevenue) / usdSalesCount : 0;
     const aovUah = uahSalesCount > 0 ? (uahCourseRevenue + uahTripwireRevenue) / uahSalesCount : 0;
+    const aovEur = eurSalesCount > 0 ? (eurCourseRevenue + eurTripwireRevenue) / eurSalesCount : 0;
 
     return {
       totalLeads,
@@ -886,18 +926,23 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       cpl,
       usdRevenue: totalUsdRevenue,
       uahRevenue: totalUahRevenue,
+      eurRevenue: totalEurRevenue,
       usdCourseRevenue,
       uahCourseRevenue,
+      eurCourseRevenue,
       usdTripwireRevenue,
       uahTripwireRevenue,
+      eurTripwireRevenue,
       netProfitUsd,
       roi,
       totalSales,
       leadToSaleConv,
       leadToSaleConvUsd,
       leadToSaleConvUah,
+      leadToSaleConvEur,
       aovUsd,
-      aovUah
+      aovUah,
+      aovEur
     };
   }, [processedLeads, filteredTraffic, filteredCosts, viewType]);
 
@@ -1344,6 +1389,17 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
         {/* Global Controls */}
         <div className="flex items-center gap-3 w-full md:w-auto">
+          {unresolvedOrders.length > 0 && (
+            <button
+              onClick={() => setShowUnresolvedModal(true)}
+              className="px-4 py-2.5 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 text-xs font-black transition-all hover:bg-red-500/20 cursor-pointer flex items-center gap-2 animate-pulse"
+              title="Є транзакції без валюти"
+            >
+              <AlertCircle className="w-4 h-4" />
+              <span>Помилка: {unresolvedOrders.length}</span>
+            </button>
+          )}
+
           {/* Theme Toggle */}
           <button
             onClick={handleToggleTheme}
@@ -1491,8 +1547,9 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         const totalSpend = summaryData.reduce((sum: number, p: any) => sum + Number(p.spend || 0), 0);
         const totalUsdRevenue = summaryData.reduce((sum: number, p: any) => sum + Number(p.usd_revenue || 0), 0);
         const totalUahRevenue = summaryData.reduce((sum: number, p: any) => sum + Number(p.uah_revenue || 0), 0);
+        const totalEurRevenue = summaryData.reduce((sum: number, p: any) => sum + Number(p.eur_revenue || 0), 0);
 
-        const totalBlendedRevenue = totalUsdRevenue + (totalUahRevenue / 41.0);
+        const totalBlendedRevenue = totalUsdRevenue + (totalUahRevenue / 41.0) + (totalEurRevenue * 1.08);
         const blendedProfit = totalBlendedRevenue - totalSpend;
         const blendedRoi = totalSpend > 0 ? (totalBlendedRevenue / totalSpend) * 100 : 0;
 
@@ -1509,13 +1566,13 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                 },
                 {
                   title: "Сумарна Виручка",
-                  val: formatDualCurrency(totalUsdRevenue, totalUahRevenue),
+                  val: formatDualCurrency(totalUsdRevenue, totalUahRevenue, totalEurRevenue),
                   desc: "Всього отримано оплат",
                   color: "text-emerald-400 font-extrabold"
                 },
                 {
                   title: "Чистий Прибуток",
-                  val: formatDualProfit(totalUsdRevenue, totalSpend, totalUahRevenue),
+                  val: formatDualProfit(totalUsdRevenue, totalSpend, totalUahRevenue, totalEurRevenue),
                   desc: "Маржинальність після реклами",
                   color: "text-purple-400 font-extrabold"
                 },
@@ -1569,7 +1626,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                       summaryData.map((proj: any) => {
                         const usdRev = Number(proj.usd_revenue || 0);
                         const uahRev = Number(proj.uah_revenue || 0);
-                        const blendedRev = usdRev + (uahRev / 41.0);
+                        const eurRev = Number(proj.eur_revenue || 0);
+                        const blendedRev = usdRev + (uahRev / 41.0) + (eurRev * 1.08);
                         const spend = Number(proj.spend || 0);
                         const projRoi = spend > 0 ? (blendedRev / spend) * 100 : 0;
 
@@ -1582,9 +1640,9 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                             <td className="p-4 text-center font-bold text-red-400">${spend.toFixed(2)}</td>
                             <td className="p-4 text-center font-extrabold">{proj.leads_count}</td>
                             <td className="p-4 text-center font-bold text-neutral-400">${Number(proj.cpl).toFixed(2)}</td>
-                            <td className="p-4 text-center font-bold text-emerald-400">{formatDualCurrency(usdRev, uahRev)}</td>
+                            <td className="p-4 text-center font-bold text-emerald-400">{formatDualCurrency(usdRev, uahRev, eurRev)}</td>
                             <td className="p-4 text-center font-black">
-                              {formatDualProfit(usdRev, spend, uahRev)}
+                              {formatDualProfit(usdRev, spend, uahRev, eurRev)}
                             </td>
                             <td className="p-4 text-center font-black">
                               <span className={`px-2.5 py-1 rounded-full text-[10px] ${projRoi >= 150
@@ -1732,10 +1790,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                           ${Number(prod.cpl).toFixed(2)}
                         </td>
                         <td className="p-4 text-center font-bold text-emerald-400">
-                          {formatDualCurrency(prod.usd_revenue, prod.uah_revenue)}
+                          {formatDualCurrency(prod.usd_revenue, prod.uah_revenue, prod.eur_revenue)}
                         </td>
                         <td className="p-4 text-center font-black">
-                          {formatDualProfit(prod.usd_revenue, prod.spend, prod.uah_revenue)}
+                          {formatDualProfit(prod.usd_revenue, prod.spend, prod.uah_revenue, prod.eur_revenue)}
                         </td>
                         <td className="p-4 text-center font-black">
                           <span className={`px-2.5 py-1 rounded-full text-[10px] ${prod.roi >= 150
@@ -1864,13 +1922,18 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                     {formatLocaleNumber(singleProjectStats.uahCourseRevenue)} ₴
                   </p>
                 )}
+                {singleProjectStats && singleProjectStats.eurCourseRevenue > 0 && (
+                  <p className="text-2xl font-black text-emerald-455">
+                    {formatLocaleNumber(singleProjectStats.eurCourseRevenue)} €
+                  </p>
+                )}
                 {singleProjectStats && singleProjectStats.usdCourseRevenue > 0 && (
                   <p className="text-2xl font-black text-emerald-455">
                     ${formatLocaleNumber(singleProjectStats.usdCourseRevenue)}
                   </p>
                 )}
-                {(!singleProjectStats || (singleProjectStats.uahCourseRevenue === 0 && singleProjectStats.usdCourseRevenue === 0)) && (
-                  <p className={`text-2xl font-black ${textMutedLightClass}`}>—</p>
+                {(!singleProjectStats || (singleProjectStats.uahCourseRevenue === 0 && singleProjectStats.usdCourseRevenue === 0 && singleProjectStats.eurCourseRevenue === 0)) && (
+                  <p className={`text-2xl font-black ${textMutedLightClass}`}>0 ₴</p>
                 )}
               </div>
               <p className={`text-[11px] ${textMutedClass} mt-2 font-semibold`}>Виручка тільки від продажу основного курсу</p>
@@ -1885,13 +1948,18 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                     {formatLocaleNumber(singleProjectStats.uahTripwireRevenue)} ₴
                   </p>
                 )}
+                {singleProjectStats && singleProjectStats.eurTripwireRevenue > 0 && (
+                  <p className="text-2xl font-black text-indigo-400">
+                    {formatLocaleNumber(singleProjectStats.eurTripwireRevenue)} €
+                  </p>
+                )}
                 {singleProjectStats && singleProjectStats.usdTripwireRevenue > 0 && (
                   <p className="text-2xl font-black text-indigo-400">
                     ${formatLocaleNumber(singleProjectStats.usdTripwireRevenue)}
                   </p>
                 )}
-                {(!singleProjectStats || (singleProjectStats.uahTripwireRevenue === 0 && singleProjectStats.usdTripwireRevenue === 0)) && (
-                  <p className={`text-2xl font-black ${textMutedLightClass}`}>—</p>
+                {(!singleProjectStats || (singleProjectStats.uahTripwireRevenue === 0 && singleProjectStats.usdTripwireRevenue === 0 && singleProjectStats.eurTripwireRevenue === 0)) && (
+                  <p className={`text-2xl font-black ${textMutedLightClass}`}>0 ₴</p>
                 )}
               </div>
               <p className={`text-[11px] ${textMutedClass} mt-2 font-semibold`}>Виручка від міні-продуктів та практикуму</p>
@@ -1904,15 +1972,29 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                 {singleProjectStats && (
                   <>
                     {/* Net profit in UAH */}
-                    {singleProjectStats.uahCourseRevenue > 0 && (
+                    {singleProjectStats.uahRevenue > 0 && (
                       <p className="text-xl font-black text-emerald-455">
-                        {formatLocaleNumber(singleProjectStats.uahCourseRevenue)} ₴
+                        {formatLocaleNumber(singleProjectStats.uahRevenue)} ₴
+                      </p>
+                    )}
+                    {/* Net profit in EUR */}
+                    {singleProjectStats.eurRevenue > 0 && (
+                      <p className="text-xl font-black text-emerald-455">
+                        {formatLocaleNumber(singleProjectStats.eurRevenue)} €
                       </p>
                     )}
                     {/* Net profit in USD (Revenue USD - Spend) */}
-                    <p className={`text-xl font-black ${singleProjectStats.netProfitUsd >= 0 ? "text-emerald-455" : "text-red-400"}`}>
-                      {singleProjectStats.netProfitUsd >= 0 ? "" : "-"}${formatLocaleNumber(Math.abs(singleProjectStats.netProfitUsd))}
-                    </p>
+                    {(singleProjectStats.usdRevenue > 0 || singleProjectStats.totalSpend > 0) && (
+                      <p className={`text-xl font-black ${singleProjectStats.netProfitUsd >= 0 ? "text-emerald-455" : "text-red-400"}`}>
+                        {singleProjectStats.netProfitUsd >= 0 ? "" : "-"}${formatLocaleNumber(Math.abs(singleProjectStats.netProfitUsd))}
+                      </p>
+                    )}
+                    {/* Fallback if everything is 0 */}
+                    {singleProjectStats.uahRevenue === 0 && singleProjectStats.eurRevenue === 0 && singleProjectStats.usdRevenue === 0 && singleProjectStats.totalSpend === 0 && (
+                      <p className="text-xl font-black text-emerald-455">
+                        0 ₴
+                      </p>
+                    )}
                   </>
                 )}
                 <span className="text-[10px] font-black uppercase text-yellow-400 block mt-2 tracking-wider">
@@ -1942,7 +2024,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
               <div className="mt-4 space-y-3">
                 {/* UAH Row */}
                 {singleProjectStats && (singleProjectStats.aovUah > 0 || singleProjectStats.leadToSaleConvUah > 0) && (
-                  <div className={`space-y-0.5 border-b ${borderClass} pb-2`}>
+                  <div className={`space-y-0.5 ${(singleProjectStats.aovUsd > 0 || singleProjectStats.leadToSaleConvUsd > 0 || singleProjectStats.aovEur > 0 || singleProjectStats.leadToSaleConvEur > 0) ? `border-b ${borderClass} pb-2` : ""}`}>
                     <span className={`text-[9px] ${textMutedClass} font-black uppercase tracking-wider block`}>Гривневі замовлення (UAH)</span>
                     <div className="flex justify-between items-baseline gap-2 mt-1">
                       <p className="text-lg font-black text-emerald-450">
@@ -1957,7 +2039,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
                 {/* USD Row */}
                 {singleProjectStats && (singleProjectStats.aovUsd > 0 || singleProjectStats.leadToSaleConvUsd > 0) && (
-                  <div className="space-y-0.5 pt-1">
+                  <div className={`space-y-0.5 ${(singleProjectStats.aovEur > 0 || singleProjectStats.leadToSaleConvEur > 0) ? `border-b ${borderClass} pb-2` : ""}`}>
                     <span className={`text-[9px] ${textMutedClass} font-black uppercase tracking-wider block`}>Доларові замовлення (USD)</span>
                     <div className="flex justify-between items-baseline gap-2 mt-1">
                       <p className="text-lg font-black text-emerald-450">
@@ -1970,9 +2052,32 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                   </div>
                 )}
 
-                {/* Fallback empty */}
-                {(!singleProjectStats || (singleProjectStats.aovUah === 0 && singleProjectStats.aovUsd === 0)) && (
-                  <p className={`text-lg font-black ${textMutedLightClass}`}>—</p>
+                {/* EUR Row */}
+                {singleProjectStats && (singleProjectStats.aovEur > 0 || singleProjectStats.leadToSaleConvEur > 0) && (
+                  <div className="space-y-0.5">
+                    <span className={`text-[9px] ${textMutedClass} font-black uppercase tracking-wider block`}>Єврові замовлення (EUR)</span>
+                    <div className="flex justify-between items-baseline gap-2 mt-1">
+                      <p className="text-lg font-black text-emerald-450">
+                        {singleProjectStats.aovEur > 0 ? `${formatLocaleNumber(singleProjectStats.aovEur)} €` : "—"}
+                      </p>
+                      <span className="text-[10px] font-black uppercase text-yellow-400 tracking-wider">
+                        CR: {singleProjectStats.leadToSaleConvEur.toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Fallback when all are 0 */}
+                {(!singleProjectStats || (singleProjectStats.aovUah === 0 && singleProjectStats.aovUsd === 0 && singleProjectStats.aovEur === 0)) && (
+                  <div className="space-y-0.5">
+                    <span className={`text-[9px] ${textMutedClass} font-black uppercase tracking-wider block`}>Гривневі замовлення (UAH)</span>
+                    <div className="flex justify-between items-baseline gap-2 mt-1">
+                      <p className="text-lg font-black text-emerald-450">0 ₴</p>
+                      <span className="text-[10px] font-black uppercase text-yellow-400 tracking-wider">
+                        CR: 0.0%
+                      </span>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
@@ -2625,13 +2730,13 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
                           {/* Sum Amount */}
                           <td className="p-4 text-center font-black text-sm">
-                            {lead.usdPaid > 0 || lead.uahPaid > 0 ? (
+                            {lead.usdPaid > 0 || lead.uahPaid > 0 || lead.eurPaid > 0 ? (
                               <span className="text-emerald-400 font-black">
-                                {formatDualCurrency(lead.usdPaid, lead.uahPaid)}
+                                {formatDualCurrency(lead.usdPaid, lead.uahPaid, lead.eurPaid)}
                               </span>
-                            ) : lead.usdAttempted > 0 || lead.uahAttempted > 0 ? (
+                            ) : lead.usdAttempted > 0 || lead.uahAttempted > 0 || lead.eurAttempted > 0 ? (
                               <span className="inline-flex items-center gap-1 text-amber-500/80 text-[11px] font-extrabold" title="Спроба оплати (Unpaid Intent)">
-                                ⏳ {formatDualCurrency(lead.usdAttempted, lead.uahAttempted)}
+                                ⏳ {formatDualCurrency(lead.usdAttempted, lead.uahAttempted, lead.eurAttempted)}
                               </span>
                             ) : (
                               <span className="text-white/20">—</span>
@@ -3108,10 +3213,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                                 {(() => {
                                   const amt = Number(touch.amount || 0);
                                   const metaCurrency = touch.metadata?.currency || touch.metadata?.lead?.currency || "";
+                                  const isExplicitEur = ["EUR", "eur", "€", "Eur"].includes(String(metaCurrency).trim());
+                                  if (isExplicitEur) return `${formatLocaleNumber(amt)} €`;
                                   const isExplicitUah = ["UAH", "uah", "грн", "грн.", "Uah"].includes(String(metaCurrency).trim());
                                   const isExplicitUsd = ["USD", "usd", "Usd", "$"].includes(String(metaCurrency).trim());
-                                  const isUah = isExplicitUah || (!isExplicitUsd && amt >= 500);
-                                  return isUah ? `${amt} ₴` : `$${amt}`;
+                                  const isUah = isExplicitUah || (!isExplicitUsd && !isExplicitEur && amt >= 500);
+                                  return isUah ? `${formatLocaleNumber(amt)} ₴` : `$${formatLocaleNumber(amt)}`;
                                 })()}
                               </span>
                             </div>
@@ -3304,6 +3411,89 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal for Unresolved Orders */}
+      {showUnresolvedModal && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="relative w-full max-w-2xl max-h-[80vh] bg-[#0C0C0F] border border-white/10 rounded-3xl p-6 shadow-2xl flex flex-col space-y-6 animate-in slide-in-from-bottom-4 duration-300">
+            <button
+              onClick={() => setShowUnresolvedModal(false)}
+              className="absolute top-4 right-4 p-2 rounded-xl text-white/40 hover:text-white hover:bg-white/5 cursor-pointer transition-all"
+            >
+              <XCircle className="w-5 h-5" />
+            </button>
+
+            <div>
+              <h3 className="text-lg font-black uppercase tracking-tight text-white flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-red-500 animate-pulse" />
+                Транзакції без вказаної валюти
+              </h3>
+              <p className="text-white/40 text-xs mt-1">
+                Будь ласка, оберіть валюту для кожної транзакції, щоб вони правильно відображалися в аналітиці.
+              </p>
+            </div>
+
+            <div className="flex-grow overflow-y-auto custom-scrollbar space-y-3 pr-2">
+              {unresolvedOrders.length === 0 ? (
+                <p className="text-center text-xs text-white/30 py-8 italic">Усі транзакції мають вказану валюту!</p>
+              ) : (
+                unresolvedOrders.map((order: any) => (
+                  <div
+                    key={order.id}
+                    className="p-4 rounded-xl border border-white/5 bg-white/[0.01] hover:bg-white/[0.02] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-all"
+                  >
+                    <div className="space-y-1">
+                      <p className="text-xs font-bold text-white/90">
+                        {order.customerName || "Невідомий клієнт"}
+                      </p>
+                      <p className="text-[10px] text-white/40">
+                        Проект: {order.projectName} | Дата: {new Date(order.created_at).toLocaleString("uk-UA")}
+                      </p>
+                      {order.customerPhone && (
+                        <p className="text-[10px] text-white/40">
+                          Тел: {order.customerPhone}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
+                      <span className="text-sm font-black text-white pr-2">
+                        {formatLocaleNumber(order.amount)}
+                      </span>
+                      <div className="flex gap-1.5 shrink-0">
+                        {[
+                          { code: "uah", symbol: "₴ UAH" },
+                          { code: "usd", symbol: "$ USD" },
+                          { code: "eur", symbol: "€ EUR" },
+                        ].map((curr) => (
+                          <button
+                            key={curr.code}
+                            disabled={updatingCurrencyId === order.id}
+                            onClick={async () => {
+                              setUpdatingCurrencyId(order.id);
+                              try {
+                                const res = await updateOrderCurrencyAction(order.id, curr.code as any);
+                                if (res.error) throw new Error(res.error);
+                                router.refresh();
+                              } catch (err: any) {
+                                alert("Помилка оновлення валюти: " + err.message);
+                              } finally {
+                                setUpdatingCurrencyId(null);
+                              }
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-emerald-500 hover:text-black disabled:opacity-40 text-[10px] font-extrabold text-white/80 border border-white/10 hover:border-emerald-550 transition-all cursor-pointer"
+                          >
+                            {curr.symbol}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
