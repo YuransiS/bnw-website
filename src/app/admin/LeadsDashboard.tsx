@@ -270,7 +270,15 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const campaignsData = initialData.campaignsData || [];
   const producersLeaderboard = initialData.producersLeaderboard || [];
   const salesManagers = initialData.salesManagers || [];
-  const unresolvedOrders = initialData.unresolvedOrders || [];
+  const [unresolvedOrders, setUnresolvedOrders] = useState<any[]>([]);
+
+  useEffect(() => {
+    let list = initialData.unresolvedOrders || [];
+    if (viewType === "single" && activeProject) {
+      list = list.filter((o: any) => o.projectId === activeProject.id);
+    }
+    setUnresolvedOrders(list);
+  }, [initialData.unresolvedOrders, viewType, activeProject]);
 
   // Local component states
   const [activeTab, setActiveTab] = useState<string>(
@@ -3475,8 +3483,21 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                             onClick={async () => {
                               setUpdatingCurrencyId(order.id);
                               try {
-                                const res = await updateOrderCurrencyAction(order.id, curr.code as any);
+                                let updateAll = false;
+                                if (order.landingName) {
+                                  updateAll = window.confirm(
+                                    `Бажаєте встановити валюту ${curr.symbol} для всіх замовлень з лендингу "${order.landingName}" з ціною ${formatLocaleNumber(order.amount)}?`
+                                  );
+                                }
+                                const bulkParam = updateAll ? { landingName: order.landingName, amount: order.amount } : undefined;
+                                const res = await updateOrderCurrencyAction(order.id, curr.code as any, bulkParam);
                                 if (res.error) throw new Error(res.error);
+                                
+                                if (updateAll) {
+                                  setUnresolvedOrders(prev => prev.filter(o => !(o.landingName === order.landingName && o.amount === order.amount)));
+                                } else {
+                                  setUnresolvedOrders(prev => prev.filter(o => o.id !== order.id));
+                                }
                                 router.refresh();
                               } catch (err: any) {
                                 alert("Помилка оновлення валюти: " + err.message);

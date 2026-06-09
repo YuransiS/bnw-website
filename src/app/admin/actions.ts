@@ -132,14 +132,17 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
             unresolvedOrders = filtered.map((o) => {
               const customer = (custs.find((c: any) => c.id === o.customer_id) || {}) as any;
               const project = (projs.find((p: any) => p.id === o.project_id) || {}) as any;
+              const landingName = o.metadata?.target_sheet || o.metadata?.lead?.target_sheet || o.metadata?.original_sheet || o.metadata?.lead?.original_sheet || "";
               return {
                 id: o.id,
                 amount: Number(o.amount || 0),
                 status: o.status,
                 created_at: o.created_at,
+                projectId: o.project_id,
                 projectName: project.name || "Невідомий проект",
                 customerName: customer.name || "Невідомий клієнт",
                 customerPhone: customer.phone || "",
+                landingName,
               };
             });
           }
@@ -476,7 +479,7 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
       traffic: traffic,
       costs: costs,
       salesManagers,
-      unresolvedOrders,
+      unresolvedOrders: unresolvedOrders.filter((o) => o.projectId === activeProject.id),
     };
   } catch (err: any) {
     console.error("Unified CRM fetching error:", err.message);
@@ -774,7 +777,11 @@ export async function updateFeedbackStatusAction(feedbackId: string, status: str
 }
 
 // Server action to update currency of a transaction
-export async function updateOrderCurrencyAction(orderId: string, currency: "usd" | "uah" | "eur") {
+export async function updateOrderCurrencyAction(
+  orderId: string, 
+  currency: "usd" | "uah" | "eur",
+  bulk?: { landingName: string; amount: number }
+) {
   try {
     const supabase = await createClient();
     const adminSupabase = createAdminClient();
@@ -801,6 +808,32 @@ export async function updateOrderCurrencyAction(orderId: string, currency: "usd"
       .eq("id", orderId);
 
     if (updateError) throw updateError;
+
+    if (bulk && bulk.landingName) {
+      const { data: matchingOrders } = await adminSupabase
+        .from("unified_orders")
+        .select("id, metadata")
+        .eq("amount", bulk.amount)
+        .not("status", "in", "('Клик', 'КликФормы')");
+
+      if (matchingOrders && matchingOrders.length > 0) {
+        const toUpdate = matchingOrders.filter((o: any) => {
+          const lName = o.metadata?.target_sheet || o.metadata?.lead?.target_sheet || o.metadata?.original_sheet || o.metadata?.lead?.original_sheet || "";
+          return lName === bulk.landingName;
+        });
+
+        for (const orderToUpdate of toUpdate) {
+          const updatedMeta = {
+            ...(orderToUpdate.metadata || {}),
+            currency: currency,
+          };
+          await adminSupabase
+            .from("unified_orders")
+            .update({ metadata: updatedMeta })
+            .eq("id", orderToUpdate.id);
+        }
+      }
+    }
 
     revalidatePath("/admin");
     return { success: true };
