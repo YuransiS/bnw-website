@@ -106,6 +106,31 @@ const formatDualProfit = (usdRevenue: number, spend: number, uahRevenue: number,
   return parts.join(" + ");
 };
 
+interface CommentItem {
+  id: string;
+  text: string;
+  authorEmail: string;
+  authorName: string;
+  createdAt: string;
+}
+
+const parseComments = (rawComment: string | null): CommentItem[] => {
+  if (!rawComment) return [];
+  try {
+    const parsed = JSON.parse(rawComment);
+    if (Array.isArray(parsed)) return parsed;
+  } catch (e) {
+    // Treat as single legacy comment
+  }
+  return [{
+    id: "legacy",
+    text: rawComment,
+    authorEmail: "system",
+    authorName: "Попередній коментар",
+    createdAt: new Date().toISOString()
+  }];
+};
+
 const getLeadDate = (lead: any): Date => {
   const rawDateStr = 
     lead.metadata?.raw_row?.Дата || 
@@ -381,13 +406,17 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
   useEffect(() => {
     if (selectedLeadInfo) {
-      setTempManagerComment(selectedLeadInfo.managerComment || "");
+      setTempManagerComment("");
       setTempAssignedManagerId(selectedLeadInfo.assigned_manager_id || "");
     } else {
       setTempManagerComment("");
       setTempAssignedManagerId("");
     }
   }, [selectedLeadInfo]);
+
+  const commentsList = useMemo(() => {
+    return parseComments(selectedLeadInfo?.managerComment);
+  }, [selectedLeadInfo?.managerComment]);
 
   // Collapsible UTM Tree States & handlers
   const [expandedUtmNodes, setExpandedUtmNodes] = useState<Record<string, boolean>>({});
@@ -1185,12 +1214,14 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
   const handleSaveComment = async () => {
     if (!selectedLeadInfo?.customerId) return;
+    if (!tempManagerComment.trim()) return;
     setIsSavingComment(true);
     try {
       const res = await updateCustomerCommentAction(selectedLeadInfo.customerId, tempManagerComment);
       if (res.error) throw new Error(res.error);
       
-      setSelectedLeadInfo((prev: any) => prev ? { ...prev, managerComment: tempManagerComment } : null);
+      setSelectedLeadInfo((prev: any) => prev ? { ...prev, managerComment: res.managerComment } : null);
+      setTempManagerComment("");
       router.refresh();
     } catch (err: any) {
       alert("Помилка збереження коментаря: " + err.message);
@@ -1381,9 +1412,11 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                 ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                 : role === "producer"
                   ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
-                  : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                  : role === "rop"
+                    ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
+                    : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
               }`}>
-              {role === "admin" || role === "superman" ? "Супермен" : role === "producer" ? "Продюсер" : "Відділ продажів"}
+              {role === "admin" || role === "superman" ? "Супермен" : role === "producer" ? "Продюсер" : role === "rop" ? "Керівник ВП (РОП)" : "Відділ продажів"}
             </span>
             <div className={`flex items-center gap-1.5 text-xs ${textMutedClass}`}>
               <Activity className="w-4 h-4 text-emerald-500 animate-pulse" />
@@ -3372,24 +3405,60 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                   </div>
                 )}
 
-                {/* Comment Editor */}
-                <div className="space-y-2">
-                  <span className="text-[10px] font-black uppercase text-white/40 tracking-widest block">Коментар менеджера</span>
-                  <textarea
-                    value={tempManagerComment}
-                    onChange={(e) => setTempManagerComment(e.target.value)}
-                    placeholder="Введіть робочі примітки щодо ліда..."
-                    rows={4}
-                    className="w-full px-3.5 py-2.5 bg-white/5 border border-white/10 rounded-2xl focus:outline-none focus:border-emerald-500 text-xs font-semibold text-white placeholder:text-white/20 resize-none"
-                  />
-                  <div className="flex justify-end">
-                    <button
-                      onClick={handleSaveComment}
-                      disabled={isSavingComment || tempManagerComment === (selectedLeadInfo.managerComment || "")}
-                      className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:bg-white/5 text-black disabled:text-white/45 text-xs font-black transition-all cursor-pointer flex items-center gap-1.5"
-                    >
-                      {isSavingComment ? "Збереження..." : "Зберегти коментар"}
-                    </button>
+                {/* Comments History (Chat-like feed) */}
+                <div className="space-y-4">
+                  <span className="text-[10px] font-black uppercase text-white/40 tracking-widest block">
+                    Історія коментарів ({commentsList.length})
+                  </span>
+                  
+                  {commentsList.length === 0 ? (
+                    <p className="text-xs text-white/30 italic py-1">Коментарів ще немає</p>
+                  ) : (
+                    <div className="space-y-2.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                      {commentsList.map((c: CommentItem) => {
+                        const formattedDate = new Date(c.createdAt).toLocaleString("uk-UA", {
+                          day: "numeric",
+                          month: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit"
+                        });
+                        return (
+                          <div key={c.id} className="p-3 bg-white/[0.02] border border-white/5 rounded-xl space-y-1">
+                            <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-wider text-emerald-450">
+                              <span className="truncate max-w-[150px]">
+                                {c.authorName || "Менеджер"}
+                              </span>
+                              <span className="text-white/30 shrink-0">
+                                {formattedDate}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-white/85 leading-relaxed break-words whitespace-pre-wrap font-medium">
+                              {c.text}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Add New Comment */}
+                  <div className="space-y-2 pt-3 border-t border-white/5">
+                    <textarea
+                      value={tempManagerComment}
+                      onChange={(e) => setTempManagerComment(e.target.value)}
+                      placeholder="Введіть новий коментар..."
+                      rows={2}
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-xs font-semibold text-white placeholder:text-white/20 resize-none"
+                    />
+                    <div className="flex justify-end">
+                      <button
+                        onClick={handleSaveComment}
+                        disabled={isSavingComment || !tempManagerComment.trim()}
+                        className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:bg-white/5 text-black disabled:text-white/45 text-xs font-black transition-all cursor-pointer flex items-center gap-1.5"
+                      >
+                        {isSavingComment ? "Надсилання..." : "Надіслати"}
+                      </button>
+                    </div>
                   </div>
                 </div>
 

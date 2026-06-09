@@ -673,17 +673,75 @@ export async function updateLeadStatus(
 export async function updateCustomerCommentAction(customerId: string, comment: string) {
   try {
     const supabase = await createClient();
+    const adminSupabase = createAdminClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Unauthorized");
 
-    const { error } = await supabase
+    // Fetch the existing customer comment
+    const { data: customer, error: fetchError } = await supabase
       .from("unified_customers")
-      .update({ manager_comment: comment })
+      .select("manager_comment")
+      .eq("id", customerId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    const rawComment = customer?.manager_comment;
+    let comments: any[] = [];
+
+    if (rawComment) {
+      try {
+        const parsed = JSON.parse(rawComment);
+        if (Array.isArray(parsed)) {
+          comments = parsed;
+        } else {
+          throw new Error("Not an array");
+        }
+      } catch (e) {
+        // Treat as legacy plain text comment
+        comments = [{
+          id: "legacy",
+          text: rawComment,
+          authorEmail: "system",
+          authorName: "Попередній коментар",
+          createdAt: new Date().toISOString()
+        }];
+      }
+    }
+
+    // Fetch the current user's profile for author details
+    const { data: profile } = await adminSupabase
+      .from("profiles")
+      .select("full_name, email")
+      .eq("id", user.id)
+      .single();
+
+    // Construct the new comment object
+    const newComment = {
+      id: Math.random().toString(36).substring(2, 9),
+      text: comment.trim(),
+      authorEmail: profile?.email || user.email || "unknown",
+      authorName: profile?.full_name || profile?.email || user.email || "Менеджер",
+      createdAt: new Date().toISOString()
+    };
+
+    comments.push(newComment);
+
+    // Limit to 100 comments
+    if (comments.length > 100) {
+      comments = comments.slice(-100);
+    }
+
+    const updatedCommentStr = JSON.stringify(comments);
+
+    const { error: updateError } = await supabase
+      .from("unified_customers")
+      .update({ manager_comment: updatedCommentStr })
       .eq("id", customerId);
 
-    if (error) throw error;
+    if (updateError) throw updateError;
     
-    return { success: true };
+    return { success: true, managerComment: updatedCommentStr };
   } catch (err: any) {
     return { error: err.message || "Failed to update comment" };
   }

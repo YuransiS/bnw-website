@@ -109,6 +109,7 @@ export default function Sidebar({
   const getRoleLabel = (role: string) => {
     if (role === "admin" || role === "superman") return "Супермен";
     if (role === "producer") return "Продюсер";
+    if (role === "rop") return "Керівник ВП (РОП)";
     if (role === "sales") return "Продажі";
     return role;
   };
@@ -446,6 +447,8 @@ export default function Sidebar({
                     ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                     : userRole === "producer"
                     ? "bg-purple-500/10 text-purple-400 border-purple-500/20"
+                    : userRole === "rop"
+                    ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
                     : "bg-blue-500/10 text-blue-400 border-blue-500/20"
                 }`}>
                   {getRoleLabel(userRole)}
