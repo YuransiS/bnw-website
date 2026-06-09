@@ -326,10 +326,20 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
   // Payment Link builder states
   const [payCustName, setPayCustName] = useState("");
+  const [payCustPhone, setPayCustPhone] = useState("");
   const [payAmount, setPayAmount] = useState("1000");
   const [payCurrency, setPayCurrency] = useState("UAH");
   const [payProduct, setPayProduct] = useState("Бронювання курсу");
   const [generatedLink, setGeneratedLink] = useState("");
+  const [isGeneratingLink, setIsGeneratingLink] = useState(false);
+
+  // Auto pre-fill client name and phone when selectedLeadInfo changes
+  useEffect(() => {
+    if (selectedLeadInfo) {
+      setPayCustName(selectedLeadInfo.name || "");
+      setPayCustPhone(selectedLeadInfo.phone || "");
+    }
+  }, [selectedLeadInfo]);
 
   // New lead creation states
   const [showAddLead, setShowAddLead] = useState(false);
@@ -1070,15 +1080,35 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   };
 
   // Form link creator builder click triggers
-  const handleBuildPaymentButton = (e: React.FormEvent) => {
+  const handleBuildPaymentButton = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    // Formulate a beautiful secure checkout signature URL simulation
-    const slug = activeProject?.slug || "bnw_main";
-    const secureMockToken = Math.floor(Math.random() * 9000000) + 1000000;
-    const url = `https://wayforpay.com/pay?merchant=${slug}_sales&amount=${payAmount}&currency=${payCurrency}&name=${encodeURIComponent(payProduct)}&orderId=WFP_${secureMockToken}&signature=a8b3c9d7e6f8`;
-
-    setGeneratedLink(url);
+    setIsGeneratingLink(true);
+    try {
+      const slug = activeProject?.slug || "bnw_main";
+      const res = await fetch("/api/admin/generate-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectSlug: slug,
+          amount: Number(payAmount),
+          currency: payCurrency,
+          tariffName: payProduct,
+          customerName: payCustName,
+          customerPhone: payCustPhone,
+          uuid: selectedLeadInfo?.visitor_uuid || selectedLeadInfo?.customerId || "",
+        }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        setGeneratedLink(data.url);
+      } else {
+        alert("Помилка генерації: " + (data.error || "Невідома помилка"));
+      }
+    } catch (err) {
+      alert("Помилка генерації посилання");
+    } finally {
+      setIsGeneratingLink(false);
+    }
   };
 
   // Add a new lead server event submit hook
@@ -2722,6 +2752,19 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
               <div>
                 <label className="block text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1.5">
+                  Телефон клієнта
+                </label>
+                <input
+                  type="text"
+                  value={payCustPhone}
+                  onChange={(e) => setPayCustPhone(e.target.value)}
+                  placeholder="+380991234567"
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-xs font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1.5">
                   Сума оплати
                 </label>
                 <div className="flex gap-2">
@@ -2760,9 +2803,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
               <button
                 type="submit"
-                className="w-full py-4 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black font-black transition-all cursor-pointer shadow-lg hover:scale-[1.01] active:scale-95 duration-200 mt-2 text-xs"
+                disabled={isGeneratingLink}
+                className="w-full py-4 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black font-black transition-all cursor-pointer shadow-lg hover:scale-[1.01] active:scale-95 duration-200 mt-2 text-xs disabled:opacity-55"
               >
-                Згенерувати посилання
+                {isGeneratingLink ? "Генерація..." : "Згенерувати посилання"}
               </button>
             </form>
           </div>
