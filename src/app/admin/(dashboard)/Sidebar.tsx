@@ -26,7 +26,7 @@ import {
   Lightbulb,
   Check
 } from "lucide-react";
-import { signOutAction, submitCrmFeedbackAction } from "../actions";
+import { signOutAction, submitCrmFeedbackAction, impersonateRoleAction } from "../actions";
 import { useTheme } from "../ThemeProvider";
 
 interface Project {
@@ -41,6 +41,8 @@ interface SidebarProps {
   userRole: string;
   userEmail: string;
   fullName: string;
+  isActualDev?: boolean;
+  actualRole?: string;
 }
 
 // Deterministic premium icon assignment based on project attributes
@@ -59,13 +61,31 @@ export default function Sidebar({
   allowedProjects,
   userRole,
   userEmail,
-  fullName
+  fullName,
+  isActualDev,
+  actualRole
 }: SidebarProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const [isPending, startTransition] = useTransition();
   const { theme } = useTheme();
+
+  const [isImpersonating, setIsImpersonating] = useState(false);
+
+  const handleImpersonate = async (role: string) => {
+    setIsImpersonating(true);
+    try {
+      const targetRole = role === "reset" ? null : role;
+      const res = await impersonateRoleAction(targetRole);
+      if (res.error) throw new Error(res.error);
+      router.refresh();
+    } catch (err: any) {
+      alert("Помилка зміни ролі: " + err.message);
+    } finally {
+      setIsImpersonating(false);
+    }
+  };
 
   const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault();
@@ -414,6 +434,56 @@ export default function Sidebar({
                   isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
                 }`}>
                   Налаштування
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Developer Impersonation Controls */}
+          {isActualDev && (
+            <div className="space-y-1.5 p-1 border border-dashed border-emerald-500/20 rounded-xl bg-emerald-500/[0.02] mx-1.5">
+              {!isCollapsed ? (
+                <>
+                  <p className="text-[9px] font-black uppercase tracking-wider text-emerald-400 px-2 flex items-center gap-1">
+                    <Sparkles className="w-2.5 h-2.5 animate-pulse" />
+                    Режим розробника (Mock)
+                  </p>
+                  <div className="relative">
+                    <select
+                      value={userRole}
+                      onChange={(e) => handleImpersonate(e.target.value)}
+                      disabled={isImpersonating}
+                      className="w-full appearance-none pl-3.5 pr-8 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-emerald-500 text-[11px] font-bold text-white cursor-pointer"
+                    >
+                      <option value="reset" className="bg-[#0C0C0F] text-emerald-450 font-black">Справжня роль ({getRoleLabel(actualRole || "superman")})</option>
+                      <option value="superman" className="bg-[#0C0C0F] text-white">Супермен (Superman)</option>
+                      <option value="producer" className="bg-[#0C0C0F] text-white">Продюсер (Producer)</option>
+                      <option value="rop" className="bg-[#0C0C0F] text-white">Керівник ВП (РОП)</option>
+                      <option value="sales" className="bg-[#0C0C0F] text-white">Відділ продажів (Sales)</option>
+                      <option value="pending" className="bg-[#0C0C0F] text-white">Очікує схвалення (Pending)</option>
+                    </select>
+                    <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none text-white/40 rotate-90" />
+                  </div>
+                </>
+              ) : (
+                <div className="relative group flex justify-center">
+                  <button
+                    disabled={isImpersonating}
+                    className="w-10 h-10 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/15 flex items-center justify-center cursor-pointer transition-all"
+                  >
+                    <Sparkles className={`w-4 h-4 ${isImpersonating ? "animate-spin" : ""}`} />
+                  </button>
+                  <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-[10px] font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 shadow-2xl flex flex-col space-y-1.5 ${
+                    isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
+                  }`}>
+                    <span className="font-extrabold uppercase tracking-wider text-emerald-400">Режим розробника</span>
+                    <button onClick={() => handleImpersonate("reset")} className="text-left hover:underline text-[9px] cursor-pointer">Справжня роль ({getRoleLabel(actualRole || "superman")})</button>
+                    <button onClick={() => handleImpersonate("superman")} className="text-left hover:underline text-[9px] cursor-pointer">Супермен</button>
+                    <button onClick={() => handleImpersonate("producer")} className="text-left hover:underline text-[9px] cursor-pointer">Продюсер</button>
+                    <button onClick={() => handleImpersonate("rop")} className="text-left hover:underline text-[9px] cursor-pointer">РОП</button>
+                    <button onClick={() => handleImpersonate("sales")} className="text-left hover:underline text-[9px] cursor-pointer">Sales</button>
+                    <button onClick={() => handleImpersonate("pending")} className="text-left hover:underline text-[9px] cursor-pointer">Pending</button>
+                  </div>
                 </div>
               )}
             </div>

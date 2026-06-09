@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient, createAdminClient } from "@/utils/supabase/server";
+import { cookies } from "next/headers";
 import Sidebar from "./Sidebar";
 import { ThemeProvider } from "../ThemeProvider";
 
@@ -49,7 +50,18 @@ export default async function AdminLayout({
   }
 
   const userEmail = profile?.email || user.email || "";
-  const userRole = profile?.role || "pending";
+  const isActualDev = !!((user.email && devEmails.includes(user.email.toLowerCase())) || 
+                       (profile && (profile.role === "admin" || profile.role === "superman")));
+
+  let userRole = profile?.role || "pending";
+  if (isActualDev) {
+    const cookieStore = await cookies();
+    const impersonated = cookieStore.get("crm_impersonated_role")?.value;
+    if (impersonated && ["superman", "producer", "rop", "sales", "pending"].includes(impersonated)) {
+      userRole = impersonated;
+    }
+  }
+
   const fullName = user.user_metadata?.full_name || user.user_metadata?.name || "";
 
   // Strict check: if pending, redirect straight to /admin/pending waiting screen
@@ -107,6 +119,8 @@ export default async function AdminLayout({
         userRole={userRole}
         userEmail={userEmail}
         fullName={fullName}
+        isActualDev={isActualDev}
+        actualRole={profile?.role || "superman"}
       />
 
       {/* Main content grid */}

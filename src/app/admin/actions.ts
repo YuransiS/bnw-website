@@ -3,6 +3,7 @@
 import { createClient, createAdminClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 
 export async function signOutAction() {
   const supabase = await createClient();
@@ -23,11 +24,25 @@ export async function getSessionAndAccess(selectedProjectSlug?: string) {
 
   // Fetch profile using admin client to bypass RLS or session latency
   const adminSupabase = createAdminClient();
-  const { data: profile } = await adminSupabase
+  const { data: profileData } = await adminSupabase
     .from("profiles")
     .select("id, email, role")
     .eq("id", user.id)
     .single();
+
+  let profile = profileData;
+
+  const devEmails = ["yura3zaxar@outlook.com", "yura3zaxar@gmail.com"];
+  const isActualDev = (user.email && devEmails.includes(user.email.toLowerCase())) || 
+                     (profile && (profile.role === "admin" || profile.role === "superman"));
+
+  if (isActualDev) {
+    const cookieStore = await cookies();
+    const impersonated = cookieStore.get("crm_impersonated_role")?.value;
+    if (impersonated && ["superman", "producer", "rop", "sales", "pending"].includes(impersonated)) {
+      profile = profile ? { ...profile, role: impersonated } : { id: user.id, email: user.email || "", role: impersonated };
+    }
+  }
 
   if (!profile || profile.role === "pending") {
     throw new Error("Access Pending Approval");
@@ -897,5 +912,47 @@ export async function updateOrderCurrencyAction(
     return { success: true };
   } catch (err: any) {
     return { error: err.message || "Failed to update order currency." };
+  }
+}
+
+// Server action to override current role for debugging
+export async function impersonateRoleAction(role: string | null) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Unauthorized");
+
+    const devEmails = ["yura3zaxar@outlook.com", "yura3zaxar@gmail.com"];
+    const isActualDev = devEmails.includes(user.email?.toLowerCase() || "");
+
+    let hasAccess = isActualDev;
+
+    if (!hasAccess) {
+      const adminSupabase = createAdminClient();
+      const { data: profile } = await adminSupabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+      if (profile?.role === "admin" || profile?.role === "superman") {
+        hasAccess = true;
+      }
+    }
+
+    if (!hasAccess) {
+      throw new Error("403 Forbidden");
+    }
+
+    const cookieStore = await cookies();
+    if (!role) {
+      cookieStore.delete("crm_impersonated_role");
+    } else {
+      cookieStore.set("crm_impersonated_role", role, { maxAge: 60 * 60 * 24 });
+    }
+
+    revalidatePath("/admin");
+    return { success: true };
+  } catch (err: any) {
+    return { error: err.message || "Failed to override role" };
   }
 }
