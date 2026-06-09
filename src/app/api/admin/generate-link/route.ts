@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import crypto from 'crypto';
 
 const PROJECT_DOMAINS: Record<string, string> = {
   victoria: 'https://victoria-mc.vercel.app',
@@ -10,12 +9,6 @@ const PROJECT_DOMAINS: Record<string, string> = {
   vova_win: 'https://vova-win.club',
 };
 
-function getSecretKeyForProject(slug: string): string {
-  const envKey = `WFP_SECRET_KEY_${slug.toUpperCase()}`;
-  const key = process.env[envKey] || process.env.WFP_SECRET_KEY || 'default_secret';
-  return key.replace(/['"]/g, '').trim();
-}
-
 export async function POST(request: Request) {
   try {
     const { projectSlug, amount, currency, tariffName, customerName, customerPhone, uuid } = await request.json();
@@ -23,25 +16,6 @@ export async function POST(request: Request) {
     if (!projectSlug) {
       return NextResponse.json({ error: 'Missing projectSlug' }, { status: 400 });
     }
-
-    const secretKey = getSecretKeyForProject(projectSlug);
-
-    const payloadObj = {
-      a: amount,
-      c: currency || 'UAH',
-      t: tariffName || 'Оплата послуг',
-      n: customerName || '',
-      p: customerPhone || '',
-      u: uuid || ''
-    };
-
-    const payloadStr = JSON.stringify(payloadObj);
-    const pBase64 = Buffer.from(payloadStr).toString('base64');
-
-    const signature = crypto
-      .createHmac('sha256', secretKey)
-      .update(pBase64)
-      .digest('hex');
 
     let domain = PROJECT_DOMAINS[projectSlug] || PROJECT_DOMAINS.victoria;
     const requestHost = request.headers.get('host') || '';
@@ -55,11 +29,32 @@ export async function POST(request: Request) {
       else if (projectSlug === 'victoria') domain = 'http://localhost:3004';
     }
 
-    const checkoutUrl = `${domain}/checkout?p=${encodeURIComponent(pBase64)}&sig=${signature}`;
+    const targetUrl = `${domain}/api/admin/generate-link`;
+    console.log(`Forwarding payment generation for ${projectSlug} to: ${targetUrl}`);
 
-    return NextResponse.json({ url: checkoutUrl });
+    const res = await fetch(targetUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        amount,
+        currency,
+        tariffName,
+        customerName,
+        customerPhone,
+        uuid
+      })
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error(`Failed to forward link generation to project ${projectSlug}:`, errorText);
+      return NextResponse.json({ error: `Project API returned error: ${res.status}` }, { status: res.status });
+    }
+
+    const data = await res.json();
+    return NextResponse.json(data);
   } catch (error) {
-    console.error('Generate Link Error:', error);
+    console.error('Generate Link Proxy Error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
