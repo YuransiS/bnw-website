@@ -384,14 +384,6 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const [generatedLink, setGeneratedLink] = useState("");
   const [isGeneratingLink, setIsGeneratingLink] = useState(false);
 
-  // Auto pre-fill client name and phone when selectedLeadInfo changes
-  useEffect(() => {
-    if (selectedLeadInfo) {
-      setPayCustName(selectedLeadInfo.name || "");
-      setPayCustPhone(selectedLeadInfo.phone || "");
-    }
-  }, [selectedLeadInfo]);
-
   // New lead creation states
   const [showAddLead, setShowAddLead] = useState(false);
   const [newLeadName, setNewLeadName] = useState("");
@@ -407,6 +399,14 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedLeadHistory, setSelectedLeadHistory] = useState<any[] | null>(null);
   const [selectedLeadInfo, setSelectedLeadInfo] = useState<any | null>(null);
+
+  // Auto pre-fill client name and phone when selectedLeadInfo changes
+  useEffect(() => {
+    if (selectedLeadInfo) {
+      setPayCustName(selectedLeadInfo.name || "");
+      setPayCustPhone(selectedLeadInfo.phone || "");
+    }
+  }, [selectedLeadInfo]);
 
   // Comments and manager assignments states
   const [tempManagerComment, setTempManagerComment] = useState("");
@@ -1360,6 +1360,22 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       </React.Fragment>
     );
   };
+
+  if (viewType === "none" || (allowedProjects.length === 0 && role !== "admin" && role !== "superman")) {
+    return (
+      <div className={`${bgClass} min-h-screen transition-all font-sans w-full max-w-full pb-20 flex flex-col items-center justify-center text-center p-6 ${isLight ? "theme-light" : ""}`}>
+        <div className="w-16 h-16 rounded-full bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 flex items-center justify-center mb-6 shadow-[0_0_20px_rgba(234,179,8,0.1)]">
+          <Briefcase className="w-8 h-8 animate-pulse" />
+        </div>
+        <h1 className="text-2xl font-black text-white uppercase tracking-tight mb-3">
+          Немає доступних проектів
+        </h1>
+        <p className="text-white/50 text-sm max-w-md leading-relaxed mb-6">
+          Ваш профіль підтверджено з роллю <span className="text-emerald-400 font-extrabold uppercase">{role === "admin" || role === "superman" ? "Супермен" : role === "producer" ? "Продюсер" : role === "rop" ? "Керівник ВП (РОП)" : role === "sales" ? "Відділ продажів" : role}</span>, але адміністратор ще не прив'язав жодного проекту до вашого акаунту. Будь ласка, зверніться до Супермена для налаштування доступів.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className={`${bgClass} min-h-screen transition-all font-sans w-full max-w-full pb-20 ${isLight ? "theme-light" : ""}`}>
