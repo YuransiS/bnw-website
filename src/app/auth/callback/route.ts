@@ -17,14 +17,23 @@ export async function GET(request: Request) {
     if (!error) {
       return NextResponse.redirect(redirectTo);
     }
-  } else if (token_hash && type) {
+  }
+  
+  if (token_hash) {
     const supabase = await createClient();
-    const { error } = await supabase.auth.verifyOtp({
-      type,
-      token_hash,
-    });
-    if (!error) {
-      return NextResponse.redirect(redirectTo);
+    // Cycle through possible OTP types to verify token securely without requiring local PKCE verifier cookie
+    const typesToTry: EmailOtpType[] = type 
+      ? [type] 
+      : ["signup", "invite", "magiclink", "recovery", "email_change"];
+      
+    for (const t of typesToTry) {
+      const { error } = await supabase.auth.verifyOtp({
+        type: t,
+        token_hash,
+      });
+      if (!error) {
+        return NextResponse.redirect(redirectTo);
+      }
     }
   }
 

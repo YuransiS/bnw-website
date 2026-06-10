@@ -206,49 +206,50 @@ const PIPELINE_COLUMNS = [
 ];
 
 // Project landing links registry
-const PROJECT_LANDINGS: Record<string, Array<{ label: string; url: string; badgeColor: string }>> = {
+const PROJECT_LANDINGS: Record<string, Array<{ label: string; url: string; badgeColor: string; type: "paid" | "free" }>> = {
   bw_main: [
-    { label: "Основний", url: "https://bnw-prod.vercel.app/", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" }
+    { label: "Основний", url: "https://bnw-prod.vercel.app/", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "free" }
   ],
   victoria: [
-    { label: "Майстер-клас", url: "https://victoria-mc.vercel.app/", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20" },
-    { label: "VSL", url: "https://victoria-mc.vercel.app/free-lection/", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20" },
-    { label: "VSL-форма", url: "https://victoria-mc.vercel.app/free-lection/vsl-form/", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20" },
-    { label: "Броні", url: "https://victoria-mc.vercel.app/price", badgeColor: "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20" },
-    { label: "Практикум", url: "https://victoria-mc.vercel.app/practicum", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20" }
+    { label: "Майстер-клас", url: "https://victoria-mc.vercel.app/", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20", type: "free" },
+    { label: "VSL", url: "https://victoria-mc.vercel.app/free-lection/", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20", type: "free" },
+    { label: "VSL-форма", url: "https://victoria-mc.vercel.app/free-lection/vsl-form/", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "free" },
+    { label: "Броні", url: "https://victoria-mc.vercel.app/price", badgeColor: "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20", type: "paid" },
+    { label: "Практикум", url: "https://victoria-mc.vercel.app/practicum", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20", type: "paid" }
   ],
   sofia: [
-    { label: "Основний", url: "https://sofifinsight.vercel.app/", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" },
-    { label: "Інтенсив", url: "https://sofifinsight.vercel.app/intensive", badgeColor: "bg-teal-500/10 text-teal-400 border border-teal-500/20" },
-    { label: "Вебінар", url: "https://sofifinsight.vercel.app/web", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20" },
-    { label: "Броні", url: "https://sofifinsight.vercel.app/price", badgeColor: "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20" },
-    { label: "VSL", url: "https://sofifinsight.vercel.app/sofia-invest", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20" },
-    { label: "VSL-форма", url: "https://sofifinsight.vercel.app/sofia-invest/lesson", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20" },
-    { label: "Міні-курс", url: "https://sofifinsight.vercel.app/minicourse", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20" }
+    { label: "Основний", url: "https://sofifinsight.vercel.app/", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "free" },
+    { label: "Інтенсив", url: "https://sofifinsight.vercel.app/intensive", badgeColor: "bg-teal-500/10 text-teal-400 border border-teal-500/20", type: "free" },
+    { label: "Вебінар", url: "https://sofifinsight.vercel.app/web", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20", type: "free" },
+    { label: "Броні", url: "https://sofifinsight.vercel.app/price", badgeColor: "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20", type: "paid" },
+    { label: "VSL", url: "https://sofifinsight.vercel.app/sofia-invest", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20", type: "free" },
+    { label: "VSL-форма", url: "https://sofifinsight.vercel.app/sofia-invest/lesson", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "free" },
+    { label: "Міні-курс", url: "https://sofifinsight.vercel.app/minicourse", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20", type: "paid" }
   ],
   valeria: [
-    { label: "Основний", url: "https://pix-ai-ua.vercel.app/", badgeColor: "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20" },
-    { label: "Офіс", url: "https://pix-ai-ua.vercel.app/office", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" },
-    { label: "Мами", url: "https://pix-ai-ua.vercel.app/moms", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20" },
-    { label: "Б'юті", url: "https://pix-ai-ua.vercel.app/beauty", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20" },
-    { label: "Для тінейджерів", url: "https://pix-ai-ua.vercel.app/teen", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20" },
-    { label: "Для батьків", url: "https://pix-ai-ua.vercel.app/parents", badgeColor: "bg-orange-500/10 text-orange-400 border border-orange-500/20" }
+    { label: "Основний", url: "https://pix-ai-ua.vercel.app/", badgeColor: "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20", type: "free" },
+    { label: "Офіс", url: "https://pix-ai-ua.vercel.app/office", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "paid" },
+    { label: "Мами", url: "https://pix-ai-ua.vercel.app/moms", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20", type: "paid" },
+    { label: "Б'юті", url: "https://pix-ai-ua.vercel.app/beauty", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "paid" },
+    { label: "Для тінейджерів", url: "https://pix-ai-ua.vercel.app/teen", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20", type: "paid" },
+    { label: "Для батьків", url: "https://pix-ai-ua.vercel.app/parents", badgeColor: "bg-orange-500/10 text-orange-400 border border-orange-500/20", type: "paid" }
   ],
   clean_klinom: [
-    { label: "Основний", url: "https://clean-klinom.vercel.app/", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20" }
+    { label: "Основний", url: "https://clean-klinom.vercel.app/", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20", type: "free" }
   ],
   svitlana: [
-    { label: "Основний", url: "https://svitlanatape.vercel.app/", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" },
-    { label: "Антиботокс", url: "https://antibotox.vercel.app/", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20" },
-    { label: "Заломи сну", url: "https://zalomu-sny.vercel.app/", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20" },
-    { label: "Типи старіння", url: "https://tipstarinnyaa.vercel.app/", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20" },
-    { label: "3 веби", url: "https://svitlana3web.vercel.app/", badgeColor: "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20" },
-    { label: "Світлана тейп", url: "https://svetlanatape.vercel.app/", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20" },
-    { label: "Антиботокс клуб", url: "https://antibotox-club.vercel.app/", badgeColor: "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20" },
-    { label: "Face Detox", url: "https://facedetox.vercel.app/", badgeColor: "bg-teal-500/10 text-teal-400 border border-teal-500/20" }
+    { label: "Основний", url: "https://svitlanatape.vercel.app/", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "free" },
+    { label: "Антиботокс", url: "https://antibotox.vercel.app/", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20", type: "paid" },
+    { label: "Заломи сну", url: "https://zalomu-sny.vercel.app/", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20", type: "paid" },
+    { label: "Тейпування тіла", url: "https://svitlanatape.vercel.app/body-taping", badgeColor: "bg-orange-500/10 text-orange-400 border border-orange-500/20", type: "paid" },
+    { label: "Типи старіння", url: "https://tipstarinnyaa.vercel.app/", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "free" },
+    { label: "3 веби", url: "https://svitlana3web.vercel.app/", badgeColor: "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20", type: "free" },
+    { label: "Світлана тейп", url: "https://svetlanatape.vercel.app/", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20", type: "free" },
+    { label: "Антиботокс клуб", url: "https://antibotox-club.vercel.app/", badgeColor: "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20", type: "paid" },
+    { label: "Face Detox", url: "https://facedetox.vercel.app/", badgeColor: "bg-teal-500/10 text-teal-400 border border-teal-500/20", type: "free" }
   ],
   vova_win: [
-    { label: "Марафон", url: "https://vova-win.club/marathon", badgeColor: "bg-orange-500/10 text-orange-400 border border-orange-500/20" }
+    { label: "Марафон", url: "https://vova-win.club/marathon", badgeColor: "bg-orange-500/10 text-orange-400 border border-orange-500/20", type: "paid" }
   ]
 };
 
@@ -307,6 +308,7 @@ const isLeadMatchingLanding = (lead: any, landingUrl: string) => {
     
     const originalSheet = (touch.metadata?.original_sheet || touch.metadata?.originalSheet || "").trim();
     const targetSheet = (touch.metadata?.target_sheet || touch.metadata?.targetSheet || "").trim();
+    const tariff = (touch.metadata?.tariff || touch.metadata?.raw_row?.tariff || "").trim();
     
     // 1. URL match
     if (touchUrl) {
@@ -1752,71 +1754,129 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
       {/* Landing Selectors Filter Row */}
       {viewType === "single" && PROJECT_LANDINGS[activeSlug] && PROJECT_LANDINGS[activeSlug].length > 0 && (
-        <div className={`${cardClass} p-4 rounded-2xl mb-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-in fade-in duration-300`}>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={`text-[10px] font-bold uppercase tracking-wider ${isLight ? "text-neutral-500" : "text-white/40"} mr-2`}>
-              Фільтр за лендінгом:
-            </span>
-            <button
-              onClick={() => setSelectedLanding("all")}
-              className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                selectedLanding === "all"
-                  ? isLight
-                    ? "bg-neutral-900 text-white shadow-sm"
-                    : "bg-white text-black shadow-lg"
-                  : isLight
-                    ? "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
-                    : "bg-white/5 text-white/70 hover:bg-white/10"
-              }`}
-            >
-              Усі сторінки
-            </button>
-            {PROJECT_LANDINGS[activeSlug].map((land, idx) => {
-              const isSelected = selectedLanding === land.url;
-              return (
-                <div key={idx} className="flex items-center gap-0.5">
-                  <button
-                    onClick={() => setSelectedLanding(land.url)}
-                    className={`px-4 py-2 rounded-l-xl text-xs font-black transition-all cursor-pointer ${
-                      isSelected
-                        ? isLight
-                          ? "bg-emerald-600 text-white shadow-sm"
-                          : "bg-emerald-500 text-black shadow-lg"
-                        : isLight
-                          ? "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
-                          : "bg-white/5 text-white/70 hover:bg-white/10"
-                    }`}
-                  >
-                    {land.label}
-                  </button>
-                  <a
-                    href={land.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`px-2.5 py-2.5 rounded-r-xl border-l transition-all cursor-pointer flex items-center justify-center ${
-                      isSelected
-                        ? isLight
-                          ? "bg-emerald-600 border-emerald-700/30 text-white/80 hover:text-white"
-                          : "bg-emerald-500 border-emerald-600/30 text-black/80 hover:text-black"
-                        : isLight
-                          ? "bg-neutral-100 border-neutral-200 text-neutral-400 hover:text-neutral-900 hover:bg-neutral-200"
-                          : "bg-white/5 border-white/5 text-white/40 hover:text-white hover:bg-white/10"
-                    }`}
-                    title={`Відкрити посилання: ${land.url}`}
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
-              );
-            })}
+        <div className={`${cardClass} p-5 rounded-2xl mb-8 flex flex-col gap-4 animate-in fade-in duration-300`}>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-white/5">
+            <div className="flex items-center gap-2">
+              <span className={`text-[10px] font-black uppercase tracking-wider ${isLight ? "text-neutral-500" : "text-white/40"} mr-2`}>
+                Фільтр за лендінгом:
+              </span>
+              <button
+                onClick={() => setSelectedLanding("all")}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  selectedLanding === "all"
+                    ? isLight
+                      ? "bg-neutral-900 text-white shadow-sm"
+                      : "bg-white text-black shadow-lg"
+                    : isLight
+                      ? "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+                      : "bg-white/5 text-white/70 hover:bg-white/10"
+                }`}
+              >
+                Усі сторінки
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Globe className="w-4 h-4 text-emerald-500 animate-pulse" />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500">
+                {selectedLanding === "all" ? "Активні всі воронки" : "Показ статистики за обраним сайтом"}
+              </span>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Globe className="w-4 h-4 text-emerald-500 animate-pulse" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500">
-              {selectedLanding === "all" ? "Активні всі воронки" : "Показ статистики за обраним сайтом"}
-            </span>
-          </div>
+          {/* Paid products row */}
+          {PROJECT_LANDINGS[activeSlug].some(l => l.type === "paid") && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`text-[9px] font-extrabold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1.5 rounded-lg mr-2`}>
+                Платні продукти:
+              </span>
+              {PROJECT_LANDINGS[activeSlug].filter(l => l.type === "paid").map((land, idx) => {
+                const isSelected = selectedLanding === land.url;
+                return (
+                  <div key={idx} className="flex items-center gap-0.5">
+                    <button
+                      onClick={() => setSelectedLanding(land.url)}
+                      className={`px-4 py-2 rounded-l-xl text-xs font-black transition-all cursor-pointer ${
+                        isSelected
+                          ? isLight
+                            ? "bg-emerald-600 text-white shadow-sm"
+                            : "bg-emerald-500 text-black shadow-lg"
+                          : isLight
+                            ? "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+                            : "bg-white/5 text-white/70 hover:bg-white/10"
+                      }`}
+                    >
+                      {land.label}
+                    </button>
+                    <a
+                      href={land.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`px-2.5 py-2.5 rounded-r-xl border-l transition-all cursor-pointer flex items-center justify-center ${
+                        isSelected
+                          ? isLight
+                            ? "bg-emerald-600 border-emerald-700/30 text-white/80 hover:text-white"
+                            : "bg-emerald-500 border-emerald-600/30 text-black/80 hover:text-black"
+                          : isLight
+                            ? "bg-neutral-100 border-neutral-200 text-neutral-400 hover:text-neutral-900 hover:bg-neutral-200"
+                            : "bg-white/5 border-white/5 text-white/40 hover:text-white hover:bg-white/10"
+                      }`}
+                      title={`Відкрити посилання: ${land.url}`}
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Free funnels/webinars row */}
+          {PROJECT_LANDINGS[activeSlug].some(l => l.type === "free") && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`text-[9px] font-extrabold uppercase tracking-wider bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2.5 py-1.5 rounded-lg mr-2`}>
+                Безкоштовні / Воронки:
+              </span>
+              {PROJECT_LANDINGS[activeSlug].filter(l => l.type === "free").map((land, idx) => {
+                const isSelected = selectedLanding === land.url;
+                return (
+                  <div key={idx} className="flex items-center gap-0.5">
+                    <button
+                      onClick={() => setSelectedLanding(land.url)}
+                      className={`px-4 py-2 rounded-l-xl text-xs font-black transition-all cursor-pointer ${
+                        isSelected
+                          ? isLight
+                            ? "bg-emerald-600 text-white shadow-sm"
+                            : "bg-emerald-500 text-black shadow-lg"
+                          : isLight
+                            ? "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+                            : "bg-white/5 text-white/70 hover:bg-white/10"
+                      }`}
+                    >
+                      {land.label}
+                    </button>
+                    <a
+                      href={land.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`px-2.5 py-2.5 rounded-r-xl border-l transition-all cursor-pointer flex items-center justify-center ${
+                        isSelected
+                          ? isLight
+                            ? "bg-emerald-600 border-emerald-700/30 text-white/80 hover:text-white"
+                            : "bg-emerald-500 border-emerald-600/30 text-black/80 hover:text-black"
+                          : isLight
+                            ? "bg-neutral-100 border-neutral-200 text-neutral-400 hover:text-neutral-900 hover:bg-neutral-200"
+                            : "bg-white/5 border-white/5 text-white/40 hover:text-white hover:bg-white/10"
+                      }`}
+                      title={`Відкрити посилання: ${land.url}`}
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
