@@ -14,58 +14,65 @@ export default function PendingApprovalPage() {
 
   useEffect(() => {
     const supabase = createClient();
+    let interval: NodeJS.Timeout;
 
     // 1. Initial user check
     const checkUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
 
-      if (!user) {
-        router.push("/admin/login");
-        return;
-      }
-
-      setUserEmail(user.email || "");
-
-      // Check current profile role
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-
-      if (profile && profile.role !== "pending") {
-        // Already approved, send straight to CRM
-        window.location.href = "/admin";
-        return;
-      }
-
-      setChecking(false);
-
-      // 2. Set up active 3-second polling to auto-approve without relogging
-      const interval = setInterval(async () => {
-        try {
-          const { data: freshProfile } = await supabase
-            .from("profiles")
-            .select("role")
-            .eq("id", user.id)
-            .single();
-
-          if (freshProfile && freshProfile.role !== "pending") {
-            clearInterval(interval);
-            // Approved! Trigger a hard window reload to bypass Next router caches
-            window.location.href = "/admin";
-          }
-        } catch (err) {
-          console.error("Polling profile status error:", err);
+        if (!user) {
+          router.push("/admin/login");
+          return;
         }
-      }, 3000); // 3 seconds
 
-      return () => clearInterval(interval);
+        setUserEmail(user.email || "");
+
+        // Check current profile role
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .single();
+
+        if (profile && profile.role !== "pending") {
+          // Already approved, send straight to CRM
+          window.location.href = "/admin";
+          return;
+        }
+
+        setChecking(false);
+
+        // 2. Set up active 3-second polling to auto-approve without relogging
+        interval = setInterval(async () => {
+          try {
+            const { data: freshProfile } = await supabase
+              .from("profiles")
+              .select("role")
+              .eq("id", user.id)
+              .single();
+
+            if (freshProfile && freshProfile.role !== "pending") {
+              clearInterval(interval);
+              // Approved! Trigger a hard window reload to bypass Next router caches
+              window.location.href = "/admin";
+            }
+          } catch (err) {
+            console.error("Polling profile status error:", err);
+          }
+        }, 3000); // 3 seconds
+      } catch (err) {
+        console.error("Error during checkUser:", err);
+      }
     };
 
     checkUser();
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [router]);
 
   const handleSignOut = () => {
