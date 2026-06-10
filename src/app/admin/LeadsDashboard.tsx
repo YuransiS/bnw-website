@@ -670,7 +670,13 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         const amt = Number(item.amount || 0);
         if (amt === 0) return;
 
-        const metaCurrency = String(item.metadata?.currency || item.metadata?.lead?.currency || "").trim().toLowerCase();
+        const metaCurrency = String(
+          item.metadata?.currency || 
+          item.metadata?.lead?.currency || 
+          item.metadata?.raw_row?.currency ||
+          item.metadata?.raw_row?.raw_payload?.currency ||
+          ""
+        ).trim().toLowerCase();
         const orderProj = allowedProjects.find((p: any) => p.id === item.project_id);
         const orderSlug = orderProj?.slug || "";
         
@@ -3313,8 +3319,14 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                               <span className="text-emerald-455 font-black text-sm block mt-1">
                                 {(() => {
                                   const amt = Number(touch.amount || 0);
-                                  const metaCurrency = touch.metadata?.currency || touch.metadata?.lead?.currency || "";
-                                  const isExplicitEur = ["EUR", "eur", "€", "Eur"].includes(String(metaCurrency).trim());
+                                  const metaCurrency = String(
+                                    touch.metadata?.currency || 
+                                    touch.metadata?.lead?.currency || 
+                                    touch.metadata?.raw_row?.currency ||
+                                    touch.metadata?.raw_row?.raw_payload?.currency ||
+                                    ""
+                                  ).trim().toLowerCase();
+                                  const isExplicitEur = ["EUR", "eur", "€", "Eur", "EUR"].includes(String(metaCurrency).trim());
                                   if (isExplicitEur) return `${formatLocaleNumber(amt)} €`;
                                   const isExplicitUah = ["UAH", "uah", "грн", "грн.", "Uah"].includes(String(metaCurrency).trim());
                                   const isExplicitUsd = ["USD", "usd", "Usd", "$"].includes(String(metaCurrency).trim());
