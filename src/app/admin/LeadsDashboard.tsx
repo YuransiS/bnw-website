@@ -37,7 +37,8 @@ import {
   HelpCircle,
   Layers,
   Activity,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ClipboardCheck
 } from "lucide-react";
 import {
   updateUnifiedLeadStatusAction,
@@ -273,6 +274,47 @@ class DSU {
   }
 }
 
+const normalizeUrlForMatching = (url: string) => {
+  if (!url) return "";
+  return url
+    .replace(/^https?:\/\//i, "")
+    .replace(/^www\./i, "")
+    .replace(/\/+$/, "")
+    .trim()
+    .toLowerCase();
+};
+
+const isLeadMatchingLanding = (lead: any, landingUrl: string) => {
+  if (landingUrl === "all") return true;
+  const targetNorm = normalizeUrlForMatching(landingUrl);
+  const targetHasPath = targetNorm.includes("/");
+  
+  return lead.history?.some((touch: any) => {
+    const touchUrl = normalizeUrlForMatching(
+      touch.page_url || 
+      touch.metadata?.page_url || 
+      touch.metadata?.pageUrl || 
+      touch.metadata?.full_url || 
+      touch.metadata?.fullUrl || 
+      ""
+    );
+    if (!touchUrl) return false;
+    
+    if (targetHasPath) {
+      return touchUrl.includes(targetNorm);
+    } else {
+      const firstSlashIdx = touchUrl.indexOf("/");
+      if (firstSlashIdx === -1) {
+        return touchUrl === targetNorm;
+      } else {
+        const domainPart = touchUrl.substring(0, firstSlashIdx);
+        const pathPart = touchUrl.substring(firstSlashIdx + 1).trim();
+        return domainPart === targetNorm && pathPart === "";
+      }
+    }
+  }) || false;
+};
+
 interface LeadsDashboardProps {
   initialData: any;
 }
@@ -321,6 +363,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const [endDate, setEndDate] = useState("");
   const [dateRangePreset, setDateRangePreset] = useState<"all" | "30d" | "7d" | "1d" | "custom">("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedLanding, setSelectedLanding] = useState<string>("all");
+  const [activeQuizLeadId, setActiveQuizLeadId] = useState<string | null>(null);
 
   // Kanban separate isolated filter states to prevent bleeding
   const [kanbanSearchQuery, setKanbanSearchQuery] = useState("");
@@ -373,7 +417,13 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   // Reset page number on filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, statusFilter, touchCountFilter, sourceFilter, unpaidIntentOnly, startDate, endDate, activeSlug]);
+  }, [searchQuery, statusFilter, touchCountFilter, sourceFilter, unpaidIntentOnly, startDate, endDate, activeSlug, selectedLanding]);
+
+  // Reset selected quiz lead and landing filter when project or tab changes
+  useEffect(() => {
+    setActiveQuizLeadId(null);
+    setSelectedLanding("all");
+  }, [activeSlug, activeTab]);
 
   // Payment Link builder states
   const [payCustName, setPayCustName] = useState("");
@@ -828,9 +878,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         if (leadDate > end) return false;
       }
 
+      // 7. Landing filter matching
+      if (!isLeadMatchingLanding(lead, selectedLanding)) return false;
+
       return true;
     });
-  }, [clusteredLeads, searchQuery, statusFilter, touchCountFilter, sourceFilter, unpaidIntentOnly, startDate, endDate]);
+  }, [clusteredLeads, searchQuery, statusFilter, touchCountFilter, sourceFilter, unpaidIntentOnly, startDate, endDate, selectedLanding]);
 
   // Memorized filtered leads strictly isolated for Kanban view to prevent bleeding
   const kanbanProcessedLeads = useMemo(() => {
@@ -859,9 +912,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         if (source.toLowerCase() !== kanbanSourceFilter.toLowerCase()) return false;
       }
 
+      // 4. Landing filter matching
+      if (!isLeadMatchingLanding(lead, selectedLanding)) return false;
+
       return true;
     });
-  }, [clusteredLeads, kanbanSearchQuery, kanbanTouchFilter, kanbanSourceFilter]);
+  }, [clusteredLeads, kanbanSearchQuery, kanbanTouchFilter, kanbanSourceFilter, selectedLanding]);
 
   const paginatedLeads = useMemo(() => {
     const startIndex = (currentPage - 1) * pageSize;
@@ -1561,11 +1617,11 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           </button>
         )}
 
-        {/* Current Sites Tab - All approved */}
+        {/* Quizzes Tab - All approved */}
         {viewType === "single" && (
           <button
-            onClick={() => setActiveTab("current_sites")}
-            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${activeTab === "current_sites"
+            onClick={() => setActiveTab("quizzes")}
+            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${activeTab === "quizzes"
                 ? isLight
                   ? "bg-neutral-900 text-white shadow-sm"
                   : "bg-white text-black shadow-lg"
@@ -1574,8 +1630,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                   : "text-white/40 hover:text-white"
               }`}
           >
-            <Globe className="w-4 h-4 text-emerald-450" />
-            Поточні сайти
+            <ClipboardCheck className="w-4 h-4 text-emerald-450" />
+            📋 Анкети
           </button>
         )}
 
@@ -1633,6 +1689,76 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           </button>
         )}
       </div>
+
+      {/* Landing Selectors Filter Row */}
+      {viewType === "single" && PROJECT_LANDINGS[activeSlug] && PROJECT_LANDINGS[activeSlug].length > 0 && (
+        <div className={`${cardClass} p-4 rounded-2xl mb-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-in fade-in duration-300`}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`text-[10px] font-bold uppercase tracking-wider ${isLight ? "text-neutral-500" : "text-white/40"} mr-2`}>
+              Фільтр за лендінгом:
+            </span>
+            <button
+              onClick={() => setSelectedLanding("all")}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                selectedLanding === "all"
+                  ? isLight
+                    ? "bg-neutral-900 text-white shadow-sm"
+                    : "bg-white text-black shadow-lg"
+                  : isLight
+                    ? "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+                    : "bg-white/5 text-white/70 hover:bg-white/10"
+              }`}
+            >
+              Усі сторінки
+            </button>
+            {PROJECT_LANDINGS[activeSlug].map((land, idx) => {
+              const isSelected = selectedLanding === land.url;
+              return (
+                <div key={idx} className="flex items-center gap-0.5">
+                  <button
+                    onClick={() => setSelectedLanding(land.url)}
+                    className={`px-4 py-2 rounded-l-xl text-xs font-black transition-all cursor-pointer ${
+                      isSelected
+                        ? isLight
+                          ? "bg-emerald-600 text-white shadow-sm"
+                          : "bg-emerald-500 text-black shadow-lg"
+                        : isLight
+                          ? "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+                          : "bg-white/5 text-white/70 hover:bg-white/10"
+                    }`}
+                  >
+                    {land.label}
+                  </button>
+                  <a
+                    href={land.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`px-2.5 py-2.5 rounded-r-xl border-l transition-all cursor-pointer flex items-center justify-center ${
+                      isSelected
+                        ? isLight
+                          ? "bg-emerald-600 border-emerald-700/30 text-white/80 hover:text-white"
+                          : "bg-emerald-500 border-emerald-600/30 text-black/80 hover:text-black"
+                        : isLight
+                          ? "bg-neutral-100 border-neutral-200 text-neutral-400 hover:text-neutral-900 hover:bg-neutral-200"
+                          : "bg-white/5 border-white/5 text-white/40 hover:text-white hover:bg-white/10"
+                    }`}
+                    title={`Відкрити посилання: ${land.url}`}
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Globe className="w-4 h-4 text-emerald-500 animate-pulse" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500">
+              {selectedLanding === "all" ? "Активні всі воронки" : "Показ статистики за обраним сайтом"}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* --- TAB VIEWPORTS --- */}
       {(() => {
@@ -3044,54 +3170,151 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         </div>
       )}
 
-      {/* 6. CURRENT SITES TABS VIEWPORT */}
-      {activeTab === "current_sites" && viewType === "single" && (
-        <div className={`${cardClass} p-6 rounded-2xl shadow-xl space-y-6 animate-in fade-in duration-300`}>
-          <div>
-            <h2 className={`text-lg font-black uppercase tracking-tight ${isLight ? "text-neutral-900" : "text-white"} flex items-center gap-2`}>
-              <Globe className="w-5 h-5 text-emerald-500" />
-              Поточні лендінги та сайти проекту
-            </h2>
-            <p className={`${textMutedClass} text-xs mt-1 font-semibold`}>
-              Список усіх робочих сторінок та лендінгів, закріплених за цим проектом для швидкого доступу.
-            </p>
-          </div>
+      {/* 6. QUIZZES TABS VIEWPORT */}
+      {activeTab === "quizzes" && viewType === "single" && (() => {
+        // Filter processed leads that have non-empty quiz answers (diagnosticsComment)
+        const leadsWithQuizzes = processedLeads.filter((l: any) => l.diagnosticsComment && l.diagnosticsComment.trim().length > 0);
+        return (
+          <div className="space-y-6 animate-in fade-in duration-300">
+            <div>
+              <h2 className={`text-lg font-black uppercase tracking-tight ${isLight ? "text-neutral-900" : "text-white"} flex items-center gap-2`}>
+                <ClipboardCheck className="w-5 h-5 text-emerald-500" />
+                Заповнені анкети та опитування
+              </h2>
+              <p className={`${textMutedClass} text-xs mt-1 font-semibold`}>
+                Список усіх користувачів, які заповнили анкети чи форми реєстрації на сайтах проекту.
+              </p>
+            </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {PROJECT_LANDINGS[activeSlug] && PROJECT_LANDINGS[activeSlug].length > 0 ? (
-              PROJECT_LANDINGS[activeSlug].map((land, idx) => (
-                <div
-                  key={idx}
-                  className={`p-5 rounded-2xl border border-white/5 bg-white/[0.01] hover:bg-white/[0.03] transition-all relative flex flex-col justify-between h-[135px]`}
-                >
-                  <div className="space-y-2.5">
-                    <span className={`inline-block px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded border ${land.badgeColor}`}>
-                      {land.label}
-                    </span>
-                    <p className="text-xs font-bold text-white/95 truncate max-w-full">
-                      {land.url.replace(/^https?:\/\//, "")}
-                    </p>
-                  </div>
-
-                  <a
-                    href={land.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white/5 hover:bg-emerald-500 hover:text-black text-white/80 hover:scale-[1.01] active:scale-95 border border-white/10 hover:border-emerald-500 transition-all cursor-pointer font-black text-xs duration-200"
-                  >
-                    Перейти на сайт
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                </div>
-              ))
+            {leadsWithQuizzes.length === 0 ? (
+              <div className={`${cardClass} py-16 text-center text-white/20 italic rounded-2xl shadow-xl`}>
+                Для цього проекту ще не знайдено жодної заповненої анкети
+              </div>
             ) : (
-              <div className="col-span-full py-16 text-center text-white/20 italic">
-                Для цього проекту ще не закріплено поточних лендінгів
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                {/* Left side: List of leads */}
+                <div className="lg:col-span-1 space-y-4 max-h-[800px] overflow-y-auto pr-2 custom-scrollbar">
+                  {leadsWithQuizzes.map((lead: any) => {
+                    const isSelected = activeQuizLeadId === lead.id;
+                    const dateStr = getLeadDate(lead).toLocaleDateString("uk-UA");
+                    return (
+                      <div
+                        key={lead.id}
+                        onClick={() => setActiveQuizLeadId(lead.id)}
+                        className={`p-4 rounded-xl border transition-all cursor-pointer ${
+                          isSelected
+                            ? isLight
+                              ? "bg-emerald-50 border-emerald-500 shadow-md"
+                              : "bg-emerald-950/20 border-emerald-500/20 shadow-lg"
+                            : isLight
+                              ? "bg-white border-neutral-200 hover:border-neutral-300"
+                              : "bg-[#0C0C0F] border-white/5 hover:border-white/10"
+                        }`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <h4 className="font-extrabold text-sm truncate max-w-[150px]">{lead.name}</h4>
+                          <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${
+                            lead.status === "Купив курс"
+                              ? "bg-emerald-500/10 text-emerald-400"
+                              : "bg-white/5 text-white/40"
+                          }`}>
+                            {lead.status}
+                          </span>
+                        </div>
+                        <div className="mt-2 space-y-1 text-[11px] text-white/50">
+                          {lead.telegram && <p>TG: <span className="text-[#81D8D0]">@{lead.telegram}</span></p>}
+                          {lead.phone && <p>Тел: {lead.phone}</p>}
+                          <p className="text-[10px] text-white/30 text-right mt-1">{dateStr}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Right side: Detailed Answers Panel */}
+                <div className="lg:col-span-2">
+                  {(() => {
+                    const selectedLead = leadsWithQuizzes.find((l: any) => l.id === activeQuizLeadId) || leadsWithQuizzes[0];
+                    if (!selectedLead) return null;
+
+                    // Parse diagnostics comments into separate Q&A lines
+                    const qaLines = selectedLead.diagnosticsComment
+                      .split("\n")
+                      .map((line: string) => {
+                        const parts = line.split(":");
+                        const label = parts[0]?.trim() || "";
+                        const value = parts.slice(1).join(":")?.trim() || "";
+                        return { label, value };
+                      })
+                      .filter((x: any) => x.label && x.value);
+
+                    return (
+                      <div className={`${cardClass} p-6 rounded-2xl shadow-xl space-y-6`}>
+                        <div className="flex justify-between items-start border-b border-white/5 pb-4">
+                          <div>
+                            <h3 className="text-md font-black uppercase tracking-tight text-white">{selectedLead.name}</h3>
+                            <div className="flex flex-wrap gap-2.5 mt-2 text-xs text-white/60">
+                              {selectedLead.phone && <span>📞 {selectedLead.phone}</span>}
+                              {selectedLead.telegram && <span className="text-[#81D8D0]">💬 @{selectedLead.telegram}</span>}
+                              {selectedLead.email && <span>📧 {selectedLead.email}</span>}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => setSelectedLeadHistory(selectedLead.history)}
+                            className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-black text-xs font-black rounded-xl transition-all cursor-pointer"
+                          >
+                            Історія ліда
+                          </button>
+                        </div>
+
+                        <div className="space-y-4">
+                          <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-500">
+                            Відповіді на запитання анкети:
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {qaLines.map((qa: any, idx: number) => (
+                              <div key={idx} className="p-4 bg-white/[0.02] border border-white/5 rounded-xl space-y-1">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-white/40 block">
+                                  {qa.label}
+                                </span>
+                                <p className="text-xs font-semibold text-white/90 leading-relaxed">
+                                  {qa.value}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Attribution context */}
+                        <div className="border-t border-white/5 pt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-[11px] text-white/40">
+                          <div>
+                            <span className="block font-bold uppercase text-[9px] text-white/20">Сторінка реєстрації</span>
+                            <span className="text-white/80 font-bold truncate block mt-1">
+                              {selectedLead.page_path || selectedLead.metadata?.page_path || "/"}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="block font-bold uppercase text-[9px] text-white/20">Джерело трафіку</span>
+                            <span className="text-white/80 font-bold block mt-1">
+                              {selectedLead.utm_source || "direct"}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="block font-bold uppercase text-[9px] text-white/20">Кампанія</span>
+                            <span className="text-white/80 font-bold block mt-1 truncate">
+                              {selectedLead.utm_campaign || "-"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
             )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* --- FLOATING FLOATING FLOATING FLOATING FLOATING FLOATING FLOATING FLOATING --- */}
 
