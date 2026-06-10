@@ -219,6 +219,7 @@ const PROJECT_LANDINGS: Record<string, Array<{ label: string; url: string; badge
   ],
   sofia: [
     { label: "Основний", url: "https://sofifinsight.vercel.app/", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" },
+    { label: "Інтенсив", url: "https://sofifinsight.vercel.app/intensive", badgeColor: "bg-teal-500/10 text-teal-400 border border-teal-500/20" },
     { label: "Вебінар", url: "https://sofifinsight.vercel.app/web", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20" },
     { label: "Броні", url: "https://sofifinsight.vercel.app/price", badgeColor: "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20" },
     { label: "VSL", url: "https://sofifinsight.vercel.app/sofia-invest", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20" },
@@ -226,7 +227,12 @@ const PROJECT_LANDINGS: Record<string, Array<{ label: string; url: string; badge
     { label: "Міні-курс", url: "https://sofifinsight.vercel.app/minicourse", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20" }
   ],
   valeria: [
-    { label: "Основний", url: "https://pix-ai-ua.vercel.app/", badgeColor: "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20" }
+    { label: "Основний", url: "https://pix-ai-ua.vercel.app/", badgeColor: "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20" },
+    { label: "Офіс", url: "https://pix-ai-ua.vercel.app/office", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" },
+    { label: "Мами", url: "https://pix-ai-ua.vercel.app/moms", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20" },
+    { label: "Б'юті", url: "https://pix-ai-ua.vercel.app/beauty", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20" },
+    { label: "Для тінейджерів", url: "https://pix-ai-ua.vercel.app/teen", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20" },
+    { label: "Для батьків", url: "https://pix-ai-ua.vercel.app/parents", badgeColor: "bg-orange-500/10 text-orange-400 border border-orange-500/20" }
   ],
   clean_klinom: [
     { label: "Основний", url: "https://clean-klinom.vercel.app/", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20" }
@@ -298,20 +304,74 @@ const isLeadMatchingLanding = (lead: any, landingUrl: string) => {
       touch.metadata?.fullUrl || 
       ""
     );
-    if (!touchUrl) return false;
     
-    if (targetHasPath) {
-      return touchUrl.includes(targetNorm);
-    } else {
-      const firstSlashIdx = touchUrl.indexOf("/");
-      if (firstSlashIdx === -1) {
-        return touchUrl === targetNorm;
+    const originalSheet = (touch.metadata?.original_sheet || touch.metadata?.originalSheet || "").trim();
+    const targetSheet = (touch.metadata?.target_sheet || touch.metadata?.targetSheet || "").trim();
+    
+    // 1. URL match
+    if (touchUrl) {
+      let urlMatch = false;
+      if (targetHasPath) {
+        urlMatch = touchUrl.includes(targetNorm);
       } else {
-        const domainPart = touchUrl.substring(0, firstSlashIdx);
-        const pathPart = touchUrl.substring(firstSlashIdx + 1).trim();
-        return domainPart === targetNorm && pathPart === "";
+        const firstSlashIdx = touchUrl.indexOf("/");
+        if (firstSlashIdx === -1) {
+          urlMatch = touchUrl === targetNorm;
+        } else {
+          const domainPart = touchUrl.substring(0, firstSlashIdx);
+          const pathPart = touchUrl.substring(firstSlashIdx + 1).trim();
+          urlMatch = domainPart === targetNorm && pathPart === "";
+        }
+      }
+      if (urlMatch) return true;
+    }
+    
+    // 2. Sheet semantic matching fallback
+    if (targetNorm.includes("/practicum")) {
+      if (originalSheet === "Практикум" || originalSheet === "Practicum_Leads" || targetSheet === "Заявки на практикум") return true;
+    }
+    if (targetNorm.includes("/free-lection") && !targetNorm.includes("vsl-form")) {
+      if (originalSheet === "VSL 1 етап" || originalSheet === "VSL Трафик" || originalSheet === "VLS Урок") return true;
+    }
+    if (targetNorm.includes("/free-lection/vsl-form")) {
+      if (originalSheet === "VSL Форма") return true;
+    }
+    if (targetNorm.includes("/price")) {
+      if (originalSheet === "Бронювання" || originalSheet === "Заявки на практикум" || targetSheet === "Заявки на практикум") return true;
+    }
+    if (targetNorm.includes("/intensive")) {
+      if (targetSheet === "Заявки на інтенсив") return true;
+    }
+    if (targetNorm.includes("/web")) {
+      if (originalSheet === "Лиды Вебинар" || originalSheet === "Webinars" || originalSheet === "Заявки ленд Веб" || originalSheet === "ВЕБ (бот)" || originalSheet === "новый веб") return true;
+    }
+    if (targetNorm.includes("/sofia-invest/lesson")) {
+      if (originalSheet === "Заявки на урок" || originalSheet === "Анкети після уроку") return true;
+    }
+    if (targetNorm.includes("/sofia-invest") && !targetNorm.includes("/lesson")) {
+      if (originalSheet === "VSL Трафик" || originalSheet === "VLS Урок") return true;
+    }
+    if (targetNorm.includes("/office")) {
+      if (originalSheet === "Practicum_Leads") return true;
+    }
+    
+    // 3. Fallback to main page if sheet matches default and target is main page (no path)
+    if (!targetHasPath) {
+      // For Victoria
+      if (targetNorm.includes("victoria-mc.vercel.app")) {
+        if (["Ленд 1", "Ленд 2", "Ленд 3", "МК 2.0", "Автовеб", "Webinars", "Ліди МК"].includes(originalSheet)) return true;
+      }
+      // For Svitlana
+      if (targetNorm.includes("svitlanatape.vercel.app") || targetNorm.includes("svetlanatape.vercel.app")) {
+        if (["Діагностики", "Квіз", "Відповіді бот (19.05)"].includes(originalSheet)) return true;
+      }
+      // For Sofia
+      if (targetNorm.includes("sofifinsight.vercel.app")) {
+        if (!originalSheet && !targetSheet) return true; // default
       }
     }
+    
+    return false;
   }) || false;
 };
 
