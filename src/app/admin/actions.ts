@@ -373,6 +373,18 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
 
     const activeProject = allowedProjects.find((p) => p.slug === activeSlug)!;
 
+    // Check if there is a Head of Sales (ROP) assigned to this project
+    const { data: assignedProfilesData } = await adminSupabase
+      .from("profile_projects")
+      .select("profiles(role)")
+      .eq("project_id", activeProject.id);
+
+    const hasRop = (assignedProfilesData || [])
+      .map((item: any) => item.profiles)
+      .some((p: any) => p && p.role === "rop");
+
+    const isSalesFiltered = profile.role === "sales" && hasRop;
+
     // Fetch all customers with automatic pagination to bypass PostgREST 1000 limit
     const fetchAllCustomers = async () => {
       let results: any[] = [];
@@ -385,7 +397,7 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
           .select("*")
           .eq("project_id", activeProject.id);
 
-        if (profile.role === "sales") {
+        if (isSalesFiltered) {
           query = query.eq("assigned_manager_id", user.id);
         }
 
@@ -410,7 +422,7 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
           .select("*")
           .eq("project_id", activeProject.id);
 
-        if (profile.role === "sales") {
+        if (isSalesFiltered) {
           if (customerIds.length === 0) {
             return [];
           }
