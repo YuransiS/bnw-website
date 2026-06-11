@@ -437,6 +437,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const [kanbanSearchQuery, setKanbanSearchQuery] = useState("");
   const [kanbanTouchFilter, setKanbanTouchFilter] = useState("all");
   const [kanbanSourceFilter, setKanbanSourceFilter] = useState("all");
+  const [activeKanbanCol, setActiveKanbanCol] = useState("Новий лід");
+  const [activeModalTab, setActiveModalTab] = useState("journey");
 
   const applyPreset = (preset: "all" | "30d" | "7d" | "1d") => {
     setDateRangePreset(preset);
@@ -2727,7 +2729,9 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             </div>
           </div>
 
-          <div className="flex gap-4 overflow-x-auto pb-10 min-h-[500px] custom-scrollbar">
+          {/* Desktop Kanban Board View */}
+          <div className="hidden md:flex gap-4 overflow-x-auto pb-10 min-h-[500px] custom-scrollbar">
+
             {PIPELINE_COLUMNS.map((col) => {
               // Filter leads that are in this column state
               const colLeads = kanbanProcessedLeads.filter((l: any) => l.status === col.key);
@@ -2829,6 +2833,137 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                 </div>
               );
             })}
+
+          </div>
+
+          {/* Mobile Kanban Column Switcher */}
+          <div className="md:hidden flex gap-2 overflow-x-auto pb-3 pt-1 mb-4 custom-scrollbar">
+            {PIPELINE_COLUMNS.map((col) => {
+              const colLeadsCount = kanbanProcessedLeads.filter((l: any) => l.status === col.key).length;
+              const isActive = activeKanbanCol === col.key;
+              return (
+                <button
+                  key={col.key}
+                  type="button"
+                  onClick={() => setActiveKanbanCol(col.key)}
+                  className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider shrink-0 transition-all border flex items-center gap-2 cursor-pointer ${
+                    isActive
+                      ? isLight
+                        ? "bg-neutral-900 text-white border-neutral-900 shadow-md"
+                        : "bg-white text-black border-white shadow-lg"
+                      : isLight
+                      ? "bg-white border-neutral-200 text-neutral-500 hover:text-neutral-900"
+                      : "bg-white/5 border-white/5 text-white/40 hover:text-white"
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${col.dotColor}`} />
+                  <span>{col.label}</span>
+                  <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black ${
+                    isActive 
+                      ? isLight ? "bg-black/10 text-black/60" : "bg-black/10 text-black/60"
+                      : "bg-white/5 text-white/30"
+                  }`}>
+                    {colLeadsCount}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Mobile Kanban Cards Column View */}
+          <div className="md:hidden">
+            {(() => {
+              const activeCol = PIPELINE_COLUMNS.find((c) => c.key === activeKanbanCol) || PIPELINE_COLUMNS[0];
+              const colLeads = kanbanProcessedLeads.filter((l: any) => l.status === activeCol.key);
+              return (
+                <div className={`${cardClass} rounded-2xl p-4 flex flex-col space-y-4`}>
+                  {/* Column Header */}
+                  <div className="flex justify-between items-center border-b border-white/5 pb-3">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2.5 h-2.5 rounded-full ${activeCol.dotColor}`} />
+                      <h3 className="text-xs font-black uppercase text-white">{activeCol.label}</h3>
+                    </div>
+                    <span className="text-[10px] font-black text-white/30 bg-white/5 px-2 py-0.5 rounded">
+                      {colLeads.length}
+                    </span>
+                  </div>
+
+                  {/* Cards Area */}
+                  <div className="space-y-3">
+                    {colLeads.length === 0 ? (
+                      <div className="h-28 border border-dashed border-white/5 rounded-xl flex items-center justify-center text-[10px] text-white/20 uppercase font-black">
+                        Колонка порожня
+                      </div>
+                    ) : (
+                      colLeads.map((lead: any) => (
+                        <div
+                          key={lead.id}
+                          onClick={() => {
+                            setSelectedLeadHistory(lead.history);
+                            setSelectedLeadInfo(lead);
+                          }}
+                          className={`p-4 rounded-xl border bg-white/[0.01] hover:bg-white/[0.03] transition-all cursor-pointer relative overflow-hidden group ${
+                            lead.usdPaid > 0 || lead.uahPaid > 0
+                              ? "border-emerald-500/15"
+                              : "border-white/5"
+                          }`}
+                        >
+                          {(lead.usdPaid > 0 || lead.uahPaid > 0) && (
+                            <div className="absolute top-0 right-0 px-2 py-0.5 rounded-bl-lg bg-emerald-500/10 border-l border-b border-emerald-500/20 text-[9px] font-black text-emerald-400">
+                              Оплачено
+                            </div>
+                          )}
+
+                          <div className="space-y-2">
+                            <h4 className="text-xs font-extrabold text-white group-hover:text-emerald-400 transition-all pr-12">
+                              {lead.name}
+                            </h4>
+                            <p className="text-[10px] text-white/40">{lead.phone}</p>
+
+                            <div className="flex flex-wrap gap-1.5 pt-1.5 border-t border-white/5">
+                              {lead.telegram && renderSocialsLink(lead.telegram, "tg")}
+                              <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-white/5 text-white/40 border border-white/5 shrink-0">
+                                {lead.utm_source || "direct"}
+                              </span>
+                              {lead.assigned_manager_name && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20" title={`Менеджер: ${lead.assigned_manager_name}`}>
+                                  👤 {lead.assigned_manager_name.split(" ").slice(0, 2).map((n: string) => n[0]).join("").toUpperCase()}
+                                </span>
+                              )}
+                            </div>
+
+                            {(lead.diagnosticsComment || lead.managerComment) && (
+                              <div className="mt-2 text-[10px] space-y-1 bg-white/[0.02] border border-white/5 p-2 rounded-lg text-white/60">
+                                {lead.diagnosticsComment && (
+                                  <div className="truncate" title={lead.diagnosticsComment}>
+                                    <span className="font-extrabold text-[8px] uppercase tracking-wider text-white/30 mr-1">Запит:</span>
+                                    {lead.diagnosticsComment}
+                                  </div>
+                                )}
+                                {lead.managerComment && (
+                                  <div className="truncate" title={lead.managerComment}>
+                                    <span className="font-extrabold text-[8px] uppercase tracking-wider text-white/30 mr-1">Ком:</span>
+                                    {lead.managerComment}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {lead.usdPaid > 0 || lead.uahPaid > 0 ? (
+                              <p className="text-xs font-black text-emerald-450 mt-1">{formatDualCurrency(lead.usdPaid, lead.uahPaid)}</p>
+                            ) : lead.usdAttempted > 0 || lead.uahAttempted > 0 ? (
+                              <p className="text-xs font-bold text-amber-500/80 mt-1 flex items-center gap-1" title="Спроба оплати (Unpaid Intent)">
+                                ⏳ {formatDualCurrency(lead.usdAttempted, lead.uahAttempted)}
+                              </p>
+                            ) : null}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -2966,7 +3101,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
           {/* CRM Clustered grid table */}
           <div className={`${cardClass} rounded-2xl overflow-hidden shadow-xl`}>
-            <div className={`overflow-x-auto border-b ${borderClass}`}>
+            {/* Desktop Table View */}
+            <div className={`hidden md:block overflow-x-auto border-b ${borderClass}`}>
               <table className="w-full border-collapse text-left text-xs">
                 <thead>
                   <tr className={`${tableHeaderClass} uppercase tracking-widest font-black border-b`}>
@@ -3107,6 +3243,125 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                   )}
                 </tbody>
               </table>
+
+            </div>
+
+            {/* Mobile Card List View */}
+            <div className={`md:hidden divide-y ${isLight ? "divide-neutral-200" : "divide-white/5"}`}>
+              {processedLeads.length === 0 ? (
+                <div className="p-8 text-center text-white/20 italic">Заявки за заданими параметрами відсутні</div>
+              ) : (
+                paginatedLeads.map((lead: any) => {
+                  const col = PIPELINE_COLUMNS.find((c) => c.key === lead.status) || PIPELINE_COLUMNS[0];
+                  const isUnpaidIntent = lead.history.some((o: any) => o.status === "⏳ Очікується оплата" || (o.order_id && !o.order_id.startsWith("ELT_ORD_"))) &&
+                    !lead.history.some((o: any) => o.status === "Купив курс" || o.status === "Купив(-ла) Трипвайер" || o.amount > 0);
+
+                  return (
+                    <div
+                      key={lead.id}
+                      onClick={() => {
+                        setSelectedLeadHistory(lead.history);
+                        setSelectedLeadInfo(lead);
+                      }}
+                      className="p-5 hover:bg-emerald-500/[0.02] active:bg-emerald-500/[0.04] transition-all cursor-pointer space-y-4"
+                    >
+                      {/* Header: Name, Badges & Amount */}
+                      <div className="flex justify-between items-start gap-4">
+                        <div className="space-y-1">
+                          <h3 className={`font-extrabold text-sm flex flex-wrap items-center gap-1.5 ${isLight ? "text-neutral-900" : "text-white"}`}>
+                            {lead.name}
+                            {lead.isMultiSource && (
+                              <span className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                                Мульти-канал
+                              </span>
+                            )}
+                            {isUnpaidIntent && (
+                              <span className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-red-500/10 text-red-400 border border-red-500/20">
+                                Кинув кошик
+                              </span>
+                            )}
+                          </h3>
+                          <div className={`text-[10px] ${textMutedClass} font-semibold truncate max-w-[200px]`} title={lead.visitor_uuid}>
+                            ID: {lead.visitor_uuid?.substring(0, 8)}...
+                          </div>
+                        </div>
+                        
+                        <div className="text-right shrink-0">
+                          {lead.usdPaid > 0 || lead.uahPaid > 0 || lead.eurPaid > 0 ? (
+                            <span className="text-emerald-450 font-black text-xs block">
+                              {formatDualCurrency(lead.usdPaid, lead.uahPaid, lead.eurPaid)}
+                            </span>
+                          ) : lead.usdAttempted > 0 || lead.uahAttempted > 0 || lead.eurAttempted > 0 ? (
+                            <span className="inline-flex items-center gap-1 text-amber-500/80 text-[10px] font-extrabold" title="Спроба оплати (Unpaid Intent)">
+                              ⏳ {formatDualCurrency(lead.usdAttempted, lead.uahAttempted, lead.eurAttempted)}
+                            </span>
+                          ) : (
+                            <span className="text-white/20 text-xs block">—</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Contacts Row */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className={`font-bold ${isLight ? "text-neutral-800" : "text-white/90"}`}>{lead.phone || "Невідомий телефон"}</span>
+                          {lead.phone && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCopyPhone(lead.phone, lead.id);
+                              }}
+                              className={`p-1.5 rounded transition-all cursor-pointer ${isLight ? "bg-neutral-100 hover:bg-neutral-200 text-neutral-500 hover:text-neutral-900" : "bg-white/5 hover:bg-white/10 text-white/40 hover:text-white"}`}
+                            >
+                              {copiedId === lead.id ? (
+                                <Check className="w-3 h-3 text-emerald-450" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex gap-1.5">
+                          {lead.telegram && renderSocialsLink(lead.telegram, "tg")}
+                          {lead.instagram && renderSocialsLink(lead.instagram, "ig")}
+                        </div>
+                      </div>
+
+                      {/* Source, Touch & Status Footer */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-white/5">
+                        <div className="flex items-center gap-2">
+                          <span className={`font-semibold uppercase text-[9px] tracking-wider px-2 py-0.5 rounded ${isLight ? "bg-neutral-100 text-neutral-600 border border-neutral-200" : "bg-white/5 text-white/60 border border-white/5"}`}>
+                            {lead.utm_source || "direct"}
+                          </span>
+                          
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedLeadHistory(lead.history);
+                              setSelectedLeadInfo(lead);
+                            }}
+                            className={`px-2 py-0.5 rounded border transition-all font-black text-[9px] cursor-pointer ${isLight ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-emerald-600" : "bg-white/5 hover:bg-white/10 border-white/5 text-emerald-450"}`}
+                          >
+                            {lead.touchCount} торк.
+                          </button>
+                        </div>
+
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[10px] font-extrabold ${lead.status === "Купив курс" || lead.status === "Купив(-ла) Трипвайер"
+                          ? "bg-emerald-500/10 text-emerald-455 border-emerald-500/20"
+                          : lead.status === "Відмова"
+                            ? "bg-red-500/10 text-red-400 border-red-500/20"
+                            : isLight
+                              ? "bg-neutral-150 border-neutral-300 text-neutral-700"
+                              : "bg-neutral-800 border-neutral-700 text-neutral-300"
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${col.dotColor}`} />
+                          {lead.status}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
 
             {/* Pagination controls */}
@@ -3585,10 +3840,36 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
               </p>
             </div>
 
+            {/* Mobile modal sub-tabs header */}
+            <div className="md:hidden flex border-b border-white/5 pb-2">
+              <button
+                type="button"
+                onClick={() => setActiveModalTab("journey")}
+                className={`flex-1 pb-2 text-center text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+                  activeModalTab === "journey"
+                    ? "border-emerald-500 text-white"
+                    : "border-transparent text-white/45"
+                }`}
+              >
+                Шлях клієнта
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveModalTab("details")}
+                className={`flex-1 pb-2 text-center text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+                  activeModalTab === "details"
+                    ? "border-emerald-500 text-white"
+                    : "border-transparent text-white/45"
+                }`}
+              >
+                Дані & Коментарі
+              </button>
+            </div>
+
             {/* Redesigned Roadmap Timeline Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-grow overflow-hidden">
               {/* Left Column: Timeline list */}
-              <div className="flex-grow overflow-y-auto custom-scrollbar space-y-0 pr-2 pt-2 h-full">
+              <div className={`overflow-y-auto custom-scrollbar space-y-0 pr-2 pt-2 h-full ${activeModalTab === "journey" ? "flex flex-col flex-grow" : "hidden md:flex md:flex-col"}`}>
                 <h4 className="text-[10px] font-black uppercase text-white/40 tracking-widest mb-3">Хронологія шляху клієнта</h4>
                 {selectedLeadHistory.map((touch: any, idx: number) => {
                   const isPaidCourse = touch.status === "Купив курс";
@@ -3785,7 +4066,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
               </div>
 
               {/* Right Column: Lead info, Questionnaire, comments editor & manager assignments */}
-              <div className="overflow-y-auto custom-scrollbar pl-2 space-y-6 h-full border-t md:border-t-0 md:border-l border-white/5 pt-4 md:pt-0 md:pl-6">
+              <div className={`overflow-y-auto custom-scrollbar pl-2 space-y-6 h-full border-t md:border-t-0 md:border-l border-white/5 pt-4 md:pt-0 md:pl-6 ${activeModalTab === "details" ? "block" : "hidden md:block"}`}>
                 {/* Core parameters */}
                 <div className="space-y-3">
                   <span className="text-[10px] font-black uppercase text-white/40 tracking-widest block">Основні параметри</span>

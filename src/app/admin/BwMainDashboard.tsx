@@ -696,8 +696,9 @@ export default function BwMainDashboard({
             )}
           </div>
         ) : (
-          /* Standard Leads Table view with premium features & custom select */
-          <div className={`overflow-x-auto border rounded-xl ${borderClass}`}>
+          <>
+            {/* Desktop Table View */}
+            <div className={`hidden md:block overflow-x-auto border rounded-xl ${borderClass}`}>
             {/* Click Outside overlay when dropdown is open */}
             {activeDropdownId && (
               <div
@@ -852,7 +853,135 @@ export default function BwMainDashboard({
               </tbody>
             </table>
           </div>
-        )}
+
+          {/* Mobile Card List View */}
+          <div className={`md:hidden divide-y ${isLight ? "divide-neutral-200" : "divide-white/5"}`}>
+            {filteredLeads.length === 0 ? (
+              <div className={`p-8 text-center text-sm font-medium ${isLight ? "text-neutral-400" : "text-white/30"}`}>
+                Заявки не знайдені
+              </div>
+            ) : (
+              filteredLeads.map((lead) => {
+                const currentPipelineStatus = parsePipelineStatus(lead.status, lead.button_id);
+                const currentConfig =
+                  PIPELINE_STATUSES.find((s) => s.key === currentPipelineStatus) ||
+                  PIPELINE_STATUSES[0];
+
+                return (
+                  <div
+                    key={lead.id}
+                    className="p-5 hover:bg-emerald-500/[0.02] active:bg-emerald-500/[0.04] transition-all space-y-4"
+                  >
+                    {/* Name and Created Date */}
+                    <div className="flex justify-between items-start gap-4">
+                      <div>
+                        <h3 className={`font-extrabold text-sm ${isLight ? "text-neutral-900" : "text-white"}`}>
+                          {lead.name}
+                        </h3>
+                        <div className={`text-[10px] ${textMutedClass} font-semibold truncate max-w-[200px] mt-0.5`} title={lead.visitor_id}>
+                          ID: {lead.visitor_id?.substring(0, 8)}...
+                        </div>
+                      </div>
+                      <span className={`text-[10px] ${textMutedClass} font-semibold shrink-0`}>
+                        {new Date(lead.created_at).toLocaleDateString("uk-UA")}
+                      </span>
+                    </div>
+
+                    {/* Contacts & Socials Row */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className={`font-bold ${isLight ? "text-neutral-800" : "text-white/90"}`}>{lead.phone}</span>
+                        <button
+                          onClick={() => handleCopyPhone(lead.phone, lead.id)}
+                          className={`p-1.5 rounded transition-all cursor-pointer relative ${isLight ? "bg-neutral-100 hover:bg-neutral-200 text-neutral-550 hover:text-neutral-900" : "bg-white/5 hover:bg-white/10 text-white/40 hover:text-white"}`}
+                          title="Скопіювати номер"
+                        >
+                          {copiedId === lead.id ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-450" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+                      <div className="flex gap-1.5">
+                        {lead.telegram && renderTelegramLink(lead.telegram)}
+                        {lead.instagram && renderInstagramLink(lead.instagram)}
+                      </div>
+                    </div>
+
+                    {/* Source & Status Selector Footer */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-white/5">
+                      <span className={`font-semibold text-[9px] tracking-wider uppercase px-2 py-0.5 rounded ${isLight ? "bg-neutral-100 text-neutral-600 border border-neutral-200" : "bg-white/5 text-white/60 border border-white/5"}`}>
+                        {BUTTON_LABELS[getBaseButtonId(lead.button_id)] || getBaseButtonId(lead.button_id)}
+                      </span>
+
+                      <div className="inline-block relative">
+                        <button
+                          disabled={updatingId === lead.id}
+                          onClick={() =>
+                            setActiveDropdownId(
+                              activeDropdownId === lead.id ? null : lead.id
+                            )
+                          }
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-[9px] font-extrabold transition-all cursor-pointer ${
+                            currentConfig.colorClass
+                          } disabled:opacity-50`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${currentConfig.dotColor} animate-pulse`} />
+                          <span>{currentConfig.label}</span>
+                          <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+                        </button>
+
+                        {/* Dropdown Menu Container */}
+                        {activeDropdownId === lead.id && (
+                          <div className={`absolute right-0 mt-2 w-52 rounded-2xl p-2 animate-in fade-in slide-in-from-top-2 duration-200 z-50 ${dropdownClass}`}>
+                            <div className={`text-[9px] font-black uppercase tracking-wider px-3 py-1.5 border-b mb-1.5 ${isLight ? "text-neutral-400 border-neutral-100" : "text-white/30 border-white/5"}`}>
+                              Змінити статус
+                            </div>
+                            <div className="space-y-0.5 max-h-48 overflow-y-auto custom-scrollbar">
+                              {PIPELINE_STATUSES.map((statusItem) => {
+                                const isSelected = currentPipelineStatus === statusItem.key;
+                                return (
+                                  <button
+                                    key={statusItem.key}
+                                    onClick={async () => {
+                                      setActiveDropdownId(null);
+                                      await handlePipelineStatusChange(
+                                        lead.id,
+                                        statusItem.key,
+                                        lead.button_id
+                                      );
+                                    }}
+                                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-[11px] font-bold transition-all duration-150 cursor-pointer ${
+                                      isSelected
+                                        ? isLight ? "bg-neutral-100 text-neutral-900" : "bg-white/10 text-white"
+                                        : isLight ? "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50" : "text-white/60 hover:text-white hover:bg-white/5"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-1.5">
+                                      <span
+                                        className={`w-1.5 h-1.5 rounded-full ${statusItem.dotColor}`}
+                                      />
+                                      <span>{statusItem.label}</span>
+                                    </div>
+                                    {isSelected && (
+                                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </>
+      )}
       </div>
     </div>
   );
