@@ -334,6 +334,25 @@ const isLeadMatchingLanding = (lead: any, landingUrl: string) => {
     }
     
     // 2. Sheet semantic matching fallback
+    if (targetNorm.includes("svitlana3web.vercel.app")) {
+      if (originalSheet === "ВЕБ (бот)" || originalSheet === "Заявки ленд Веб" || originalSheet === "новый веб") return true;
+    }
+    if (targetNorm.includes("facedetox.vercel.app")) {
+      if (originalSheet === "новый веб") return true;
+    }
+    if (targetNorm.includes("tipstarinnyaa.vercel.app")) {
+      if (originalSheet === "Квіз") return true;
+    }
+    if (targetNorm.includes("antibotox.vercel.app")) {
+      if (originalSheet === "Заявки ленд веб") return true;
+    }
+    if (targetNorm.includes("zalomu-sny.vercel.app")) {
+      if (originalSheet === "Заломи") return true;
+    }
+    if (targetNorm.includes("body-taping")) {
+      if (originalSheet === "Тейпування тіла" || tariff === "body_taping") return true;
+    }
+
     if (targetNorm.includes("/practicum")) {
       if (originalSheet === "Практикум" || originalSheet === "Practicum_Leads" || targetSheet === "Заявки на практикум") return true;
     }
@@ -4036,7 +4055,17 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                                 {isElt && (
                                   <span className="px-2.5 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-extrabold text-emerald-400 flex items-center gap-1.5" title="Імпортовано з таблиць Google за допомогою ELT">
                                     <FileSpreadsheet className="w-3 h-3 shrink-0" />
-                                    Імпорт: {origSheet || "Sheet"} {rowIdx ? `(Рядок ${rowIdx})` : ""}
+                                    {(() => {
+                                      const sheetLower = String(origSheet).toLowerCase().trim();
+                                      if (sheetLower === "веб (бот)") return "3 Webinars (legacy)";
+                                      if (sheetLower === "новый веб") return "Face Detox (legacy)";
+                                      if (sheetLower === "діагностики") return "Diagnostics (legacy)";
+                                      if (sheetLower === "квіз") return "Quiz (legacy)";
+                                      if (sheetLower === "відповіді бот (19.05)") return "Bot Answers (legacy)";
+                                      if (sheetLower === "заявки ленд веб" || sheetLower === "заявки ленд веб") return "Antibotox (legacy)";
+                                      if (sheetLower === "vsl сайт" || sheetLower === "vsl сайт трафік") return "VSL site (legacy)";
+                                      return `Імпорт: ${origSheet || "Sheet"}${rowIdx ? ` (Рядок ${rowIdx})` : ""}`;
+                                    })()}
                                   </span>
                                 )}
                               </div>
