@@ -692,7 +692,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         }
       });
 
-      return Array.from(new Set(answers)).join(" | ");
+      return Array.from(new Set(answers)).join("\n");
     };
 
     // Step 1: Cluster leads using exact identifiers
@@ -1037,6 +1037,19 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       return true;
     });
   }, [clusteredLeads, kanbanSearchQuery, kanbanTouchFilter, kanbanSourceFilter, selectedLanding]);
+
+  const displayedLandings = useMemo(() => {
+    const landings = PROJECT_LANDINGS[activeSlug] || [];
+    if (activeTab !== "quizzes") return landings;
+    return landings.filter((land) => {
+      // Only keep landings that have at least one lead with a quiz in clusteredLeads
+      return clusteredLeads.some((lead: any) => 
+        isLeadMatchingLanding(lead, land.url) && 
+        lead.diagnosticsComment && 
+        lead.diagnosticsComment.trim().length > 0
+      );
+    });
+  }, [activeSlug, activeTab, clusteredLeads]);
 
   const paginatedLeads = useMemo(() => {
     const startIndex = (currentPage - 1) * pageSize;
@@ -1986,7 +1999,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       </div>
 
       {/* Landing Selectors Filter Row */}
-      {viewType === "single" && PROJECT_LANDINGS[activeSlug] && PROJECT_LANDINGS[activeSlug].length > 0 && (
+      {/* Landing Selectors Filter Row */}
+      {viewType === "single" && displayedLandings && displayedLandings.length > 0 && (
         <div className={`${cardClass} p-5 rounded-2xl mb-8 flex flex-col gap-4 animate-in fade-in duration-300`}>
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-white/5">
             <div className="flex items-center gap-2">
@@ -2011,24 +2025,24 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
             <div className="flex items-center gap-2">
               <Globe className="w-4 h-4 text-emerald-500 animate-pulse" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-505">
                 {selectedLanding === "all" ? "Активні всі воронки" : "Показ статистики за обраним сайтом"}
               </span>
             </div>
           </div>
 
           {/* Paid products row */}
-          {PROJECT_LANDINGS[activeSlug].some(l => l.type === "paid") && (
+          {displayedLandings.some(l => l.type === "paid") && (
             <div className="flex flex-wrap items-center gap-2">
               <span className={`text-[9px] font-extrabold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1.5 rounded-lg mr-2`}>
                 Платні продукти:
               </span>
-              {PROJECT_LANDINGS[activeSlug].filter(l => l.type === "paid").map((land, idx) => {
+              {displayedLandings.filter(l => l.type === "paid").map((land, idx) => {
                 const isSelected = selectedLanding === land.url;
                 return (
                   <div key={idx} className="flex items-center gap-0.5">
                     <button
-                      onClick={() => setSelectedLanding(land.url)}
+                       onClick={() => setSelectedLanding(land.url)}
                       className={`px-4 py-2 rounded-l-xl text-xs font-black transition-all cursor-pointer ${
                         isSelected
                           ? isLight
@@ -2065,12 +2079,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           )}
 
           {/* Free funnels/webinars row */}
-          {PROJECT_LANDINGS[activeSlug].some(l => l.type === "free") && (
+          {displayedLandings.some(l => l.type === "free") && (
             <div className="flex flex-wrap items-center gap-2">
               <span className={`text-[9px] font-extrabold uppercase tracking-wider bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2.5 py-1.5 rounded-lg mr-2`}>
                 Безкоштовні / Воронки:
               </span>
-              {PROJECT_LANDINGS[activeSlug].filter(l => l.type === "free").map((land, idx) => {
+              {displayedLandings.filter(l => l.type === "free").map((land, idx) => {
                 const isSelected = selectedLanding === land.url;
                 return (
                   <div key={idx} className="flex items-center gap-0.5">
@@ -3871,7 +3885,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                             </div>
                           </div>
                           <button
-                            onClick={() => setSelectedLeadHistory(selectedLead.history)}
+                            onClick={() => {
+                              setSelectedLeadInfo(selectedLead);
+                              setSelectedLeadHistory(selectedLead.history);
+                            }}
                             className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-black text-xs font-black rounded-xl transition-all cursor-pointer"
                           >
                             Історія ліда
