@@ -315,6 +315,11 @@ const isLeadMatchingLanding = (lead: any, landingUrl: string) => {
       let urlMatch = false;
       if (targetHasPath) {
         urlMatch = touchUrl.includes(targetNorm);
+        
+        // Alias matching for Svitlana body-taping
+        if (!urlMatch && targetNorm.includes("body-taping")) {
+          urlMatch = touchUrl.includes("/body-taping");
+        }
       } else {
         const firstSlashIdx = touchUrl.indexOf("/");
         if (firstSlashIdx === -1) {
