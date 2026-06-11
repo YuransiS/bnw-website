@@ -439,6 +439,20 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   );
   const { theme, toggleTheme } = useTheme();
   const [searchQuery, setSearchQuery] = useState("");
+  const [isDevMode, setIsDevMode] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("crm_dev_mode");
+    if (saved === "true") {
+      setIsDevMode(true);
+    }
+  }, []);
+
+  const toggleDevMode = () => {
+    const newVal = !isDevMode;
+    setIsDevMode(newVal);
+    localStorage.setItem("crm_dev_mode", String(newVal));
+  };
   const [showUnresolvedModal, setShowUnresolvedModal] = useState(false);
   const [updatingCurrencyId, setUpdatingCurrencyId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
@@ -1011,6 +1025,150 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     const startIndex = (currentPage - 1) * pageSize;
     return processedLeads.slice(startIndex, startIndex + pageSize);
   }, [processedLeads, currentPage]);
+
+  const diagnosticsIssues = useMemo(() => {
+    if (viewType !== "single" || clusteredLeads.length === 0) {
+      return { nameless: [], unmatchedUrls: [], currencyErrors: [] };
+    }
+
+    const nameless: any[] = [];
+    const unmatchedUrls: Record<string, { count: number; rawUrl: string; originalSheet: string; sampleLead: string }> = {};
+    const currencyErrors: any[] = [];
+
+    clusteredLeads.forEach((lead: any) => {
+      const nameVal = lead.name?.trim();
+      const hasContacts = lead.phone || lead.telegram || lead.email;
+      if ((!nameVal || nameVal === "Невідомий") && hasContacts) {
+        nameless.push(lead);
+      }
+
+      lead.history?.forEach((touch: any) => {
+        const url = touch.page_url || touch.metadata?.page_url || "";
+        if (url) {
+          const matched = PROJECT_LANDINGS[activeSlug]?.some((land) => {
+            const normLand = land.url.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").toLowerCase();
+            const normTouch = url.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").toLowerCase();
+            return normTouch.includes(normLand);
+          });
+          if (!matched) {
+            const cleanUrl = url.replace(/^https?:\/\//i, "").replace(/^www\./i, "").trim();
+            if (!unmatchedUrls[cleanUrl]) {
+              unmatchedUrls[cleanUrl] = {
+                count: 0,
+                rawUrl: url,
+                originalSheet: touch.metadata?.original_sheet || touch.metadata?.target_sheet || "direct",
+                sampleLead: lead.name
+              };
+            }
+            unmatchedUrls[cleanUrl].count++;
+          }
+        }
+
+        const amt = Number(touch.amount || 0);
+        if (amt > 0) {
+          const metaCurrency = String(
+            touch.metadata?.currency || 
+            touch.metadata?.lead?.currency || 
+            touch.metadata?.raw_row?.currency ||
+            ""
+          ).trim().toLowerCase();
+          if (!["usd", "$", "uah", "₴", "eur", "€"].includes(metaCurrency)) {
+            currencyErrors.push({
+              leadId: lead.id,
+              leadName: lead.name,
+              amount: amt,
+              currency: metaCurrency || "missing",
+              date: getLeadDate(touch)
+            });
+          }
+        }
+      });
+    });
+
+    return {
+      nameless,
+      unmatchedUrls: Object.values(unmatchedUrls).sort((a, b) => b.count - a.count),
+      currencyErrors
+    };
+  }, [clusteredLeads, viewType, activeSlug]);
+
+  useEffect(() => {
+    if (!isDevMode || viewType !== "single" || clusteredLeads.length === 0) return;
+
+    console.groupCollapsed("🐞 CRM Developer Diagnostics: DSU & Mappings");
+    console.log(`Total raw leads/orders: ${rawLeads.length}`);
+    console.log(`Clustered unique customer profiles: ${clusteredLeads.length}`);
+    
+    // Find URL matching issues
+    const urlMismatches: any[] = [];
+    const namelessLeads: any[] = [];
+    const missingCurrency: any[] = [];
+
+    clusteredLeads.forEach((lead: any) => {
+      // 1. Nameless contacts
+      const nameVal = lead.name?.trim();
+      const hasContacts = lead.phone || lead.telegram || lead.email;
+      if ((!nameVal || nameVal === "Невідомий") && hasContacts) {
+        namelessLeads.push({
+          id: lead.id,
+          phone: lead.phone,
+          telegram: lead.telegram,
+          email: lead.email,
+          project: lead.project_id
+        });
+      }
+
+      // 2. Mismatched URLs
+      lead.history?.forEach((touch: any) => {
+        const url = touch.page_url || touch.metadata?.page_url || "";
+        if (url) {
+          // Check if this URL is matched by any rule in PROJECT_LANDINGS
+          const matched = PROJECT_LANDINGS[activeSlug]?.some((land) => {
+            const normLand = land.url.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").toLowerCase();
+            const normTouch = url.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").toLowerCase();
+            return normTouch.includes(normLand);
+          });
+          if (!matched) {
+            urlMismatches.push({
+              leadName: lead.name,
+              url,
+              sheet: touch.metadata?.original_sheet || touch.metadata?.target_sheet || "direct"
+            });
+          }
+        }
+
+        // 3. Currency errors
+        const amt = Number(touch.amount || 0);
+        if (amt > 0) {
+          const metaCurrency = String(
+            touch.metadata?.currency || 
+            touch.metadata?.lead?.currency || 
+            touch.metadata?.raw_row?.currency ||
+            ""
+          ).trim().toLowerCase();
+          if (!["usd", "$", "uah", "₴", "eur", "€"].includes(metaCurrency)) {
+            missingCurrency.push({
+              leadName: lead.name,
+              amount: amt,
+              currency: metaCurrency || "missing"
+            });
+          }
+        }
+      });
+    });
+
+    if (namelessLeads.length > 0) {
+      console.warn(`⚠️ Found ${namelessLeads.length} leads with contact details but missing/unknown names:`, namelessLeads);
+    }
+    if (urlMismatches.length > 0) {
+      console.warn(`⚠️ Found ${urlMismatches.length} touchpoint URLs not matching any registered landings in PROJECT_LANDINGS:`, urlMismatches);
+    }
+    if (missingCurrency.length > 0) {
+      console.error(`❌ Found ${missingCurrency.length} transactions with unresolved/missing currency codes:`, missingCurrency);
+    }
+
+    console.groupEnd();
+  }, [isDevMode, clusteredLeads, rawLeads.length, viewType, activeSlug]);
 
   const uniqueSources = useMemo(() => {
     const sources = new Set<string>();
@@ -1637,6 +1795,22 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             </button>
           )}
 
+          {/* Developer Mode Toggle */}
+          <button
+            onClick={toggleDevMode}
+            className={`px-4 py-3 rounded-xl border transition-all cursor-pointer flex items-center gap-2 text-xs font-black ${
+              isDevMode
+                ? "bg-red-500/10 border-red-500/30 text-red-400"
+                : isLight
+                ? "border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-500"
+                : "border-white/10 bg-white/[0.02] hover:bg-white/[0.06] text-white/50"
+            }`}
+            title="Перемкнути режим розробника"
+          >
+            <AlertCircle className="w-4 h-4 animate-pulse" />
+            <span>{isDevMode ? "Dev Active" : "Dev Mode"}</span>
+          </button>
+
           {/* Theme Toggle */}
           <button
             onClick={handleToggleTheme}
@@ -1774,6 +1948,22 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           >
             <LinkIcon className="w-4 h-4" />
             Платіжні кнопки
+          </button>
+        )}
+
+        {/* Diagnostics Hub Tab - Only if Dev Mode is enabled */}
+        {viewType === "single" && isDevMode && (
+          <button
+            onClick={() => setActiveTab("diagnostics")}
+            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 border border-red-500/20 bg-red-500/5 ${activeTab === "diagnostics"
+                ? isLight
+                  ? "bg-neutral-900 text-white shadow-sm"
+                  : "bg-white text-black shadow-lg"
+                : "text-red-400 hover:text-red-300"
+              }`}
+          >
+            <AlertCircle className="w-4 h-4 animate-pulse" />
+            🐞 Діагностика
           </button>
         )}
       </div>
@@ -3171,6 +3361,11 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                                   Кинув кошик
                                 </span>
                               )}
+                              {isDevMode && (lead.name === "Невідомий" || !lead.name) && (
+                                <span className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-amber-500/10 text-amber-550 border border-amber-500/20" title="Ім'я контакту відсутнє в базі даних">
+                                  Без імені
+                                </span>
+                              )}
                             </div>
                             <div className={`text-[10px] ${textMutedClass} font-semibold truncate max-w-[150px] mt-0.5`} title={lead.visitor_uuid}>
                               Visitor ID: {lead.visitor_uuid}
@@ -3715,6 +3910,143 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         );
       })()}
 
+      {/* 7. DEVELOPER DIAGNOSTICS HUB TAB */}
+      {activeTab === "diagnostics" && viewType === "single" && isDevMode && (
+        <div className="space-y-8 animate-in fade-in duration-300">
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-red-500/[0.02] border border-red-500/10 p-5 rounded-2xl shadow-xl backdrop-blur-md">
+            <div className="space-y-1">
+              <h3 className="text-sm font-black uppercase tracking-widest text-red-400 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 animate-pulse" />
+                🐞 Панель інженерної діагностики
+              </h3>
+              <p className="text-[11px] text-white/45 font-semibold">
+                Автоматичний аналіз розбіжностей у бд, незареєстрованих лендінгів та аномальних UTM-метрик
+              </p>
+            </div>
+            
+            <div className="flex items-center gap-4">
+              <div className="px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-wider text-white/50">
+                Загалом лідів у кластері: {clusteredLeads.length}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className={`${cardClass} p-5 rounded-2xl relative overflow-hidden shadow-xl border-amber-500/10`}>
+              <p className="text-[10px] text-white/40 font-black uppercase tracking-widest">Контакти без імені</p>
+              <p className="text-2xl font-black mt-3 text-amber-500">{diagnosticsIssues.nameless.length}</p>
+              <p className="text-[11px] text-white/30 mt-1 font-semibold">Мають телефон/telegram, але ім'я пусте</p>
+            </div>
+            <div className={`${cardClass} p-5 rounded-2xl relative overflow-hidden shadow-xl border-red-500/10`}>
+              <p className="text-[10px] text-white/40 font-black uppercase tracking-widest">Невідомі URL лендінгів</p>
+              <p className="text-2xl font-black mt-3 text-red-400">{diagnosticsIssues.unmatchedUrls.length}</p>
+              <p className="text-[11px] text-white/30 mt-1 font-semibold">Немає відповідного URL в PROJECT_LANDINGS</p>
+            </div>
+            <div className={`${cardClass} p-5 rounded-2xl relative overflow-hidden shadow-xl border-purple-500/10`}>
+              <p className="text-[10px] text-white/40 font-black uppercase tracking-widest">Аномалії валют</p>
+              <p className="text-2xl font-black mt-3 text-purple-400">{diagnosticsIssues.currencyErrors.length}</p>
+              <p className="text-[11px] text-white/30 mt-1 font-semibold">Транзакції з незареєстрованою валютою</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Unmatched URLs Panel */}
+            <div className={`${cardClass} p-6 rounded-2xl shadow-xl space-y-6 border-red-500/10`}>
+              <h3 className="text-sm font-black uppercase tracking-widest text-red-400 flex items-center gap-2">
+                <Globe className="w-4 h-4" />
+                Некартовані URL-шляхи & Лендінги
+              </h3>
+              <p className="text-xs text-white/40 font-medium">
+                Ці URL були зафіксовані в сесіях користувачів, але відсутні в масиві `PROJECT_LANDINGS` для поточного проекту. Додайте їх у код `PROJECT_LANDINGS`, щоб увімкнути точне відображення конверсій.
+              </p>
+
+              <div className="overflow-x-auto border border-white/5 rounded-xl">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead>
+                    <tr className="bg-white/[0.02] text-white/40 uppercase tracking-widest font-black border-b border-white/5">
+                      <th className="p-3">Шлях / URL</th>
+                      <th className="p-3 text-center">Переходів</th>
+                      <th className="p-3">Джерело / Sheet</th>
+                      <th className="p-3">Приклад ліда</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 text-white/80">
+                    {diagnosticsIssues.unmatchedUrls.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="p-6 text-center text-white/20 italic">Усі URL успішно картовані!</td>
+                      </tr>
+                    ) : (
+                      diagnosticsIssues.unmatchedUrls.map((item: any, idx: number) => (
+                        <tr key={idx} className="hover:bg-white/[0.01]">
+                          <td className="p-3 font-mono text-[11px] text-white select-all max-w-xs truncate" title={item.rawUrl}>
+                            {item.rawUrl}
+                          </td>
+                          <td className="p-3 text-center font-extrabold text-red-400">{item.count}</td>
+                          <td className="p-3 font-semibold text-neutral-400">{item.originalSheet}</td>
+                          <td className="p-3 text-white/60 font-medium">{item.sampleLead}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Nameless Leads Panel */}
+            <div className={`${cardClass} p-6 rounded-2xl shadow-xl space-y-6 border-amber-500/10`}>
+              <h3 className="text-sm font-black uppercase tracking-widest text-amber-500 flex items-center gap-2">
+                <Users className="w-4 h-4" />
+                Контакти з невідомим ім'ям
+              </h3>
+              <p className="text-xs text-white/40 font-medium">
+                Ці ліди залишили свої контактні дані, але їхні імена в базі пусті або записані як "Невідомий". Ви можете використати їхній телефон чи Telegram для пошуку.
+              </p>
+
+              <div className="overflow-x-auto border border-white/5 rounded-xl max-h-[350px] custom-scrollbar">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead>
+                    <tr className="bg-white/[0.02] text-white/40 uppercase tracking-widest font-black border-b border-white/5">
+                      <th className="p-3">Телефон</th>
+                      <th className="p-3">Telegram</th>
+                      <th className="p-3">Email</th>
+                      <th className="p-3 text-center">Дія</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 text-white/80">
+                    {diagnosticsIssues.nameless.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="p-6 text-center text-white/20 italic">Контактів без імені не знайдено</td>
+                      </tr>
+                    ) : (
+                      diagnosticsIssues.nameless.map((lead: any) => (
+                        <tr key={lead.id} className="hover:bg-white/[0.01]">
+                          <td className="p-3 font-bold text-white">{lead.phone || "—"}</td>
+                          <td className="p-3 text-[#81D8D0] font-bold">
+                            {lead.telegram ? `@${lead.telegram}` : "—"}
+                          </td>
+                          <td className="p-3 text-neutral-400">{lead.email || "—"}</td>
+                          <td className="p-3 text-center">
+                            <button
+                              onClick={() => {
+                                setSelectedLeadHistory(lead.history);
+                                setSelectedLeadInfo(lead);
+                              }}
+                              className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-white font-extrabold text-[10px] cursor-pointer"
+                            >
+                              Докладно
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* --- FLOATING FLOATING FLOATING FLOATING FLOATING FLOATING FLOATING FLOATING --- */}
 
       {/* Manual lead insertion modal overlay */}
@@ -4215,6 +4547,56 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                     {isAssigningManager && (
                       <p className="text-[10px] text-emerald-455 animate-pulse font-semibold">Оновлення відповідального...</p>
                     )}
+                  </div>
+                )}
+
+                {/* 🐞 Developer Diagnostics Collapsible Section (Only if isDevMode) */}
+                {isDevMode && (
+                  <div className="border border-red-500/20 bg-red-500/5 p-4 rounded-2xl space-y-3 mt-4">
+                    <h4 className="text-[10px] font-black uppercase text-red-400 tracking-widest flex items-center gap-2">
+                      <AlertCircle className="w-3.5 h-3.5 animate-pulse" />
+                      🐞 Developer Diagnostics
+                    </h4>
+                    <div className="space-y-2 text-[11px]">
+                      <div>
+                        <span className="text-white/30 uppercase text-[9px] font-bold block">Customer UUID</span>
+                        <span className="font-mono text-white/80 select-all">{selectedLeadInfo.visitor_uuid || "—"}</span>
+                      </div>
+                      <div>
+                        <span className="text-white/30 uppercase text-[9px] font-bold block">Customer ID (Primary Key)</span>
+                        <span className="font-mono text-white/80 select-all">{selectedLeadInfo.customerId || "—"}</span>
+                      </div>
+                      <div>
+                        <span className="text-white/30 uppercase text-[9px] font-bold block">DSU History Size</span>
+                        <span className="text-white/80 font-bold">{selectedLeadInfo.history?.length || 0} items</span>
+                      </div>
+                      <div>
+                        <span className="text-white/30 uppercase text-[9px] font-bold block">Stitching Criteria Logs</span>
+                        <span className="text-white/80 font-medium">
+                          {selectedLeadInfo.phone ? `Matched by Phone: ${selectedLeadInfo.phone}. ` : ""}
+                          {selectedLeadInfo.telegram ? `Matched by Telegram: ${selectedLeadInfo.telegram}. ` : ""}
+                          {selectedLeadInfo.email ? `Matched by Email: ${selectedLeadInfo.email}. ` : ""}
+                        </span>
+                      </div>
+                      <div className="pt-2 border-t border-white/5">
+                        <span className="text-white/30 uppercase text-[9px] font-bold block mb-1">Raw JSON Payload</span>
+                        <pre className="p-3 bg-black/60 rounded-xl overflow-x-auto text-[10px] text-emerald-400 font-mono max-h-48 custom-scrollbar">
+                          {JSON.stringify({
+                            id: selectedLeadInfo.id,
+                            name: selectedLeadInfo.name,
+                            phone: selectedLeadInfo.phone,
+                            telegram: selectedLeadInfo.telegram,
+                            email: selectedLeadInfo.email,
+                            status: selectedLeadInfo.status,
+                            utm_source: selectedLeadInfo.utm_source,
+                            utm_medium: selectedLeadInfo.utm_medium,
+                            utm_campaign: selectedLeadInfo.utm_campaign,
+                            metadata: selectedLeadInfo.metadata,
+                            history: selectedLeadInfo.history
+                          }, null, 2)}
+                        </pre>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
