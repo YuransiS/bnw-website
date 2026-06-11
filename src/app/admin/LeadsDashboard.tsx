@@ -306,8 +306,22 @@ const isLeadMatchingLanding = (lead: any, landingUrl: string) => {
       ""
     );
     
-    const originalSheet = (touch.metadata?.original_sheet || touch.metadata?.originalSheet || "").trim();
-    const targetSheet = (touch.metadata?.target_sheet || touch.metadata?.targetSheet || "").trim();
+    const originalSheet = (
+      touch.metadata?.original_sheet || 
+      touch.metadata?.originalSheet || 
+      touch.metadata?.raw_row?.original_sheet ||
+      touch.metadata?.raw_row?.originalSheet ||
+      ""
+    ).trim();
+    
+    const targetSheet = (
+      touch.metadata?.target_sheet || 
+      touch.metadata?.targetSheet || 
+      touch.metadata?.raw_row?.target_sheet || 
+      touch.metadata?.raw_row?.targetSheet ||
+      touch.metadata?.raw_row?.raw_payload?.sheet_name ||
+      ""
+    ).trim();
     const tariff = (touch.metadata?.tariff || touch.metadata?.raw_row?.tariff || "").trim();
     
     // 1. URL match
@@ -836,10 +850,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         const isUsd = !isEur && (["usd", "$"].includes(metaCurrency) || 
                       orderSlug === "sofia" || 
                       orderSlug === "valeria" || 
-                      orderSlug === "svitlana" ||
                       activeProject?.slug === "sofia" || 
-                      activeProject?.slug === "valeria" ||
-                      activeProject?.slug === "svitlana");
+                      activeProject?.slug === "valeria");
 
         const isProjectAlwaysTripwire = 
           ["sofia", "valeria", "svitlana"].includes(orderSlug) || 
@@ -881,12 +893,17 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       const utm_content = normalizedGroupLeads.find((l) => l.utm_content)?.utm_content || "";
       const utm_term = normalizedGroupLeads.find((l) => l.utm_term)?.utm_term || "";
 
+      const page_path = normalizedGroupLeads.find((l) => l.page_path && l.page_path !== "/")?.page_path || primaryLead.page_path || "/";
+      const page_url = normalizedGroupLeads.find((l) => l.page_url && l.page_url !== "")?.page_url || primaryLead.page_url || "";
+
       return {
         ...primaryLead,
         name: primaryLead.name || "Невідомий",
         phone: primaryLead.phone || "",
         telegram: primaryLead.telegram || "",
         email: primaryLead.email || "",
+        page_path,
+        page_url,
         status: finalStatus,
         usdPaid: usdCoursePaid,
         uahPaid: uahCoursePaid,

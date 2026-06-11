@@ -222,7 +222,7 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
             const amt = Number(o.amount || 0);
             const metaCurrency = String(o.metadata?.currency || o.metadata?.lead?.currency || "").trim().toLowerCase();
 
-            const isUsd = ["usd", "$"].includes(metaCurrency) || proj.slug === "sofia" || proj.slug === "valeria" || proj.slug === "svitlana";
+            const isUsd = ["usd", "$"].includes(metaCurrency) || proj.slug === "sofia" || proj.slug === "valeria";
             const isEur = ["eur", "€"].includes(metaCurrency);
 
             if (isUsd) {
@@ -294,7 +294,7 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
           const metaCurrency = String(o.metadata?.currency || o.metadata?.lead?.currency || "").trim().toLowerCase();
 
           const orderProj = projects.find(p => p.id === o.project_id);
-          const isUsd = ["usd", "$"].includes(metaCurrency) || orderProj?.slug === "sofia" || orderProj?.slug === "valeria" || orderProj?.slug === "svitlana";
+          const isUsd = ["usd", "$"].includes(metaCurrency) || orderProj?.slug === "sofia" || orderProj?.slug === "valeria";
           const isEur = ["eur", "€"].includes(metaCurrency);
 
           if (isUsd) {
