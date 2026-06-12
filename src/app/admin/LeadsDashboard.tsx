@@ -899,9 +899,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           else if (isEur) eurTripwirePaid += amt;
           else uahTripwirePaid += amt;
         } else {
-          if (isUsd) usdAttempted += amt;
-          else if (isEur) eurAttempted += amt;
-          else uahAttempted += amt;
+          // Use Math.max to prevent multiple failed checkout attempts from summing up
+          if (isUsd) usdAttempted = Math.max(usdAttempted, amt);
+          else if (isEur) eurAttempted = Math.max(eurAttempted, amt);
+          else uahAttempted = Math.max(uahAttempted, amt);
         }
       });
 
@@ -919,15 +920,26 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       // Extract unique tags and source indicators
       const isMultiSource = new Set(normalizedGroupLeads.map((l) => getTouchUtm(l, "source")).filter(Boolean)).size > 1;
 
-      // Extract the first non-empty UTM parameters from the group history to prevent loss during DSU mapping
-      const utm_source = normalizedGroupLeads.map((l) => getTouchUtm(l, "source")).find(Boolean) || "";
-      const utm_medium = normalizedGroupLeads.map((l) => getTouchUtm(l, "medium")).find(Boolean) || "";
-      const utm_campaign = normalizedGroupLeads.map((l) => getTouchUtm(l, "campaign")).find(Boolean) || "";
-      const utm_content = normalizedGroupLeads.map((l) => getTouchUtm(l, "content")).find(Boolean) || "";
-      const utm_term = normalizedGroupLeads.map((l) => getTouchUtm(l, "term")).find(Boolean) || "";
+      // Separate actual conversion touches from traffic clicks to prioritize real ad attribution
+      const actualOrdersDesc = normalizedGroupLeads
+        .filter((l) => l.status !== "Клик" && l.status !== "КликФормы")
+        .sort((a, b) => getLeadDate(b).getTime() - getLeadDate(a).getTime());
+
+      const coldClicksDesc = normalizedGroupLeads
+        .filter((l) => l.status === "Клик" || l.status === "КликФормы")
+        .sort((a, b) => getLeadDate(b).getTime() - getLeadDate(a).getTime());
+
+      const prioritizedTouches = [...actualOrdersDesc, ...coldClicksDesc];
+
+      // Extract the latest non-empty UTM parameters from the prioritized touches
+      const utm_source = prioritizedTouches.map((l) => getTouchUtm(l, "source")).find(Boolean) || "";
+      const utm_medium = prioritizedTouches.map((l) => getTouchUtm(l, "medium")).find(Boolean) || "";
+      const utm_campaign = prioritizedTouches.map((l) => getTouchUtm(l, "campaign")).find(Boolean) || "";
+      const utm_content = prioritizedTouches.map((l) => getTouchUtm(l, "content")).find(Boolean) || "";
+      const utm_term = prioritizedTouches.map((l) => getTouchUtm(l, "term")).find(Boolean) || "";
 
       const page_path = normalizedGroupLeads.find((l) => l.page_path && l.page_path !== "/")?.page_path || primaryLead.page_path || "/";
-      const page_url = normalizedGroupLeads.map(getTouchPageUrl).find((url) => url !== "") || getTouchPageUrl(primaryLead);
+      const page_url = prioritizedTouches.map(getTouchPageUrl).find((url) => url !== "") || getTouchPageUrl(primaryLead);
 
       return {
         ...primaryLead,
