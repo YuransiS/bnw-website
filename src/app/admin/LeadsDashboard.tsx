@@ -630,6 +630,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     }).catch((err) => {
       console.error("Failed to fetch dashboard data:", err);
       if (isMounted) {
+        setDashboardData((prev: any) => ({ ...prev, error: err.message || "Невідома помилка" }));
         setIsLoading(false);
       }
     });
@@ -977,17 +978,24 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     );
   };
 
-  if (viewType === "none" || (allowedProjects.length === 0 && role !== "admin" && role !== "superman")) {
+  if (viewType === "none" || allowedProjects.length === 0 || dashboardData?.error) {
+    const hasError = !!dashboardData?.error;
     return (
       <div className={`${bgClass} min-h-screen transition-all font-sans w-full max-w-full pb-20 flex flex-col items-center justify-center text-center p-6 ${isLight ? "theme-light" : ""}`}>
-        <div className="w-16 h-16 rounded-full bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 flex items-center justify-center mb-6 shadow-[0_0_20px_rgba(234,179,8,0.1)]">
-          <Briefcase className="w-8 h-8 animate-pulse" />
+        <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-6 shadow-lg ${
+          hasError 
+            ? "bg-red-500/10 border border-red-500/20 text-red-500" 
+            : "bg-yellow-500/10 border border-yellow-500/20 text-yellow-500"
+        }`}>
+          {hasError ? <AlertCircle className="w-8 h-8 animate-pulse" /> : <Briefcase className="w-8 h-8 animate-pulse" />}
         </div>
         <h1 className="text-2xl font-black text-white uppercase tracking-tight mb-3">
-          Немає доступних проектів
+          {hasError ? "Помилка завантаження" : "Немає доступних проектів"}
         </h1>
         <p className="text-white/50 text-sm max-w-md leading-relaxed mb-6">
-          Ваш профіль підтверджено з роллю <span className="text-emerald-400 font-extrabold uppercase">{role === "admin" || role === "superman" ? "Супермен" : role === "producer" ? "Продюсер" : role === "rop" ? "Керівник ВП (РОП)" : role === "sales" ? "Відділ продажів" : role}</span>, але адміністратор ще не прив'язав жодного проекту до вашого акаунту. Будь ласка, зверніться до Супермена для налаштування доступів.
+          {hasError 
+            ? `Не вдалося завантажити дані аналитики: ${dashboardData.error}` 
+            : `Ваш профіль підтверджено з роллю ${role === "admin" || role === "superman" ? "Супермен" : role === "producer" ? "Продюсер" : role === "rop" ? "Керівник ВП (РОП)" : role === "sales" ? "Відділ продажів" : role}, але в системі немає активних проектів або вони не прив'язані до вашого акаунту. Будь ласка, зверніться до Супермена для налаштування доступів.`}
         </p>
       </div>
     );

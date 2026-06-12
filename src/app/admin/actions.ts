@@ -55,27 +55,14 @@ export async function getSessionAndAccess(selectedProjectSlug?: string) {
   let allowedProjects: { id: string; name: string; slug: string }[] = [];
 
   if (isSuperman) {
-    // Superman role sees all projects except isolated 'bw_main' unless explicitly assigned
-    const { data: allProj } = await supabase
+    // Superman role sees all active projects without checking profile_projects mapping and RLS
+    const { data: allProj } = await adminSupabase
       .from("projects")
       .select("id, name, slug, is_active")
       .order("name");
     const projectsList = allProj || [];
 
-    const { data: explicitAssignments } = await supabase
-      .from("profile_projects")
-      .select("project_id")
-      .eq("profile_id", user.id);
-
-    const assignedProjectIds = new Set((explicitAssignments || []).map((a) => a.project_id));
-
-    allowedProjects = projectsList.filter((p) => {
-      if (!p.is_active) return false;
-      if (p.slug === "bw_main") {
-        return isSuperman || assignedProjectIds.has(p.id);
-      }
-      return true;
-    });
+    allowedProjects = projectsList.filter((p) => p.is_active);
   } else {
     const { data } = await supabase
       .from("profile_projects")
