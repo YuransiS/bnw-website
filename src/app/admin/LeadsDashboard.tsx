@@ -48,6 +48,7 @@ import {
   updateOrderCurrencyAction
 } from "./actions";
 import { useTheme } from "./ThemeProvider";
+import { statusMapper } from "@/lib/statusMapper";
 
 // Safe locale number formatting to avoid server/client hydration mismatch
 const formatLocaleNumber = (num: number) => {
@@ -766,7 +767,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     const normalizeStatus = (lead: any): string => {
       const s = lead.status;
       if (!s) return "Новий лід";
-      const lower = s.toLowerCase().trim();
+      const normalized = statusMapper.normalize(s);
+      
       const originalSheet = String(lead.metadata?.original_sheet || lead.metadata?.lead?.original_sheet || "").trim();
       const targetSheet = String(lead.metadata?.target_sheet || lead.metadata?.lead?.target_sheet || "").trim();
       const courseName = String(lead.metadata?.leadData?.course || lead.metadata?.lead?.leadData?.course || "").trim();
@@ -790,12 +792,13 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         ["sofia", "valeria"].includes(leadSlug) || 
         ["sofia", "valeria"].includes(activeProject?.slug || "");
 
-      if (lower === "closed_won" || lower === "approved" || lower === "aprooved" || lower === "оплачено") {
+      if (normalized === "closed_won") {
         return (isTripwire || isProjectAlwaysTripwire) ? "Купив(-ла) Трипвайер" : "Купив курс";
       }
-      if (lower === "declined" || lower === "expired" || lower === "відмова") {
+      if (normalized === "declined") {
         return "Відмова";
       }
+      const lower = s.toLowerCase().trim();
       if (
         lower === "new" ||
         lower === "pending" ||
@@ -865,7 +868,40 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       let uahAttempted = 0;
       let eurAttempted = 0;
 
+      // Group items by unique order reference: order_id + project_id to avoid double-counting duplicate logs
+      const uniqueOrders = new Map<string, any>();
       normalizedGroupLeads.forEach((item) => {
+        const orderId = item.order_id || item.id;
+        const projectId = item.project_id;
+        const orderKey = `${orderId}_${projectId}`;
+        
+        const existing = uniqueOrders.get(orderKey);
+        if (!existing) {
+          uniqueOrders.set(orderKey, item);
+        } else {
+          const existingIsPaid = existing.status === "Купив курс" || existing.status === "Купив(-ла) Трипвайер";
+          const itemIsPaid = item.status === "Купив курс" || item.status === "Купив(-ла) Трипвайер";
+          
+          if (itemIsPaid && !existingIsPaid) {
+            uniqueOrders.set(orderKey, item);
+          } else if (!itemIsPaid && existingIsPaid) {
+            // Keep existing paid order representation
+          } else {
+            // Pick the latest order log by created_at
+            const existingTime = new Date(existing.created_at || 0).getTime();
+            const itemTime = new Date(item.created_at || 0).getTime();
+            if (itemTime > existingTime) {
+              uniqueOrders.set(orderKey, item);
+            } else if (itemTime === existingTime) {
+              if (Number(item.amount || 0) > Number(existing.amount || 0)) {
+                uniqueOrders.set(orderKey, item);
+              }
+            }
+          }
+        }
+      });
+
+      uniqueOrders.forEach((item) => {
         const amt = Number(item.amount || 0);
         if (amt === 0) return;
 
@@ -899,10 +935,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           else if (isEur) eurTripwirePaid += amt;
           else uahTripwirePaid += amt;
         } else {
-          // Use Math.max to prevent multiple failed checkout attempts from summing up
-          if (isUsd) usdAttempted = Math.max(usdAttempted, amt);
-          else if (isEur) eurAttempted = Math.max(eurAttempted, amt);
-          else uahAttempted = Math.max(uahAttempted, amt);
+          // Strict summing on a per-order basis (no customer-level Math.max)
+          if (isUsd) usdAttempted += amt;
+          else if (isEur) eurAttempted += amt;
+          else uahAttempted += amt;
         }
       });
 

@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient, createAdminClient } from "@/utils/supabase/server";
+import { statusMapper } from "@/lib/statusMapper";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
@@ -94,6 +95,10 @@ export async function getSessionAndAccess(selectedProjectSlug?: string) {
   }
 
   // Verify access to requested slug
+  if (activeSlug === "all" && !isSuperman) {
+    activeSlug = allowedProjects.length > 0 ? allowedProjects[0].slug : undefined;
+  }
+
   if (activeSlug && activeSlug !== "all" && !allowedProjects.some((p) => p.slug === activeSlug)) {
     activeSlug = allowedProjects.length > 0 ? allowedProjects[0].slug : undefined;
   }
@@ -105,6 +110,32 @@ export async function getSessionAndAccess(selectedProjectSlug?: string) {
     allowedProjects,
     activeSlug,
   };
+}
+
+export async function checkProjectAccess(projectId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const adminSupabase = createAdminClient();
+  const { data: profile } = await adminSupabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || profile.role === "pending") throw new Error("Access Pending Approval");
+  if (profile.role === "admin" || profile.role === "superman") return true;
+
+  const { data } = await supabase
+    .from("profile_projects")
+    .select("project_id")
+    .eq("profile_id", user.id)
+    .eq("project_id", projectId)
+    .maybeSingle();
+
+  if (!data) throw new Error("Access Denied: You do not have access to this project.");
+  return true;
 }
 
 // Fetch unified CRM dashboard and analytics data
@@ -209,9 +240,7 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
           const projSpends = (allSpends || []).filter((s) => s.project_id === proj.id);
 
           const paidOrders = projOrders.filter((o) => {
-            if (!o.status) return false;
-            const sLower = o.status.toLowerCase().trim();
-            return ["closed_won", "approved", "aprooved", "оплачено", "купив курс", "купив_курс", "купив трипвайєр", "купив трипвайер", "купив(-ла) трипвайер"].includes(sLower);
+            return statusMapper.normalize(o.status) === "closed_won";
           });
           
           let usd_revenue = 0;
@@ -280,9 +309,7 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
         // Aggregate orders revenue and leads count
         const prodOrders = orders.filter((o) => assignedIds.includes(o.project_id));
         const prodPaidOrders = prodOrders.filter((o) => {
-          if (!o.status) return false;
-          const sLower = o.status.toLowerCase().trim();
-          return ["closed_won", "approved", "aprooved", "оплачено", "купив курс", "купив_курс", "купив трипвайєр", "купив трипвайер", "купив(-ла) трипвайер"].includes(sLower);
+          return statusMapper.normalize(o.status) === "closed_won";
         });
         
         let usd_revenue = 0;
@@ -440,18 +467,40 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
       return results;
     };
 
+    // Fetch all traffic clicks with pagination
+    const fetchAllTraffic = async () => {
+      let results: any[] = [];
+      let from = 0;
+      const limit = 1000;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from("traffic_clicks")
+          .select("*")
+          .eq("project_id", activeProject.id)
+          .order("created_at", { ascending: false })
+          .range(from, from + limit - 1);
+        if (error) throw error;
+        results = [...results, ...(data || [])];
+        if ((data || []).length < limit) hasMore = false;
+        else from += limit;
+      }
+      return results;
+    };
+
     // Fetch single project data in sequence/parallel
     const allCustomers = await fetchAllCustomers();
-    const [allOrders, costsRes] = await Promise.all([
+    const [allOrders, allTraffic, costsRes] = await Promise.all([
       fetchAllOrders(allCustomers.map((c) => c.id)),
+      fetchAllTraffic(),
       supabase.from("daily_traffic_and_costs").select("*").eq("project_id", activeProject.id).order("date", { ascending: false }),
     ]);
 
     const costs = costsRes.data || [];
 
     // Separate real leads from raw traffic click session logs
-    const leads = allOrders.filter((o) => o.status !== "Клик" && o.status !== "КликФормы");
-    const traffic = allOrders.filter((o) => o.status === "Клик" || o.status === "КликФормы");
+    const leads = allOrders;
+    const traffic = allTraffic;
 
     // Fetch all profiles to map sales manager names
     const { data: allProfiles } = await adminSupabase
@@ -521,6 +570,15 @@ export async function updateUnifiedLeadStatusAction(orderId: string, newStatus: 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Unauthorized");
 
+    // Fetch order first to check project_id for access validation
+    const { data: order } = await supabase
+      .from("unified_orders")
+      .select("project_id")
+      .eq("id", orderId)
+      .single();
+    if (!order) throw new Error("Order not found");
+    await checkProjectAccess(order.project_id);
+
     const { error } = await supabase
       .from("unified_orders")
       .update({ status: newStatus })
@@ -554,6 +612,9 @@ export async function createUnifiedLeadAction(
     const adminSupabase = createAdminClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Unauthorized");
+
+    // Enforce access control
+    await checkProjectAccess(projectId);
 
     // 1. Resolve or create customer inside unified_customers
     // First query if there is a match inside the same project
@@ -635,6 +696,18 @@ export async function getDashboardData() {
     throw new Error("Unauthorized");
   }
 
+  // Verify access to bw_main project
+  const { data: bwMainProj } = await adminSupabase
+    .from("projects")
+    .select("id")
+    .eq("slug", "bw_main")
+    .single();
+
+  if (!bwMainProj) {
+    throw new Error("Project bw_main not found");
+  }
+  await checkProjectAccess(bwMainProj.id);
+
   // 3. Fetch all leads, page views, and button clicks in parallel
   const [leadsRes, pageViewsRes, clicksRes] = await Promise.all([
     adminSupabase.from("leads").select("*").order("created_at", { ascending: false }),
@@ -678,6 +751,18 @@ export async function updateLeadStatus(
     throw new Error("Unauthorized");
   }
 
+  // Verify access to bw_main project
+  const { data: bwMainProj } = await adminSupabase
+    .from("projects")
+    .select("id")
+    .eq("slug", "bw_main")
+    .single();
+
+  if (!bwMainProj) {
+    throw new Error("Project bw_main not found");
+  }
+  await checkProjectAccess(bwMainProj.id);
+
   // 3. Perform database update
   const { data, error } = await adminSupabase
     .from("leads")
@@ -704,14 +789,15 @@ export async function updateCustomerCommentAction(customerId: string, comment: s
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Unauthorized");
 
-    // Fetch the existing customer comment
+    // Fetch the existing customer comment and project_id for access validation
     const { data: customer, error: fetchError } = await supabase
       .from("unified_customers")
-      .select("manager_comment")
+      .select("project_id, manager_comment")
       .eq("id", customerId)
       .single();
 
     if (fetchError) throw fetchError;
+    await checkProjectAccess(customer.project_id);
 
     const rawComment = customer?.manager_comment;
     let comments: any[] = [];
@@ -780,6 +866,15 @@ export async function assignLeadToManagerAction(customerId: string, managerId: s
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Unauthorized");
+
+    // Fetch customer to check project_id for access validation
+    const { data: customer } = await supabase
+      .from("unified_customers")
+      .select("project_id")
+      .eq("id", customerId)
+      .single();
+    if (!customer) throw new Error("Customer not found");
+    await checkProjectAccess(customer.project_id);
 
     const { error } = await supabase
       .from("unified_customers")
@@ -873,14 +968,15 @@ export async function updateOrderCurrencyAction(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Unauthorized");
 
-    // Fetch existing order metadata
+    // Fetch existing order metadata and project_id for access verification
     const { data: order, error: fetchError } = await adminSupabase
       .from("unified_orders")
-      .select("metadata")
+      .select("project_id, metadata")
       .eq("id", orderId)
       .single();
 
     if (fetchError) throw fetchError;
+    await checkProjectAccess(order.project_id);
 
     const newMetadata = {
       ...(order?.metadata || {}),
@@ -897,7 +993,7 @@ export async function updateOrderCurrencyAction(
     if (bulk && bulk.landingName) {
       const { data: matchingOrders } = await adminSupabase
         .from("unified_orders")
-        .select("id, metadata")
+        .select("id, project_id, metadata")
         .eq("amount", bulk.amount)
         .not("status", "in", "('Клик', 'КликФормы')");
 
@@ -908,14 +1004,19 @@ export async function updateOrderCurrencyAction(
         });
 
         for (const orderToUpdate of toUpdate) {
-          const updatedMeta = {
-            ...(orderToUpdate.metadata || {}),
-            currency: currency,
-          };
-          await adminSupabase
-            .from("unified_orders")
-            .update({ metadata: updatedMeta })
-            .eq("id", orderToUpdate.id);
+          try {
+            await checkProjectAccess(orderToUpdate.project_id);
+            const updatedMeta = {
+              ...(orderToUpdate.metadata || {}),
+              currency: currency,
+            };
+            await adminSupabase
+              .from("unified_orders")
+              .update({ metadata: updatedMeta })
+              .eq("id", orderToUpdate.id);
+          } catch (accessErr) {
+            console.warn(`Bulk currency update skipped for order ${orderToUpdate.id} due to project access restriction`);
+          }
         }
       }
     }
