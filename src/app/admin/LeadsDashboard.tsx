@@ -1371,6 +1371,13 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     let start = startDate ? new Date(startDate) : null;
     let end = endDate ? new Date(endDate) : new Date();
 
+    if (start && (start.getFullYear() < 2020 || start.getFullYear() > 2100 || isNaN(start.getTime()))) {
+      return [];
+    }
+    if (end && (end.getFullYear() < 2020 || end.getFullYear() > 2100 || isNaN(end.getTime()))) {
+      return [];
+    }
+
     if (!start) {
       const leadDates = processedLeads.map((l: any) => getLeadDate(l).getTime());
       const trafficDates = filteredTraffic.map((t: any) => new Date(t.created_at).getTime());
@@ -1390,7 +1397,9 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     const dayClicks: Record<string, number> = {};
     const curr = new Date(start);
 
+    let safetyCounter = 0;
     while (curr <= end) {
+      if (safetyCounter++ > 1000) break;
       const str = curr.toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" });
       dayLeads[str] = 0;
       dayClicks[str] = 0;
@@ -3342,32 +3351,72 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
               </div>
 
               {/* Date pickers */}
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-white/30 font-black uppercase">Період:</span>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="px-3 py-2 bg-white/[0.02] border border-white/10 rounded-lg text-[10px] text-white font-extrabold focus:outline-none"
-                />
-                <span className="text-white/20">—</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="px-3 py-2 bg-white/[0.02] border border-white/10 rounded-lg text-[10px] text-white font-extrabold focus:outline-none"
-                />
-                {(startDate || endDate) && (
-                  <button
-                    onClick={() => {
-                      setStartDate("");
-                      setEndDate("");
+              <div className="flex flex-wrap items-center gap-3">
+                <span className={`text-[10px] font-black uppercase ${isLight ? "text-neutral-500" : "text-white/30"}`}>Період:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (dateRangePreset === "1d") {
+                      applyPreset("all");
+                    } else {
+                      applyPreset("1d");
+                    }
+                  }}
+                  className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-150 cursor-pointer flex items-center gap-1.5 ${
+                    dateRangePreset === "1d"
+                      ? isLight
+                        ? "bg-emerald-500 text-white shadow-sm hover:bg-emerald-600"
+                        : "bg-emerald-500 text-black shadow-lg hover:bg-emerald-400"
+                      : isLight
+                        ? "bg-neutral-100 hover:bg-neutral-200 text-neutral-800 border border-neutral-300"
+                        : "bg-white/[0.02] hover:bg-white/5 text-white/60 hover:text-white border border-white/10"
+                  }`}
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  За останню добу
+                </button>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => {
+                      setStartDate(e.target.value);
+                      setDateRangePreset("custom");
                     }}
-                    className="p-2 text-white/40 hover:text-white transition-all rounded-lg hover:bg-white/5"
-                  >
-                    <XCircle className="w-3.5 h-3.5" />
-                  </button>
-                )}
+                    className={`px-3 py-2 rounded-lg text-[10px] font-extrabold focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
+                      isLight
+                        ? "bg-neutral-100 border border-neutral-300 text-neutral-900"
+                        : "bg-white/[0.02] border border-white/10 text-white"
+                    }`}
+                  />
+                  <span className={isLight ? "text-neutral-300" : "text-white/20"}>—</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => {
+                      setEndDate(e.target.value);
+                      setDateRangePreset("custom");
+                    }}
+                    className={`px-3 py-2 rounded-lg text-[10px] font-extrabold focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
+                      isLight
+                        ? "bg-neutral-100 border border-neutral-300 text-neutral-900"
+                        : "bg-white/[0.02] border border-white/10 text-white"
+                    }`}
+                  />
+                  {(startDate || endDate) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        applyPreset("all");
+                      }}
+                      className={`p-2 transition-all rounded-lg ${
+                        isLight ? "text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100" : "text-white/40 hover:text-white hover:bg-white/5"
+                      }`}
+                    >
+                      <XCircle className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -3842,6 +3891,77 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
               <p className={`${textMutedClass} text-xs mt-1 font-semibold`}>
                 Список усіх користувачів, які заповнили анкети чи форми реєстрації на сайтах проекту.
               </p>
+            </div>
+
+            {/* Quizzes Date Filter Panel */}
+            <div className={`p-4 rounded-2xl border ${isLight ? "bg-white border-neutral-200 shadow-sm" : "bg-[#0C0C0F] border-white/5 shadow-2xl"} flex flex-wrap items-center justify-between gap-4`}>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className={`text-[10px] font-black uppercase ${isLight ? "text-neutral-500" : "text-white/30"}`}>Фільтр за періодом:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (dateRangePreset === "1d") {
+                      applyPreset("all");
+                    } else {
+                      applyPreset("1d");
+                    }
+                  }}
+                  className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-150 cursor-pointer flex items-center gap-1.5 ${
+                    dateRangePreset === "1d"
+                      ? isLight
+                        ? "bg-emerald-500 text-white shadow-sm hover:bg-emerald-600"
+                        : "bg-emerald-500 text-black shadow-lg hover:bg-emerald-400"
+                      : isLight
+                        ? "bg-neutral-100 hover:bg-neutral-200 text-neutral-800 border border-neutral-300"
+                        : "bg-white/[0.02] hover:bg-white/5 text-white/60 hover:text-white border border-white/10"
+                  }`}
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  За останню добу
+                </button>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => {
+                      setStartDate(e.target.value);
+                      setDateRangePreset("custom");
+                    }}
+                    className={`px-3 py-2 rounded-lg text-[10px] font-extrabold focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
+                      isLight
+                        ? "bg-neutral-100 border border-neutral-300 text-neutral-900"
+                        : "bg-white/[0.02] border border-white/10 text-white"
+                    }`}
+                  />
+                  <span className={isLight ? "text-neutral-300" : "text-white/20"}>—</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => {
+                      setEndDate(e.target.value);
+                      setDateRangePreset("custom");
+                    }}
+                    className={`px-3 py-2 rounded-lg text-[10px] font-extrabold focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
+                      isLight
+                        ? "bg-neutral-100 border border-neutral-300 text-neutral-900"
+                        : "bg-white/[0.02] border border-white/10 text-white"
+                    }`}
+                  />
+                  {(startDate || endDate) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        applyPreset("all");
+                      }}
+                      className={`p-2 transition-all rounded-lg ${
+                        isLight ? "text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100" : "text-white/40 hover:text-white hover:bg-white/5"
+                      }`}
+                    >
+                      <XCircle className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
 
             {leadsWithQuizzes.length === 0 ? (
