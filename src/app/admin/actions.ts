@@ -1517,11 +1517,12 @@ export async function getUnifiedCRMData(
 export async function updateUnifiedLeadStatusAction(orderId: string, newStatus: string) {
   try {
     const supabase = await createClient();
+    const adminSupabase = createAdminClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Unauthorized");
 
     // Fetch order first to check project_id for access validation
-    const { data: order } = await supabase
+    const { data: order } = await adminSupabase
       .from("unified_orders")
       .select("project_id")
       .eq("id", orderId)
@@ -1529,7 +1530,7 @@ export async function updateUnifiedLeadStatusAction(orderId: string, newStatus: 
     if (!order) throw new Error("Order not found");
     await checkProjectAccess(order.project_id);
 
-    const { error } = await supabase
+    const { error } = await adminSupabase
       .from("unified_orders")
       .update({ status: newStatus })
       .eq("id", orderId);
@@ -1740,7 +1741,7 @@ export async function updateCustomerCommentAction(customerId: string, comment: s
     if (!user) throw new Error("Unauthorized");
 
     // Fetch the existing customer comment and project_id for access validation
-    const { data: customer, error: fetchError } = await supabase
+    const { data: customer, error: fetchError } = await adminSupabase
       .from("unified_customers")
       .select("project_id, manager_comment")
       .eq("id", customerId)
@@ -1797,7 +1798,7 @@ export async function updateCustomerCommentAction(customerId: string, comment: s
 
     const updatedCommentStr = JSON.stringify(comments);
 
-    const { error: updateError } = await supabase
+    const { error: updateError } = await adminSupabase
       .from("unified_customers")
       .update({ manager_comment: updatedCommentStr })
       .eq("id", customerId);
@@ -1814,11 +1815,12 @@ export async function updateCustomerCommentAction(customerId: string, comment: s
 export async function assignLeadToManagerAction(customerId: string, managerId: string | null) {
   try {
     const supabase = await createClient();
+    const adminSupabase = createAdminClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Unauthorized");
 
     // Fetch customer to check project_id for access validation
-    const { data: customer } = await supabase
+    const { data: customer } = await adminSupabase
       .from("unified_customers")
       .select("project_id")
       .eq("id", customerId)
@@ -1826,7 +1828,31 @@ export async function assignLeadToManagerAction(customerId: string, managerId: s
     if (!customer) throw new Error("Customer not found");
     await checkProjectAccess(customer.project_id);
 
-    const { error } = await supabase
+    // Verify target manager assignment access to project if target is not a Superman
+    if (managerId) {
+      const { data: managerProfile } = await adminSupabase
+        .from("profiles")
+        .select("role")
+        .eq("id", managerId)
+        .single();
+      
+      const isSuperman = managerProfile?.role === "admin" || managerProfile?.role === "superman";
+      
+      if (!isSuperman) {
+        const { data: hasAccess } = await adminSupabase
+          .from("profile_projects")
+          .select("project_id")
+          .eq("profile_id", managerId)
+          .eq("project_id", customer.project_id)
+          .maybeSingle();
+
+        if (!hasAccess) {
+          throw new Error("Target manager does not have access to this project.");
+        }
+      }
+    }
+
+    const { error } = await adminSupabase
       .from("unified_customers")
       .update({ assigned_manager_id: managerId ? managerId : null })
       .eq("id", customerId);
