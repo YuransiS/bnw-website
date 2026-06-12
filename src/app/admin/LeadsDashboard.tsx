@@ -303,6 +303,32 @@ const getTouchPageUrl = (l: any) => {
   );
 };
 
+const getTouchUtm = (l: any, key: 'source' | 'medium' | 'campaign' | 'content' | 'term'): string => {
+  if (!l) return "";
+  
+  // Try column first
+  const colVal = l[`utm_${key}`];
+  if (colVal && colVal.trim()) return colVal.trim();
+  
+  // Try metadata -> raw_row -> raw_payload -> utms -> key
+  const utms = 
+    l.metadata?.raw_row?.raw_payload?.utms || 
+    l.metadata?.raw_payload?.utms || 
+    l.metadata?.utms || 
+    null;
+  
+  if (utms) {
+    const val = utms[key] || utms[key === 'campaign' ? 'utm_campaign' : key === 'source' ? 'utm_source' : key === 'medium' ? 'utm_medium' : key === 'content' ? 'utm_content' : key === 'term' ? 'utm_term' : ''];
+    if (val && String(val).trim()) return String(val).trim();
+  }
+  
+  // Try direct metadata values
+  const metaVal = l.metadata?.[`utm_${key}`] || l.metadata?.[`utm${key.charAt(0).toUpperCase() + key.slice(1)}`] || l.metadata?.raw_row?.[`utm_${key}`];
+  if (metaVal && String(metaVal).trim()) return String(metaVal).trim();
+  
+  return "";
+};
+
 const isLeadMatchingLanding = (lead: any, landingUrl: string) => {
   if (landingUrl === "all") return true;
   const targetNorm = normalizeUrlForMatching(landingUrl);
@@ -757,14 +783,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         courseName.includes("Міні-курс") ||
         leadSlug === "sofia" ||
         leadSlug === "valeria" ||
-        leadSlug === "svitlana" ||
         activeProject?.slug === "sofia" ||
-        activeProject?.slug === "valeria" ||
-        activeProject?.slug === "svitlana";
+        activeProject?.slug === "valeria";
 
       const isProjectAlwaysTripwire = 
-        ["sofia", "valeria", "svitlana"].includes(leadSlug) || 
-        ["sofia", "valeria", "svitlana"].includes(activeProject?.slug || "");
+        ["sofia", "valeria"].includes(leadSlug) || 
+        ["sofia", "valeria"].includes(activeProject?.slug || "");
 
       if (lower === "closed_won" || lower === "approved" || lower === "aprooved" || lower === "оплачено") {
         return (isTripwire || isProjectAlwaysTripwire) ? "Купив(-ла) Трипвайер" : "Купив курс";
@@ -863,8 +887,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                       activeProject?.slug === "valeria");
 
         const isProjectAlwaysTripwire = 
-          ["sofia", "valeria", "svitlana"].includes(orderSlug) || 
-          ["sofia", "valeria", "svitlana"].includes(activeProject?.slug || "");
+          ["sofia", "valeria"].includes(orderSlug) || 
+          ["sofia", "valeria"].includes(activeProject?.slug || "");
 
         if (item.status === "Купив курс" && !isProjectAlwaysTripwire) {
           if (isUsd) usdCoursePaid += amt;
@@ -893,14 +917,14 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       }
 
       // Extract unique tags and source indicators
-      const isMultiSource = new Set(normalizedGroupLeads.map((l) => l.utm_source).filter(Boolean)).size > 1;
+      const isMultiSource = new Set(normalizedGroupLeads.map((l) => getTouchUtm(l, "source")).filter(Boolean)).size > 1;
 
       // Extract the first non-empty UTM parameters from the group history to prevent loss during DSU mapping
-      const utm_source = normalizedGroupLeads.find((l) => l.utm_source)?.utm_source || "";
-      const utm_medium = normalizedGroupLeads.find((l) => l.utm_medium)?.utm_medium || "";
-      const utm_campaign = normalizedGroupLeads.find((l) => l.utm_campaign)?.utm_campaign || "";
-      const utm_content = normalizedGroupLeads.find((l) => l.utm_content)?.utm_content || "";
-      const utm_term = normalizedGroupLeads.find((l) => l.utm_term)?.utm_term || "";
+      const utm_source = normalizedGroupLeads.map((l) => getTouchUtm(l, "source")).find(Boolean) || "";
+      const utm_medium = normalizedGroupLeads.map((l) => getTouchUtm(l, "medium")).find(Boolean) || "";
+      const utm_campaign = normalizedGroupLeads.map((l) => getTouchUtm(l, "campaign")).find(Boolean) || "";
+      const utm_content = normalizedGroupLeads.map((l) => getTouchUtm(l, "content")).find(Boolean) || "";
+      const utm_term = normalizedGroupLeads.map((l) => getTouchUtm(l, "term")).find(Boolean) || "";
 
       const page_path = normalizedGroupLeads.find((l) => l.page_path && l.page_path !== "/")?.page_path || primaryLead.page_path || "/";
       const page_url = normalizedGroupLeads.map(getTouchPageUrl).find((url) => url !== "") || getTouchPageUrl(primaryLead);
@@ -929,11 +953,11 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         attemptedAmount: usdAttempted,
         uahAttemptedAmount: uahAttempted,
         eurAttemptedAmount: eurAttempted,
-        utm_source: utm_source || primaryLead.utm_source || "",
-        utm_medium: utm_medium || primaryLead.utm_medium || "",
-        utm_campaign: utm_campaign || primaryLead.utm_campaign || "",
-        utm_content: utm_content || primaryLead.utm_content || "",
-        utm_term: utm_term || primaryLead.utm_term || "",
+        utm_source: utm_source || getTouchUtm(primaryLead, "source"),
+        utm_medium: utm_medium || getTouchUtm(primaryLead, "medium"),
+        utm_campaign: utm_campaign || getTouchUtm(primaryLead, "campaign"),
+        utm_content: utm_content || getTouchUtm(primaryLead, "content"),
+        utm_term: utm_term || getTouchUtm(primaryLead, "term"),
         history: [...normalizedGroupLeads].sort((a, b) => getLeadDate(a).getTime() - getLeadDate(b).getTime()), // Attach full multi-touch history logs sorted chronologically
         isMultiSource,
         touchCount: normalizedGroupLeads.length,
