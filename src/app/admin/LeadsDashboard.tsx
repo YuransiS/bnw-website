@@ -45,7 +45,8 @@ import {
   createUnifiedLeadAction,
   updateCustomerCommentAction,
   assignLeadToManagerAction,
-  updateOrderCurrencyAction
+  updateOrderCurrencyAction,
+  getUnifiedCRMData
 } from "./actions";
 import { useTheme } from "./ThemeProvider";
 import { statusMapper } from "@/lib/statusMapper";
@@ -454,30 +455,35 @@ interface LeadsDashboardProps {
 export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const router = useRouter();
 
+  // Local state to hold dashboard data (pre-calculated server side)
+  const [dashboardData, setDashboardData] = useState(initialData);
+
+  // Sync state when props change (like when switching projects and router.refresh() runs)
+  useEffect(() => {
+    setDashboardData(initialData);
+  }, [initialData]);
+
   // Unified data structures
-  const viewType = initialData.viewType; // 'all' or 'single'
-  const role = initialData.role;
-  const allowedProjects = initialData.allowedProjects || [];
-  const activeSlug = initialData.activeSlug || "";
-  const activeProject = initialData.activeProject;
+  const viewType = dashboardData.viewType; // 'all' or 'single'
+  const role = dashboardData.role;
+  const allowedProjects = dashboardData.allowedProjects || [];
+  const activeSlug = dashboardData.activeSlug || "";
+  const activeProject = dashboardData.activeProject;
 
   // Scoped project data states
-  const rawLeads = initialData.leads || [];
-  const rawTraffic = initialData.traffic || [];
-  const rawCosts = initialData.costs || [];
-  const summaryData = initialData.summaryData || [];
-  const campaignsData = initialData.campaignsData || [];
-  const producersLeaderboard = initialData.producersLeaderboard || [];
-  const salesManagers = initialData.salesManagers || [];
+  const summaryData = dashboardData.summaryData || [];
+  const campaignsData = dashboardData.campaignsData || [];
+  const producersLeaderboard = dashboardData.producersLeaderboard || [];
+  const salesManagers = dashboardData.salesManagers || [];
   const [unresolvedOrders, setUnresolvedOrders] = useState<any[]>([]);
 
   useEffect(() => {
-    let list = initialData.unresolvedOrders || [];
+    let list = dashboardData.unresolvedOrders || [];
     if (viewType === "single" && activeProject) {
       list = list.filter((o: any) => o.projectId === activeProject.id);
     }
     setUnresolvedOrders(list);
-  }, [initialData.unresolvedOrders, viewType, activeProject]);
+  }, [dashboardData.unresolvedOrders, viewType, activeProject]);
 
   // Local component states
   const [activeTab, setActiveTab] = useState<string>(
@@ -486,6 +492,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const { theme, toggleTheme } = useTheme();
   const [searchQuery, setSearchQuery] = useState("");
   const [isDevMode, setIsDevMode] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("crm_dev_mode");
@@ -573,6 +580,81 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     setSelectedLanding("all");
   }, [activeSlug, activeTab]);
 
+  // Debounce search query to prevent excessive server requests
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
+  const [debouncedKanbanSearchQuery, setDebouncedKanbanSearchQuery] = useState(kanbanSearchQuery);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 400);
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedKanbanSearchQuery(kanbanSearchQuery);
+    }, 400);
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [kanbanSearchQuery]);
+
+  // Fetch filtered and paginated CRM data from the server action when filters change
+  useEffect(() => {
+    let isMounted = true;
+    if (viewType !== "single" || !activeSlug) return;
+
+    setIsLoading(true);
+
+    const isKanban = activeTab === "kanban";
+
+    getUnifiedCRMData(activeSlug, {
+      page: isKanban ? 1 : currentPage,
+      pageSize: isKanban ? 500 : pageSize,
+      searchQuery: isKanban ? debouncedKanbanSearchQuery : debouncedSearchQuery,
+      statusFilter: isKanban ? "all" : statusFilter,
+      touchCountFilter: isKanban ? kanbanTouchFilter : touchCountFilter,
+      sourceFilter: isKanban ? kanbanSourceFilter : sourceFilter,
+      unpaidIntentOnly: isKanban ? false : unpaidIntentOnly,
+      startDate: startDate,
+      endDate: endDate,
+      selectedLanding: selectedLanding
+    }).then((res) => {
+      if (isMounted) {
+        setDashboardData(res);
+        setIsLoading(false);
+      }
+    }).catch((err) => {
+      console.error("Failed to fetch dashboard data:", err);
+      if (isMounted) {
+        setIsLoading(false);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    activeSlug,
+    activeTab,
+    currentPage,
+    statusFilter,
+    touchCountFilter,
+    sourceFilter,
+    unpaidIntentOnly,
+    startDate,
+    endDate,
+    selectedLanding,
+    debouncedSearchQuery,
+    debouncedKanbanSearchQuery,
+    kanbanTouchFilter,
+    kanbanSourceFilter,
+    viewType
+  ]);
+
   // Payment Link builder states
   const [payCustName, setPayCustName] = useState("");
   const [payCustPhone, setPayCustPhone] = useState("");
@@ -654,910 +736,17 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     router.refresh();
   };
 
-  // --- DSU Clustering / Deduplication engine ---
-  const clusteredLeads = useMemo(() => {
-    if (viewType !== "single" || rawLeads.length === 0) return [];
-
-    const size = rawLeads.length;
-    const dsu = new DSU(size);
-
-    const phoneMap = new Map<string, number>();
-    const tgMap = new Map<string, number>();
-    const emailMap = new Map<string, number>();
-    const uuidMap = new Map<string, number>();
-
-    const getDiagnosticsComment = (groupLeads: any[]): string => {
-      const answers: string[] = [];
-      groupLeads.forEach((lead) => {
-        const meta = lead.metadata || {};
-        const raw = meta.raw_row || {};
-        
-        const quizFields = [
-          { key: "що турбує", label: "Що турбує" },
-          { key: "Чи колола ботокс, або подібне", label: "Ботокс" },
-          { key: "Тип старіння", label: "Тип старіння" },
-          { key: "Рівень доходу", label: "Дохід" },
-          { key: "Дохід", label: "Дохід" },
-          { key: "Фінансова ціль", label: "Фінансова ціль" },
-          { key: "Ціль", label: "Ціль" },
-          { key: "Борги", label: "Борги" },
-          { key: "Чи є борги зараз", label: "Борги" },
-          { key: "За який термін вийти на 100 000$", label: "Термін 100k$" },
-          { key: "Відповідь 1 (скільки витрачаєш на косметику в міс.)", label: "Витрати на косметику" },
-          { key: "niche", label: "Ніша" },
-          { key: "Коментар", label: "Коментар" },
-          { key: "request", label: "Запит" },
-          { key: "tariff", label: "Тариф" }
-        ];
-
-        quizFields.forEach((f) => {
-          const val = raw[f.key] || meta[f.key];
-          if (val && String(val).trim()) {
-            answers.push(`${f.label}: ${String(val).trim()}`);
-          }
-        });
-
-        Object.keys(raw).forEach((k) => {
-          if (k.toLowerCase().includes("питання") || k.toLowerCase().includes("відповідь")) {
-            const val = raw[k];
-            if (val && String(val).trim()) {
-              answers.push(`${k}: ${String(val).trim()}`);
-            }
-          }
-        });
-
-        const quizResult = raw.quiz_result || meta.quiz_result;
-        if (quizResult) {
-          if (typeof quizResult === "object") {
-            Object.entries(quizResult).forEach(([k, v]) => {
-              if (v) answers.push(`${k}: ${v}`);
-            });
-          } else {
-            answers.push(`Quiz: ${quizResult}`);
-          }
-        }
-        const queryVal = raw.query || meta.query;
-        if (queryVal) {
-          if (typeof queryVal === "object") {
-            Object.entries(queryVal).forEach(([k, v]) => {
-              if (v) answers.push(`${k}: ${v}`);
-            });
-          } else {
-            answers.push(`Запит: ${queryVal}`);
-          }
-        }
-      });
-
-      return Array.from(new Set(answers)).join("\n");
-    };
-
-    // Step 1: Cluster leads using exact identifiers
-    rawLeads.forEach((lead: any, i: number) => {
-      const phone = lead.phone?.replace(/\D/g, "") || "";
-      const tg = lead.telegram?.toLowerCase().replace("@", "").trim() || "";
-      const email = lead.email?.toLowerCase().trim() || "";
-      const uuid = lead.visitor_uuid || "";
-
-      if (phone.length >= 7) {
-        if (phoneMap.has(phone)) dsu.union(i, phoneMap.get(phone)!);
-        else phoneMap.set(phone, i);
-      }
-      if (tg) {
-        if (tgMap.has(tg)) dsu.union(i, tgMap.get(tg)!);
-        else tgMap.set(tg, i);
-      }
-      if (email) {
-        if (emailMap.has(email)) dsu.union(i, emailMap.get(email)!);
-        else emailMap.set(email, i);
-      }
-      if (uuid) {
-        if (uuidMap.has(uuid)) dsu.union(i, uuidMap.get(uuid)!);
-        else uuidMap.set(uuid, i);
-      }
-    });
-
-    // Step 2: Group records under their primary root index
-    const groups = new Map<number, number[]>();
-    for (let i = 0; i < size; i++) {
-      const root = dsu.find(i);
-      if (!groups.has(root)) groups.set(root, []);
-      groups.get(root)!.push(i);
-    }
-
-    const normalizeStatus = (lead: any): string => {
-      const s = lead.status;
-      if (!s) return "Новий лід";
-      const normalized = statusMapper.normalize(s);
-      
-      const originalSheet = String(lead.metadata?.original_sheet || lead.metadata?.lead?.original_sheet || "").trim();
-      const targetSheet = String(lead.metadata?.target_sheet || lead.metadata?.lead?.target_sheet || "").trim();
-      const courseName = String(lead.metadata?.leadData?.course || lead.metadata?.lead?.leadData?.course || "").trim();
-
-      const leadProj = allowedProjects.find((p: any) => p.id === lead.project_id);
-      const leadSlug = leadProj?.slug || "";
-
-      const isTripwire = 
-        ["Практикум", "Practicum_Leads", "Заявки на практикум", "Miні-курс"].includes(originalSheet) ||
-        ["Практикум", "Practicum_Leads", "Заявки на практикум", "Miні-курс"].includes(targetSheet) ||
-        courseName.includes("Mini-Course") || 
-        courseName.includes("Practicum") || 
-        courseName.includes("Практикум") ||
-        courseName.includes("Міні-курс") ||
-        leadSlug === "sofia" ||
-        leadSlug === "valeria" ||
-        activeProject?.slug === "sofia" ||
-        activeProject?.slug === "valeria";
-
-      const isProjectAlwaysTripwire = 
-        ["sofia", "valeria"].includes(leadSlug) || 
-        ["sofia", "valeria"].includes(activeProject?.slug || "");
-
-      if (normalized === "closed_won") {
-        return (isTripwire || isProjectAlwaysTripwire) ? "Купив(-ла) Трипвайер" : "Купив курс";
-      }
-      if (normalized === "declined") {
-        return "Відмова";
-      }
-      const lower = s.toLowerCase().trim();
-      if (
-        lower === "new" ||
-        lower === "pending" ||
-        lower === "зареєстровано" ||
-        lower.includes("очікується") ||
-        lower === "новий лід" ||
-        lower === "новий" ||
-        lower === "передано у вп" ||
-        lower === "очікує оплати"
-      ) {
-        return "Новий лід";
-      }
-      if (lower === "діагностика" || lower === "диагностика" || lower === "заявка") {
-        return "Залишив заявку";
-      }
-      if (lower === "в роботі" || lower === "списались") {
-        return "Списались";
-      }
-      if (lower === "зустріч призначена" || lower === "назначено дзвінок" || lower === "діагн. запланована") {
-        return "Назначено Дзвінок";
-      }
-      if (lower === "зустріч проведена" || lower === "дзвінок проведено" || lower === "діагн. проведена") {
-        return "Дзвінок проведено";
-      }
-      if (lower === "вирішив подумати" || lower.includes("подумати")) {
-        return "Вирішив подумати";
-      }
-      if (lower === "купив трипвайєр" || lower === "купив трипвайер" || lower === "купив(-ла) трипвайер") {
-        return "Купив(-ла) Трипвайер";
-      }
-      if (lower === "купив курс" || lower === "купив_курс") {
-        return isProjectAlwaysTripwire ? "Купив(-ла) Трипвайер" : "Купив курс";
-      }
-      if (lower === "зацікавлений лід" || lower === "зацікавлений") {
-        return "Зацікавлений лід";
-      }
-      return "Новий лід";
-    };
-
-    // Step 3: Collapse and merge groups
-    const allClustered = Array.from(groups.values()).map((indices) => {
-      const groupLeads = indices.map((idx) => rawLeads[idx]);
-
-      // Normalize statuses of individual touchpoints in history
-      const normalizedGroupLeads = groupLeads.map((item) => {
-        return {
-          ...item,
-          status: normalizeStatus(item)
-        };
-      });
-
-      // Resolve primary profile details (longest name, valid contacts)
-      const primaryLead = normalizedGroupLeads.reduce((best, curr) => {
-        const bestScore = (best.name?.length || 0) + (best.phone ? 5 : 0) + (best.telegram ? 5 : 0);
-        const currScore = (curr.name?.length || 0) + (curr.phone ? 5 : 0) + (curr.telegram ? 5 : 0);
-        return currScore > bestScore ? curr : best;
-      }, normalizedGroupLeads[0]);
-
-      // Sum split payments by currency for paid and attempted states
-      let usdCoursePaid = 0;
-      let uahCoursePaid = 0;
-      let eurCoursePaid = 0;
-      let usdTripwirePaid = 0;
-      let uahTripwirePaid = 0;
-      let eurTripwirePaid = 0;
-      let usdAttempted = 0;
-      let uahAttempted = 0;
-      let eurAttempted = 0;
-
-      // Group items by unique order reference: order_id + project_id to avoid double-counting duplicate logs
-      const uniqueOrders = new Map<string, any>();
-      normalizedGroupLeads.forEach((item) => {
-        const orderId = item.order_id || item.id;
-        const projectId = item.project_id;
-        const orderKey = `${orderId}_${projectId}`;
-        
-        const existing = uniqueOrders.get(orderKey);
-        if (!existing) {
-          uniqueOrders.set(orderKey, item);
-        } else {
-          const existingIsPaid = existing.status === "Купив курс" || existing.status === "Купив(-ла) Трипвайер";
-          const itemIsPaid = item.status === "Купив курс" || item.status === "Купив(-ла) Трипвайер";
-          
-          if (itemIsPaid && !existingIsPaid) {
-            uniqueOrders.set(orderKey, item);
-          } else if (!itemIsPaid && existingIsPaid) {
-            // Keep existing paid order representation
-          } else {
-            // Pick the latest order log by created_at
-            const existingTime = new Date(existing.created_at || 0).getTime();
-            const itemTime = new Date(item.created_at || 0).getTime();
-            if (itemTime > existingTime) {
-              uniqueOrders.set(orderKey, item);
-            } else if (itemTime === existingTime) {
-              if (Number(item.amount || 0) > Number(existing.amount || 0)) {
-                uniqueOrders.set(orderKey, item);
-              }
-            }
-          }
-        }
-      });
-
-      uniqueOrders.forEach((item) => {
-        const amt = Number(item.amount || 0);
-        if (amt === 0) return;
-
-        const metaCurrency = String(
-          item.metadata?.currency || 
-          item.metadata?.lead?.currency || 
-          item.metadata?.raw_row?.currency ||
-          item.metadata?.raw_row?.raw_payload?.currency ||
-          ""
-        ).trim().toLowerCase();
-        const orderProj = allowedProjects.find((p: any) => p.id === item.project_id);
-        const orderSlug = orderProj?.slug || "";
-        
-        const isEur = ["eur", "€"].includes(metaCurrency);
-        const isUsd = !isEur && (["usd", "$"].includes(metaCurrency) || 
-                      orderSlug === "sofia" || 
-                      orderSlug === "valeria" || 
-                      activeProject?.slug === "sofia" || 
-                      activeProject?.slug === "valeria");
-
-        const isProjectAlwaysTripwire = 
-          ["sofia", "valeria"].includes(orderSlug) || 
-          ["sofia", "valeria"].includes(activeProject?.slug || "");
-
-        if (item.status === "Купив курс" && !isProjectAlwaysTripwire) {
-          if (isUsd) usdCoursePaid += amt;
-          else if (isEur) eurCoursePaid += amt;
-          else uahCoursePaid += amt;
-        } else if (item.status === "Купив(-ла) Трипвайер" || (item.status === "Купив курс" && isProjectAlwaysTripwire)) {
-          if (isUsd) usdTripwirePaid += amt;
-          else if (isEur) eurTripwirePaid += amt;
-          else uahTripwirePaid += amt;
-        } else {
-          // Strict summing on a per-order basis (no customer-level Math.max)
-          if (isUsd) usdAttempted += amt;
-          else if (isEur) eurAttempted += amt;
-          else uahAttempted += amt;
-        }
-      });
-
-      const primaryStatus = normalizedGroupLeads.reduce((best, curr) => {
-        return statusPriority(curr.status) > statusPriority(best) ? curr.status : best;
-      }, "Новий лід");
-
-      // Auto-promote to "Зацікавлений лід" if they filled the form at least 2 times (i.e. length of history >= 2)
-      // and their status is currently low (Новий лід)
-      let finalStatus = primaryStatus;
-      if (normalizedGroupLeads.length >= 2 && statusPriority(finalStatus) <= statusPriority("Зацікавлений лід")) {
-        finalStatus = "Зацікавлений лід";
-      }
-
-      // Extract unique tags and source indicators
-      const isMultiSource = new Set(normalizedGroupLeads.map((l) => getTouchUtm(l, "source")).filter(Boolean)).size > 1;
-
-      // Separate actual conversion touches from traffic clicks to prioritize real ad attribution
-      const actualOrdersDesc = normalizedGroupLeads
-        .filter((l) => l.status !== "Клик" && l.status !== "КликФормы")
-        .sort((a, b) => getLeadDate(b).getTime() - getLeadDate(a).getTime());
-
-      const coldClicksDesc = normalizedGroupLeads
-        .filter((l) => l.status === "Клик" || l.status === "КликФормы")
-        .sort((a, b) => getLeadDate(b).getTime() - getLeadDate(a).getTime());
-
-      const prioritizedTouches = [...actualOrdersDesc, ...coldClicksDesc];
-
-      // Extract the latest non-empty UTM parameters from the prioritized touches
-      const utm_source = prioritizedTouches.map((l) => getTouchUtm(l, "source")).find(Boolean) || "";
-      const utm_medium = prioritizedTouches.map((l) => getTouchUtm(l, "medium")).find(Boolean) || "";
-      const utm_campaign = prioritizedTouches.map((l) => getTouchUtm(l, "campaign")).find(Boolean) || "";
-      const utm_content = prioritizedTouches.map((l) => getTouchUtm(l, "content")).find(Boolean) || "";
-      const utm_term = prioritizedTouches.map((l) => getTouchUtm(l, "term")).find(Boolean) || "";
-
-      const page_path = normalizedGroupLeads.find((l) => l.page_path && l.page_path !== "/")?.page_path || primaryLead.page_path || "/";
-      const page_url = prioritizedTouches.map(getTouchPageUrl).find((url) => url !== "") || getTouchPageUrl(primaryLead);
-
-      return {
-        ...primaryLead,
-        name: primaryLead.name || "Невідомий",
-        phone: primaryLead.phone || "",
-        telegram: primaryLead.telegram || "",
-        email: primaryLead.email || "",
-        page_path,
-        page_url,
-        status: finalStatus,
-        usdPaid: usdCoursePaid,
-        uahPaid: uahCoursePaid,
-        eurPaid: eurCoursePaid,
-        usdTripwirePaid,
-        uahTripwirePaid,
-        eurTripwirePaid,
-        usdAttempted,
-        uahAttempted,
-        eurAttempted,
-        amount: usdCoursePaid,
-        uahAmount: uahCoursePaid,
-        eurAmount: eurCoursePaid,
-        attemptedAmount: usdAttempted,
-        uahAttemptedAmount: uahAttempted,
-        eurAttemptedAmount: eurAttempted,
-        utm_source: utm_source || getTouchUtm(primaryLead, "source"),
-        utm_medium: utm_medium || getTouchUtm(primaryLead, "medium"),
-        utm_campaign: utm_campaign || getTouchUtm(primaryLead, "campaign"),
-        utm_content: utm_content || getTouchUtm(primaryLead, "content"),
-        utm_term: utm_term || getTouchUtm(primaryLead, "term"),
-        history: [...normalizedGroupLeads].sort((a, b) => getLeadDate(a).getTime() - getLeadDate(b).getTime()), // Attach full multi-touch history logs sorted chronologically
-        isMultiSource,
-        touchCount: normalizedGroupLeads.length,
-        diagnosticsComment: getDiagnosticsComment(normalizedGroupLeads),
-        managerComment: primaryLead.managerComment || "",
-      };
-    });
-
-    // Filter out raw empty click sessions (no name/phone/tg/email AND not Paid)
-    return allClustered.filter((lead: any) => {
-      const nameVal = lead.name?.trim();
-      const hasRealName = nameVal && nameVal !== "" && nameVal !== "Невідомий";
-      const hasPhone = !!lead.phone?.trim();
-      const hasTelegram = !!lead.telegram?.trim();
-      const hasEmail = !!lead.email?.trim();
-      const hasContacts = hasRealName || hasPhone || hasTelegram || hasEmail;
-      const isPaid = lead.status === "Купив курс" || lead.status === "Купив(-ла) Трипвайер";
-      return hasContacts || isPaid;
-    });
-  }, [rawLeads, viewType, allowedProjects]);
-
-  // --- Filtering and Query calculations ---
-  const processedLeads = useMemo(() => {
-    return clusteredLeads.filter((lead: any) => {
-      // 1. Live Search matching
-      const matchSearch =
-        lead.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead.phone?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead.telegram?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead.email?.toLowerCase().includes(searchQuery.toLowerCase());
-
-      if (!matchSearch) return false;
-
-      // 2. Status matching
-      if (statusFilter !== "all" && lead.status !== statusFilter) return false;
-
-      // 3. Touch Count Filter
-      if (touchCountFilter !== "all") {
-        if (touchCountFilter === "multi") {
-          if (lead.touchCount < 2) return false;
-        } else if (touchCountFilter === "single") {
-          if (lead.touchCount !== 1) return false;
-        }
-      }
-
-      // 4. Source Sheet matching
-      if (sourceFilter !== "all") {
-        const source = lead.metadata?.target_sheet || lead.metadata?.lead?.target_sheet || lead.utm_source || "";
-        if (source.toLowerCase() !== sourceFilter.toLowerCase()) return false;
-      }
-
-      // 5. Unpaid Intent Filter (Checkout attempt with no payment success in cluster)
-      if (unpaidIntentOnly) {
-        const hasPayment = lead.history.some((o: any) => o.status === "Купив курс" || o.status === "Купив(-ла) Трипвайер" || o.amount > 0);
-        const hasCheckout = lead.history.some(
-          (o: any) => o.status === "⏳ Очікується оплата" || (o.order_id && !o.order_id.startsWith("ELT_ORD_")) || o.metadata?.payment_intent
-        );
-        if (hasPayment || !hasCheckout) return false;
-      }
-
-      // 6. Date Range filter
-      if (startDate) {
-        const leadDate = getLeadDate(lead);
-        if (leadDate < new Date(startDate)) return false;
-      }
-      if (endDate) {
-        const leadDate = getLeadDate(lead);
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        if (leadDate > end) return false;
-      }
-
-      // 7. Landing filter matching
-      if (!isLeadMatchingLanding(lead, selectedLanding)) return false;
-
-      return true;
-    });
-  }, [clusteredLeads, searchQuery, statusFilter, touchCountFilter, sourceFilter, unpaidIntentOnly, startDate, endDate, selectedLanding]);
-
-  // Memorized filtered leads strictly isolated for Kanban view to prevent bleeding
-  const kanbanProcessedLeads = useMemo(() => {
-    return clusteredLeads.filter((lead: any) => {
-      // 1. Live Search matching
-      const matchSearch =
-        lead.name?.toLowerCase().includes(kanbanSearchQuery.toLowerCase()) ||
-        lead.phone?.toLowerCase().includes(kanbanSearchQuery.toLowerCase()) ||
-        lead.telegram?.toLowerCase().includes(kanbanSearchQuery.toLowerCase()) ||
-        lead.email?.toLowerCase().includes(kanbanSearchQuery.toLowerCase());
-
-      if (!matchSearch) return false;
-
-      // 2. Touch Count Filter
-      if (kanbanTouchFilter !== "all") {
-        if (kanbanTouchFilter === "multi") {
-          if (lead.touchCount < 2) return false;
-        } else if (kanbanTouchFilter === "single") {
-          if (lead.touchCount !== 1) return false;
-        }
-      }
-
-      // 3. Source Filter
-      if (kanbanSourceFilter !== "all") {
-        const source = lead.metadata?.target_sheet || lead.metadata?.lead?.target_sheet || lead.utm_source || "";
-        if (source.toLowerCase() !== kanbanSourceFilter.toLowerCase()) return false;
-      }
-
-      // 4. Landing filter matching
-      if (!isLeadMatchingLanding(lead, selectedLanding)) return false;
-
-      return true;
-    });
-  }, [clusteredLeads, kanbanSearchQuery, kanbanTouchFilter, kanbanSourceFilter, selectedLanding]);
-
-  const displayedLandings = useMemo(() => {
-    const landings = PROJECT_LANDINGS[activeSlug] || [];
-    if (activeTab !== "quizzes") return landings;
-    return landings.filter((land) => {
-      // Only keep landings that have at least one lead with a quiz in clusteredLeads
-      return clusteredLeads.some((lead: any) => 
-        isLeadMatchingLanding(lead, land.url) && 
-        lead.diagnosticsComment && 
-        lead.diagnosticsComment.trim().length > 0
-      );
-    });
-  }, [activeSlug, activeTab, clusteredLeads]);
-
-  const paginatedLeads = useMemo(() => {
-    const startIndex = (currentPage - 1) * pageSize;
-    return processedLeads.slice(startIndex, startIndex + pageSize);
-  }, [processedLeads, currentPage]);
-
-  const diagnosticsIssues = useMemo(() => {
-    if (viewType !== "single" || clusteredLeads.length === 0) {
-      return { nameless: [], unmatchedUrls: [], currencyErrors: [] };
-    }
-
-    const nameless: any[] = [];
-    const unmatchedUrls: Record<string, { count: number; rawUrl: string; originalSheet: string; sampleLead: string }> = {};
-    const currencyErrors: any[] = [];
-
-    clusteredLeads.forEach((lead: any) => {
-      const nameVal = lead.name?.trim();
-      const hasContacts = lead.phone || lead.telegram || lead.email;
-      if ((!nameVal || nameVal === "Невідомий") && hasContacts) {
-        nameless.push(lead);
-      }
-
-      lead.history?.forEach((touch: any) => {
-        const url = getTouchPageUrl(touch);
-        if (url) {
-          const matched = PROJECT_LANDINGS[activeSlug]?.some((land) => {
-            const normLand = land.url.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").toLowerCase();
-            const normTouch = url.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").toLowerCase();
-            return normTouch.includes(normLand);
-          });
-          if (!matched) {
-            const cleanUrl = url.replace(/^https?:\/\//i, "").replace(/^www\./i, "").trim();
-            if (!unmatchedUrls[cleanUrl]) {
-              unmatchedUrls[cleanUrl] = {
-                count: 0,
-                rawUrl: url,
-                originalSheet: touch.metadata?.original_sheet || touch.metadata?.target_sheet || "direct",
-                sampleLead: lead.name
-              };
-            }
-            unmatchedUrls[cleanUrl].count++;
-          }
-        }
-
-        const amt = Number(touch.amount || 0);
-        if (amt > 0) {
-          const metaCurrency = String(
-            touch.metadata?.currency || 
-            touch.metadata?.lead?.currency || 
-            touch.metadata?.raw_row?.currency ||
-            ""
-          ).trim().toLowerCase();
-          if (!["usd", "$", "uah", "₴", "eur", "€"].includes(metaCurrency)) {
-            currencyErrors.push({
-              leadId: lead.id,
-              leadName: lead.name,
-              amount: amt,
-              currency: metaCurrency || "missing",
-              date: getLeadDate(touch)
-            });
-          }
-        }
-      });
-    });
-
-    return {
-      nameless,
-      unmatchedUrls: Object.values(unmatchedUrls).sort((a, b) => b.count - a.count),
-      currencyErrors
-    };
-  }, [clusteredLeads, viewType, activeSlug]);
-
-  useEffect(() => {
-    if (!isDevMode || viewType !== "single" || clusteredLeads.length === 0) return;
-
-    console.groupCollapsed("🐞 CRM Developer Diagnostics: DSU & Mappings");
-    console.log(`Total raw leads/orders: ${rawLeads.length}`);
-    console.log(`Clustered unique customer profiles: ${clusteredLeads.length}`);
-    
-    // Find URL matching issues
-    const urlMismatches: any[] = [];
-    const namelessLeads: any[] = [];
-    const missingCurrency: any[] = [];
-
-    clusteredLeads.forEach((lead: any) => {
-      // 1. Nameless contacts
-      const nameVal = lead.name?.trim();
-      const hasContacts = lead.phone || lead.telegram || lead.email;
-      if ((!nameVal || nameVal === "Невідомий") && hasContacts) {
-        namelessLeads.push({
-          id: lead.id,
-          phone: lead.phone,
-          telegram: lead.telegram,
-          email: lead.email,
-          project: lead.project_id
-        });
-      }
-
-      // 2. Mismatched URLs
-      lead.history?.forEach((touch: any) => {
-        const url = getTouchPageUrl(touch);
-        if (url) {
-          // Check if this URL is matched by any rule in PROJECT_LANDINGS
-          const matched = PROJECT_LANDINGS[activeSlug]?.some((land) => {
-            const normLand = land.url.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").toLowerCase();
-            const normTouch = url.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").toLowerCase();
-            return normTouch.includes(normLand);
-          });
-          if (!matched) {
-            urlMismatches.push({
-              leadName: lead.name,
-              url,
-              sheet: touch.metadata?.original_sheet || touch.metadata?.target_sheet || "direct"
-            });
-          }
-        }
-
-        // 3. Currency errors
-        const amt = Number(touch.amount || 0);
-        if (amt > 0) {
-          const metaCurrency = String(
-            touch.metadata?.currency || 
-            touch.metadata?.lead?.currency || 
-            touch.metadata?.raw_row?.currency ||
-            ""
-          ).trim().toLowerCase();
-          if (!["usd", "$", "uah", "₴", "eur", "€"].includes(metaCurrency)) {
-            missingCurrency.push({
-              leadName: lead.name,
-              amount: amt,
-              currency: metaCurrency || "missing"
-            });
-          }
-        }
-      });
-    });
-
-    if (namelessLeads.length > 0) {
-      console.warn(`⚠️ Found ${namelessLeads.length} leads with contact details but missing/unknown names:`, namelessLeads);
-    }
-    if (urlMismatches.length > 0) {
-      console.warn(`⚠️ Found ${urlMismatches.length} touchpoint URLs not matching any registered landings in PROJECT_LANDINGS:`, urlMismatches);
-    }
-    if (missingCurrency.length > 0) {
-      console.error(`❌ Found ${missingCurrency.length} transactions with unresolved/missing currency codes:`, missingCurrency);
-    }
-
-    console.groupEnd();
-  }, [isDevMode, clusteredLeads, rawLeads.length, viewType, activeSlug]);
-
-  const uniqueSources = useMemo(() => {
-    const sources = new Set<string>();
-    clusteredLeads.forEach((l: any) => {
-      const source = l.metadata?.target_sheet || l.metadata?.lead?.target_sheet || l.utm_source || "";
-      if (source) sources.add(source);
-    });
-    return Array.from(sources);
-  }, [clusteredLeads]);
-
-  // Real-time Traffic and Costs date range filtering
-  const filteredTraffic = useMemo(() => {
-    return rawTraffic.filter((t: any) => {
-      if (startDate) {
-        const tDate = new Date(t.created_at);
-        if (tDate < new Date(startDate)) return false;
-      }
-      if (endDate) {
-        const tDate = new Date(t.created_at);
-        const end = new Date(endDate);
-        if (tDate > end) return false;
-      }
-      return true;
-    });
-  }, [rawTraffic, startDate, endDate]);
-
-  const filteredCosts = useMemo(() => {
-    return rawCosts.filter((c: any) => {
-      if (startDate) {
-        const cDate = new Date(c.date);
-        if (cDate < new Date(startDate)) return false;
-      }
-      if (endDate) {
-        const cDate = new Date(c.date);
-        const end = new Date(endDate);
-        if (cDate > end) return false;
-      }
-      return true;
-    });
-  }, [rawCosts, startDate, endDate]);
-
-  // --- Financial Scope Calculations ---
-  const singleProjectStats = useMemo(() => {
-    if (viewType !== "single") return null;
-
-    const totalLeads = processedLeads.length;
-    const totalClicks = filteredTraffic.length;
-    const totalSpend = filteredCosts.reduce((sum: number, c: any) => sum + Number(c.spend || 0), 0);
-    const totalApplications = processedLeads.filter((l: any) => 
-      statusPriority(l.status) >= 3 || 
-      l.history.some((h: any) => statusPriority(h.status) >= 3)
-    ).length;
-
-    const conversionRate = totalClicks > 0 ? (totalLeads / totalClicks) * 100 : 0;
-    const cpl = totalLeads > 0 ? totalSpend / totalLeads : 0;
-
-    const usdCourseRevenue = processedLeads.reduce((sum, l) => sum + Number(l.usdPaid || 0), 0);
-    const uahCourseRevenue = processedLeads.reduce((sum, l) => sum + Number(l.uahPaid || 0), 0);
-    const eurCourseRevenue = processedLeads.reduce((sum, l) => sum + Number(l.eurPaid || 0), 0);
-    const usdTripwireRevenue = processedLeads.reduce((sum, l) => sum + Number(l.usdTripwirePaid || 0), 0);
-    const uahTripwireRevenue = processedLeads.reduce((sum, l) => sum + Number(l.uahTripwirePaid || 0), 0);
-    const eurTripwireRevenue = processedLeads.reduce((sum, l) => sum + Number(l.eurTripwirePaid || 0), 0);
-
-    const totalUsdRevenue = usdCourseRevenue + usdTripwireRevenue;
-    const totalUahRevenue = uahCourseRevenue + uahTripwireRevenue;
-    const totalEurRevenue = eurCourseRevenue + eurTripwireRevenue;
-
-    const netProfitUsd = totalUsdRevenue - totalSpend;
-
-    // Blended ROI using rate 41.0 and 1.08 exchange rate for EUR to USD
-    const blendedRevenue = totalUsdRevenue + (totalUahRevenue / 41.0) + (totalEurRevenue * 1.08);
-    const roi = totalSpend > 0 ? (blendedRevenue / totalSpend) * 100 : 0;
-
-    const paidLeads = processedLeads.filter((l) => l.status === "Купив курс");
-    const paidTripwires = processedLeads.filter((l) => l.status === "Купив(-ла) Трипвайер");
-    const totalSales = paidLeads.length + paidTripwires.length;
-
-    // Split Course & Tripwire sales by currency
-    const usdSales = processedLeads.filter(
-      (l) => (l.status === "Купив курс" || l.status === "Купив(-ла) Трипвайер") && (Number(l.usdPaid || 0) + Number(l.usdTripwirePaid || 0) > 0)
-    );
-    const uahSales = processedLeads.filter(
-      (l) => (l.status === "Купив курс" || l.status === "Купив(-ла) Трипвайер") && (Number(l.uahPaid || 0) + Number(l.uahTripwirePaid || 0) > 0)
-    );
-    const eurSales = processedLeads.filter(
-      (l) => (l.status === "Купив курс" || l.status === "Купив(-ла) Трипвайер") && (Number(l.eurPaid || 0) + Number(l.eurTripwirePaid || 0) > 0)
-    );
-
-    const usdSalesCount = usdSales.length;
-    const uahSalesCount = uahSales.length;
-    const eurSalesCount = eurSales.length;
-
-    const leadToSaleConv = totalLeads > 0 ? (totalSales / totalLeads) * 100 : 0;
-    const leadToSaleConvUsd = totalLeads > 0 ? (usdSalesCount / totalLeads) * 100 : 0;
-    const leadToSaleConvUah = totalLeads > 0 ? (uahSalesCount / totalLeads) * 100 : 0;
-    const leadToSaleConvEur = totalLeads > 0 ? (eurSalesCount / totalLeads) * 100 : 0;
-
-    // Average Order Value (AOV) strictly divided by currency-specific sales count
-    // and counting both course + tripwire revenue for that currency
-    const aovUsd = usdSalesCount > 0 ? (usdCourseRevenue + usdTripwireRevenue) / usdSalesCount : 0;
-    const aovUah = uahSalesCount > 0 ? (uahCourseRevenue + uahTripwireRevenue) / uahSalesCount : 0;
-    const aovEur = eurSalesCount > 0 ? (eurCourseRevenue + eurTripwireRevenue) / eurSalesCount : 0;
-
-    return {
-      totalLeads,
-      totalClicks,
-      totalSpend,
-      totalApplications,
-      conversionRate,
-      cpl,
-      usdRevenue: totalUsdRevenue,
-      uahRevenue: totalUahRevenue,
-      eurRevenue: totalEurRevenue,
-      usdCourseRevenue,
-      uahCourseRevenue,
-      eurCourseRevenue,
-      usdTripwireRevenue,
-      uahTripwireRevenue,
-      eurTripwireRevenue,
-      netProfitUsd,
-      roi,
-      totalSales,
-      leadToSaleConv,
-      leadToSaleConvUsd,
-      leadToSaleConvUah,
-      leadToSaleConvEur,
-      aovUsd,
-      aovUah,
-      aovEur
-    };
-  }, [processedLeads, filteredTraffic, filteredCosts, viewType]);
-
-  // Daily registration and traffic click trends mapping for Double Area Chart
-  const splineTrendData = useMemo(() => {
-    if (viewType !== "single" || (processedLeads.length === 0 && filteredTraffic.length === 0)) return [];
-
-    let start = startDate ? new Date(startDate) : null;
-    let end = endDate ? new Date(endDate) : new Date();
-
-    if (start && (start.getFullYear() < 2020 || start.getFullYear() > 2100 || isNaN(start.getTime()))) {
-      return [];
-    }
-    if (end && (end.getFullYear() < 2020 || end.getFullYear() > 2100 || isNaN(end.getTime()))) {
-      return [];
-    }
-
-    if (!start) {
-      const leadDates = processedLeads.map((l: any) => getLeadDate(l).getTime());
-      const trafficDates = filteredTraffic.map((t: any) => new Date(t.created_at).getTime());
-      const allDates = [...leadDates, ...trafficDates];
-      const minTime = allDates.length > 0 ? Math.min(...allDates) : Date.now();
-      start = new Date(minTime);
-      if (dateRangePreset !== "all") {
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        if (start < thirtyDaysAgo) {
-          start = thirtyDaysAgo;
-        }
-      }
-    }
-
-    const dayLeads: Record<string, number> = {};
-    const dayClicks: Record<string, number> = {};
-    const curr = new Date(start);
-
-    let safetyCounter = 0;
-    while (curr <= end) {
-      if (safetyCounter++ > 1000) break;
-      const str = curr.toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" });
-      dayLeads[str] = 0;
-      dayClicks[str] = 0;
-      curr.setDate(curr.getDate() + 1);
-    }
-
-    processedLeads.forEach((l) => {
-      const str = getLeadDate(l).toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" });
-      if (dayLeads[str] !== undefined) {
-        dayLeads[str] += 1;
-      }
-    });
-
-    filteredTraffic.forEach((t: any) => {
-      const str = new Date(t.created_at).toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" });
-      if (dayClicks[str] !== undefined) {
-        dayClicks[str] += 1;
-      }
-    });
-
-    return Object.keys(dayLeads).map((name) => ({
-      name,
-      leads: dayLeads[name],
-      clicks: dayClicks[name],
-    }));
-  }, [processedLeads, filteredTraffic, startDate, endDate, viewType]);
-
-  // Collapsible Hierarchical UTM Attribution Tree performance breakdown
-  const utmAttributionTree = useMemo(() => {
-    if (viewType !== "single" || processedLeads.length === 0) return [];
-
-    const root: Record<string, any> = {};
-
-    // Helper to get or create node
-    const getOrCreateNode = (parent: any, name: string) => {
-      if (!parent[name]) {
-        parent[name] = {
-          name,
-          clicks: 0,
-          leads: 0,
-          usd_revenue: 0,
-          uah_revenue: 0,
-          revenue: 0,
-          children: {}
-        };
-      }
-      return parent[name];
-    };
-
-    // Aggregate Leads
-    processedLeads.forEach((lead) => {
-      const source = lead.utm_source || "direct";
-      const medium = lead.utm_medium || "";
-      const campaign = lead.utm_campaign || "";
-      const content = lead.utm_content || "";
-
-      // Path of levels: filter out empty names
-      const path = [source, medium, campaign, content].filter(Boolean);
-      
-      let curr = root;
-      path.forEach((part) => {
-        const node = getOrCreateNode(curr, part);
-        node.leads += 1;
-        const usdPaid = Number(lead.usdPaid || 0);
-        const uahPaid = Number(lead.uahPaid || 0);
-        node.usd_revenue += usdPaid;
-        node.uah_revenue += uahPaid;
-        node.revenue += usdPaid + (uahPaid / 41.0);
-        curr = node.children;
-      });
-    });
-
-    // Aggregate Clicks/Traffic
-    filteredTraffic.forEach((t: any) => {
-      const source = t.utm_source || "direct";
-      const medium = t.utm_medium || "";
-      const campaign = t.utm_campaign || "";
-      const content = t.utm_content || "";
-
-      const path = [source, medium, campaign, content].filter(Boolean);
-      
-      let curr = root;
-      let possible = true;
-      path.forEach((part) => {
-        if (!possible) return;
-        if (curr[part]) {
-          curr[part].clicks += 1;
-          curr = curr[part].children;
-        } else {
-          possible = false;
-        }
-      });
-    });
-
-    // Helper to convert Record to Sorted Array recursively
-    const finalizeNodes = (nodesRecord: Record<string, any>): any[] => {
-      return Object.values(nodesRecord)
-        .map((node: any) => {
-          const cr = node.clicks > 0 ? (node.leads / node.clicks) * 100 : 0;
-          return {
-            ...node,
-            cr,
-            children: finalizeNodes(node.children)
-          };
-        })
-        .sort((a, b) => b.revenue - a.revenue || b.leads - a.leads);
-    };
-
-    return finalizeNodes(root);
-  }, [processedLeads, filteredTraffic, viewType]);
+  // Server-side precalculated analytics & dashboard variables
+  const processedLeads = dashboardData.leads || [];
+  const paginatedLeads = processedLeads;
+  const kanbanProcessedLeads = dashboardData.leads || [];
+  const singleProjectStats = dashboardData.stats;
+  const splineTrendData = dashboardData.splineTrendData || [];
+  const utmAttributionTree = dashboardData.utmAttributionTree || [];
+  const diagnosticsIssues = dashboardData.diagnosticsIssues || { nameless: [], unmatchedUrls: [], currencyErrors: [] };
+  const totalCount = dashboardData.totalCount || 0;
+  const uniqueSources = dashboardData.uniqueSources || [];
+  const displayedLandings = PROJECT_LANDINGS[activeSlug] || [];
 
   // --- Kanban Column logic & state manipulation ---
   const handleDragOver = (e: React.DragEvent) => {
@@ -1662,7 +851,6 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   };
 
   // State loading spinner trackers
-  const [isLoading, setIsLoading] = useState(false);
 
   const handleCopyPhone = (phone: string, id: string) => {
     navigator.clipboard.writeText(phone);
@@ -2804,18 +1992,18 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
                     {/* Math Points */}
                     {(() => {
-                      const allCounts = splineTrendData.flatMap((d) => [d.leads, d.clicks]);
+                      const allCounts = splineTrendData.flatMap((d: any) => [d.leads, d.clicks]);
                       const max = Math.max(...allCounts, 4);
                       const stepX = 700 / (splineTrendData.length - 1 || 1);
 
                       // Map points to SVG coordinates
-                      const leadPoints = splineTrendData.map((d, i) => {
+                      const leadPoints = splineTrendData.map((d: any, i: number) => {
                         const x = i * stepX;
                         const y = 180 - (d.leads / max) * 140; // scale between 40-180
                         return { x, y, label: d.leads };
                       });
 
-                      const clickPoints = splineTrendData.map((d, i) => {
+                      const clickPoints = splineTrendData.map((d: any, i: number) => {
                         const x = i * stepX;
                         const y = 180 - (d.clicks / max) * 140; // scale between 40-180
                         return { x, y, label: d.clicks };
@@ -2853,7 +2041,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                           <path d={leadPath} fill="none" stroke="#10B981" strokeWidth="2.5" />
 
                           {/* Data points for Clicks */}
-                          {clickPoints.map((p, idx) => (
+                          {clickPoints.map((p: any, idx: number) => (
                             <g key={`c-${idx}`}>
                               <circle cx={p.x} cy={p.y} r="3.5" fill="#0C0C0F" stroke="#3B82F6" strokeWidth="2" />
                               {(splineTrendData.length <= 10 || idx % Math.max(1, Math.floor(splineTrendData.length / 5)) === 0 || idx === splineTrendData.length - 1) && (
@@ -2865,7 +2053,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                           ))}
 
                           {/* Data points for Leads */}
-                          {leadPoints.map((p, idx) => (
+                          {leadPoints.map((p: any, idx: number) => (
                             <g key={`l-${idx}`}>
                               <circle cx={p.x} cy={p.y} r="3.5" fill="#0C0C0F" stroke="#10B981" strokeWidth="2" />
                               {(splineTrendData.length <= 10 || idx % Math.max(1, Math.floor(splineTrendData.length / 5)) === 0 || idx === splineTrendData.length - 1) && (
@@ -2882,7 +2070,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
                   {/* Horizontal Labels */}
                   <div className="flex justify-between text-[10px] text-white/30 font-black uppercase mt-4">
-                    {splineTrendData.map((d, i) => {
+                    {splineTrendData.map((d: any, i: number) => {
                       const total = splineTrendData.length;
                       let labelText = d.name;
                       if (total > 7) {
@@ -2932,8 +2120,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                     },
                     {
                       label: "4. Продажі (Курс)",
-                      val: processedLeads.filter((l) => l.status === "Купив курс").length,
-                      pct: singleProjectStats.totalLeads > 0 ? (processedLeads.filter((l) => l.status === "Купив курс").length / singleProjectStats.totalLeads) * 100 : 0,
+                      val: singleProjectStats.paidLeadsCount || 0,
+                      pct: singleProjectStats.totalLeads > 0 ? ((singleProjectStats.paidLeadsCount || 0) / singleProjectStats.totalLeads) * 100 : 0,
                       color: "bg-emerald-500"
                     }
                   ].map((step) => (
@@ -3051,7 +2239,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                 className={`w-full appearance-none pl-4 pr-10 py-2.5 rounded-xl focus:outline-none text-xs font-extrabold cursor-pointer ${selectClass}`}
               >
                 <option value="all" className={optionClass}>📊 Воронка: Всі</option>
-                {uniqueSources.map((source) => (
+                {uniqueSources.map((source: string) => (
                   <option key={source} value={source} className={optionClass}>{source}</option>
                 ))}
               </select>
@@ -3373,7 +2561,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                   className={`w-full appearance-none pl-4 pr-10 py-3.5 rounded-xl focus:outline-none text-xs font-extrabold cursor-pointer ${selectClass}`}
                 >
                   <option value="all" className={optionClass}>📊 Фільтр: Всі воронки</option>
-                  {uniqueSources.map((source) => (
+                  {uniqueSources.map((source: string) => (
                     <option key={source} value={source} className={optionClass}>{source}</option>
                   ))}
                 </select>
@@ -3740,10 +2928,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             </div>
 
             {/* Pagination controls */}
-            {processedLeads.length > pageSize && (
+            {totalCount > pageSize && (
               <div className={`flex justify-between items-center p-4 border-t ${borderClass}`}>
                 <span className={`text-[11px] font-black uppercase ${textMutedClass}`}>
-                  Показано {Math.min((currentPage - 1) * pageSize + 1, processedLeads.length)}—{Math.min(currentPage * pageSize, processedLeads.length)} із {processedLeads.length} лідів
+                  Показано {Math.min((currentPage - 1) * pageSize + 1, totalCount)}—{Math.min(currentPage * pageSize, totalCount)} із {totalCount} лідів
                 </span>
                 <div className="flex gap-2">
                   <button
@@ -3757,7 +2945,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                     Назад
                   </button>
                   <button
-                    disabled={currentPage * pageSize >= processedLeads.length}
+                    disabled={currentPage * pageSize >= totalCount}
                     onClick={() => setCurrentPage(prev => prev + 1)}
                     className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all disabled:opacity-30 ${isLight
                         ? "border-neutral-200 hover:bg-neutral-100 disabled:hover:bg-transparent"
@@ -4161,7 +3349,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             
             <div className="flex items-center gap-4">
               <div className="px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-wider text-white/50">
-                Загалом лідів у кластері: {clusteredLeads.length}
+                Загалом лідів у кластері: {totalCount}
               </div>
             </div>
           </div>

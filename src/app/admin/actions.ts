@@ -138,8 +138,301 @@ export async function checkProjectAccess(projectId: string) {
   return true;
 }
 
+// PROJECT LANDINGS registry for server-side lookup
+const PROJECT_LANDINGS: Record<string, Array<{ label: string; url: string; badgeColor: string; type: "paid" | "free" }>> = {
+  bw_main: [
+    { label: "Основний", url: "https://bnw-prod.vercel.app/", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "free" }
+  ],
+  victoria: [
+    { label: "Майстер-клас", url: "https://victoria-mc.vercel.app/", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20", type: "free" },
+    { label: "VSL", url: "https://victoria-mc.vercel.app/free-lection/", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20", type: "free" },
+    { label: "VSL-форма", url: "https://victoria-mc.vercel.app/free-lection/vsl-form/", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "free" },
+    { label: "Броні", url: "https://victoria-mc.vercel.app/price", badgeColor: "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20", type: "paid" },
+    { label: "Практикум", url: "https://victoria-mc.vercel.app/practicum", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20", type: "paid" }
+  ],
+  sofia: [
+    { label: "Основний", url: "https://sofifinsight.vercel.app/", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "free" },
+    { label: "Інтенсив", url: "https://sofifinsight.vercel.app/intensive", badgeColor: "bg-teal-500/10 text-teal-400 border border-teal-500/20", type: "free" },
+    { label: "Вебінар", url: "https://sofifinsight.vercel.app/web", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20", type: "free" },
+    { label: "Броні", url: "https://sofifinsight.vercel.app/price", badgeColor: "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20", type: "paid" },
+    { label: "VSL", url: "https://sofifinsight.vercel.app/sofia-invest", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20", type: "free" },
+    { label: "VSL-форма", url: "https://sofifinsight.vercel.app/sofia-invest/lesson", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "free" },
+    { label: "Міні-курс", url: "https://sofifinsight.vercel.app/minicourse", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20", type: "paid" }
+  ],
+  valeria: [
+    { label: "Основний", url: "https://pix-ai-ua.vercel.app/", badgeColor: "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20", type: "free" },
+    { label: "Офіс", url: "https://pix-ai-ua.vercel.app/office", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "paid" },
+    { label: "Мами", url: "https://pix-ai-ua.vercel.app/moms", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20", type: "paid" },
+    { label: "Б'юті", url: "https://pix-ai-ua.vercel.app/beauty", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "paid" },
+    { label: "Для тінейджерів", url: "https://pix-ai-ua.vercel.app/teen", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20", type: "paid" },
+    { label: "Для батьків", url: "https://pix-ai-ua.vercel.app/parents", badgeColor: "bg-orange-500/10 text-orange-400 border border-orange-500/20", type: "paid" }
+  ],
+  clean_klinom: [
+    { label: "Основний", url: "https://clean-klinom.vercel.app/", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20", type: "free" }
+  ],
+  svitlana: [
+    { label: "Основний", url: "https://svitlanatape.vercel.app/", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "free" },
+    { label: "Антиботокс", url: "https://antibotox.vercel.app/", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20", type: "paid" },
+    { label: "Заломи сну", url: "https://zalomu-sny.vercel.app/", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20", type: "paid" },
+    { label: "Тейпування тіла", url: "https://svitlanatape.vercel.app/body-taping", badgeColor: "bg-orange-500/10 text-orange-400 border border-orange-500/20", type: "paid" },
+    { label: "Типи старіння", url: "https://tipstarinnyaa.vercel.app/", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "free" },
+    { label: "3 веби", url: "https://svitlana3web.vercel.app/", badgeColor: "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20", type: "free" },
+    { label: "Світлана тейп", url: "https://svetlanatape.vercel.app/", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20", type: "free" },
+    { label: "Антиботокс клуб", url: "https://antibotox-club.vercel.app/", badgeColor: "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20", type: "paid" },
+    { label: "Face Detox", url: "https://facedetox.vercel.app/", badgeColor: "bg-teal-500/10 text-teal-400 border border-teal-500/20", type: "free" }
+  ],
+  vova_win: [
+    { label: "Марафон", url: "https://vova-win.club/marathon", badgeColor: "bg-orange-500/10 text-orange-400 border border-orange-500/20", type: "paid" }
+  ]
+};
+
+// DSU Helper class
+class DSU {
+  parent: number[];
+  constructor(size: number) {
+    this.parent = Array.from({ length: size }, (_, i) => i);
+  }
+  find(i: number): number {
+    let root = i;
+    while (this.parent[root] !== root) {
+      root = this.parent[root];
+    }
+    let curr = i;
+    while (curr !== root) {
+      const nxt = this.parent[curr];
+      this.parent[curr] = root;
+      curr = nxt;
+    }
+    return root;
+  }
+  union(i: number, j: number) {
+    const rootI = this.find(i);
+    const rootJ = this.find(j);
+    if (rootI !== rootJ) {
+      this.parent[rootI] = rootJ;
+    }
+  }
+}
+
+const normalizeUrlForMatching = (url: string) => {
+  if (!url) return "";
+  return url
+    .replace(/^https?:\/\//i, "")
+    .replace(/^www\./i, "")
+    .replace(/\/+$/, "")
+    .trim()
+    .toLowerCase();
+};
+
+const getTouchPageUrl = (l: any) => {
+  if (!l) return "";
+  return (
+    l.metadata?.page_url ||
+    l.metadata?.pageUrl ||
+    l.metadata?.full_url ||
+    l.metadata?.fullUrl ||
+    l.page_url ||
+    ""
+  );
+};
+
+const getTouchUtm = (l: any, key: 'source' | 'medium' | 'campaign' | 'content' | 'term'): string => {
+  if (!l) return "";
+  const colVal = l[`utm_${key}`];
+  if (colVal && colVal.trim()) return colVal.trim();
+  const utms = 
+    l.metadata?.raw_row?.raw_payload?.utms || 
+    l.metadata?.raw_payload?.utms || 
+    l.metadata?.utms || 
+    null;
+  if (utms) {
+    const val = utms[key] || utms[key === 'campaign' ? 'utm_campaign' : key === 'source' ? 'utm_source' : key === 'medium' ? 'utm_medium' : key === 'content' ? 'utm_content' : key === 'term' ? 'utm_term' : ''];
+    if (val && String(val).trim()) return String(val).trim();
+  }
+  const metaVal = l.metadata?.[`utm_${key}`] || l.metadata?.[`utm${key.charAt(0).toUpperCase() + key.slice(1)}`] || l.metadata?.raw_row?.[`utm_${key}`];
+  if (metaVal && String(metaVal).trim()) return String(metaVal).trim();
+  return "";
+};
+
+const getLeadDate = (lead: any): Date => {
+  const rawDateStr = 
+    lead.metadata?.raw_row?.Дата || 
+    lead.metadata?.raw_row?.дата || 
+    lead.metadata?.raw_row?.Date || 
+    lead.metadata?.raw_row?.date ||
+    lead.metadata?.created_at ||
+    lead.metadata?.lead?.created_at;
+
+  if (rawDateStr) {
+    const str = String(rawDateStr).trim();
+    const dotParts = str.split(" ")[0].split(".");
+    if (dotParts.length === 3) {
+      const day = parseInt(dotParts[0], 10);
+      const month = parseInt(dotParts[1], 10) - 1;
+      const year = parseInt(dotParts[2], 10);
+      if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+        const timeStr = str.split(" ")[1];
+        if (timeStr) {
+          const timeParts = timeStr.split(":");
+          const hour = parseInt(timeParts[0], 10) || 0;
+          const min = parseInt(timeParts[1], 10) || 0;
+          const sec = parseInt(timeParts[2], 10) || 0;
+          return new Date(Date.UTC(year, month, day, hour, min, sec));
+        }
+        return new Date(Date.UTC(year, month, day, 12, 0, 0));
+      }
+    }
+    let cleanStr = str;
+    if (str.includes("(")) {
+      cleanStr = str.split("(")[0].trim();
+    }
+    const parsed = Date.parse(cleanStr);
+    if (!isNaN(parsed)) {
+      return new Date(parsed);
+    }
+  }
+  return new Date(lead.created_at);
+};
+
+const statusPriority = (s: string): number => {
+  if (s === "Купив курс") return 10;
+  if (s === "Вирішив подумати") return 8;
+  if (s === "Дзвінок проведено") return 7;
+  if (s === "Назначено Дзвінок") return 6;
+  if (s === "Купив(-ла) Трипвайер") return 5;
+  if (s === "Списались") return 4;
+  if (s === "Залишив заявку") return 3;
+  if (s === "Зацікавлений лід") return 2;
+  if (s === "Новий лід") return 1;
+  if (s === "Відмова") return -1;
+  return 0;
+};
+
+const isLeadMatchingLanding = (lead: any, landingUrl: string, activeSlug: string) => {
+  if (landingUrl === "all") return true;
+  const targetNorm = normalizeUrlForMatching(landingUrl);
+  const targetHasPath = targetNorm.includes("/");
+  
+  return lead.history?.some((touch: any) => {
+    const touchUrl = normalizeUrlForMatching(getTouchPageUrl(touch));
+    
+    const originalSheet = (
+      touch.metadata?.original_sheet || 
+      touch.metadata?.originalSheet || 
+      touch.metadata?.raw_row?.original_sheet ||
+      touch.metadata?.raw_row?.originalSheet ||
+      ""
+    ).trim();
+    
+    const targetSheet = (
+      touch.metadata?.target_sheet || 
+      touch.metadata?.targetSheet || 
+      touch.metadata?.raw_row?.target_sheet || 
+      touch.metadata?.raw_row?.targetSheet ||
+      touch.metadata?.raw_row?.raw_payload?.sheet_name ||
+      ""
+    ).trim();
+    const tariff = (touch.metadata?.tariff || touch.metadata?.raw_row?.tariff || "").trim();
+    
+    if (touchUrl) {
+      let urlMatch = false;
+      if (targetHasPath) {
+        urlMatch = touchUrl.includes(targetNorm);
+        if (!urlMatch && targetNorm.includes("body-taping")) {
+          urlMatch = touchUrl.includes("/body-taping");
+        }
+      } else {
+        const firstSlashIdx = touchUrl.indexOf("/");
+        if (firstSlashIdx === -1) {
+          urlMatch = touchUrl === targetNorm;
+        } else {
+          const domainPart = touchUrl.substring(0, firstSlashIdx);
+          const pathPart = touchUrl.substring(firstSlashIdx + 1).trim();
+          urlMatch = domainPart === targetNorm && pathPart === "";
+        }
+      }
+      if (urlMatch) return true;
+    }
+    
+    if (targetNorm.includes("svitlana3web.vercel.app")) {
+      if (originalSheet === "ВЕБ (бот)" || originalSheet === "Заявки ленд Веб" || originalSheet === "новый веб") return true;
+    }
+    if (targetNorm.includes("facedetox.vercel.app")) {
+      if (originalSheet === "новый веб") return true;
+    }
+    if (targetNorm.includes("tipstarinnyaa.vercel.app")) {
+      if (originalSheet === "Квіз") return true;
+    }
+    if (targetNorm.includes("antibotox.vercel.app")) {
+      if (originalSheet === "Заявки ленд веб") return true;
+    }
+    if (targetNorm.includes("zalomu-sny.vercel.app")) {
+      if (originalSheet === "Заломи") return true;
+    }
+    if (targetNorm.includes("body-taping")) {
+      if (originalSheet === "Тейпування тіла" || tariff === "body_taping") return true;
+    }
+
+    if (targetNorm.includes("/practicum")) {
+      if (originalSheet === "Практикум" || originalSheet === "Practicum_Leads" || targetSheet === "Заявки на практикум") return true;
+    }
+    if (targetNorm.includes("/free-lection") && !targetNorm.includes("vsl-form")) {
+      if (originalSheet === "VSL 1 етап" || originalSheet === "VSL Трафик" || originalSheet === "VLS Урок") return true;
+    }
+    if (targetNorm.includes("/free-lection/vsl-form")) {
+      if (originalSheet === "VSL Форма") return true;
+    }
+    if (targetNorm.includes("/price")) {
+      if (originalSheet === "Бронювання" || originalSheet === "Заявки на практикум" || targetSheet === "Заявки на практикум") return true;
+    }
+    if (targetNorm.includes("/intensive")) {
+      if (targetSheet === "Заявки на інтенсив") return true;
+    }
+    if (targetNorm.includes("/web")) {
+      if (originalSheet === "Лиды Вебинар" || originalSheet === "Webinars" || originalSheet === "Заявки ленд Веб" || originalSheet === "ВЕБ (бот)" || originalSheet === "новый веб") return true;
+    }
+    if (targetNorm.includes("/sofia-invest/lesson")) {
+      if (originalSheet === "Заявки на урок" || originalSheet === "Анкети після уроку") return true;
+    }
+    if (targetNorm.includes("/sofia-invest") && !targetNorm.includes("/lesson")) {
+      if (originalSheet === "VSL Трафик" || originalSheet === "VLS Урок") return true;
+    }
+    if (targetNorm.includes("/office")) {
+      if (originalSheet === "Practicum_Leads") return true;
+    }
+    
+    if (!targetHasPath) {
+      if (activeSlug === "victoria" && targetNorm.includes("victoria-mc.vercel.app")) {
+        if (["Ленд 1", "Ленд 2", "Ленд 3", "МК 2.0", "Автовеб", "Webinars", "Ліди МК"].includes(originalSheet)) return true;
+      }
+      if ((activeSlug === "svitlana" || activeSlug === "svitlana") && (targetNorm.includes("svitlanatape.vercel.app") || targetNorm.includes("svetlanatape.vercel.app"))) {
+        if (["Діагностики", "Квіз", "Відповіді бот (19.05)"].includes(originalSheet)) return true;
+      }
+      if (activeSlug === "sofia" && targetNorm.includes("sofifinsight.vercel.app")) {
+        if (!originalSheet && !targetSheet) return true;
+      }
+    }
+    
+    return false;
+  }) || false;
+};
+
 // Fetch unified CRM dashboard and analytics data
-export async function getUnifiedCRMData(selectedProjectSlug?: string) {
+export async function getUnifiedCRMData(
+  selectedProjectSlug?: string,
+  filters?: {
+    page?: number;
+    pageSize?: number;
+    searchQuery?: string;
+    statusFilter?: string;
+    touchCountFilter?: string;
+    sourceFilter?: string;
+    unpaidIntentOnly?: boolean;
+    startDate?: string;
+    endDate?: string;
+    selectedLanding?: string;
+  }
+) {
   try {
     const { isSuperman, allowedProjects, activeSlug, profile, user } = await getSessionAndAccess(selectedProjectSlug);
 
@@ -412,23 +705,14 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
 
     const isSalesFiltered = profile.role === "sales" && hasRop;
 
-    // Fetch all customers with automatic pagination to bypass PostgREST 1000 limit
-    const fetchAllCustomers = async () => {
+    // Fetch all paged records helper function
+    const fetchAllPaged = async (fetchFn: (from: number, to: number) => any) => {
       let results: any[] = [];
       let from = 0;
       const limit = 1000;
       let hasMore = true;
       while (hasMore) {
-        let query = supabase
-          .from("unified_customers")
-          .select("*")
-          .eq("project_id", activeProject.id);
-
-        if (isSalesFiltered) {
-          query = query.eq("assigned_manager_id", user.id);
-        }
-
-        const { data, error } = await query.range(from, from + limit - 1);
+        const { data, error } = await fetchFn(from, from + limit - 1);
         if (error) throw error;
         results = [...results, ...(data || [])];
         if ((data || []).length < limit) hasMore = false;
@@ -437,63 +721,36 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
       return results;
     };
 
-    // Fetch all orders with automatic pagination to bypass PostgREST 1000 limit
-    const fetchAllOrders = async (customerIds: string[]) => {
-      let results: any[] = [];
-      let from = 0;
-      const limit = 1000;
-      let hasMore = true;
-      while (hasMore) {
-        let query = supabase
+    // Parallel fetch using adminSupabase (bypassing RLS safely)
+    const [allCustomers, allOrders, allTraffic, costsRes] = await Promise.all([
+      fetchAllPaged((from, to) => {
+        let q = adminSupabase.from("unified_customers").select("*").eq("project_id", activeProject.id);
+        if (isSalesFiltered) {
+          q = q.eq("assigned_manager_id", user.id);
+        }
+        return q.range(from, to);
+      }),
+      fetchAllPaged((from, to) => {
+        return adminSupabase
           .from("unified_orders")
           .select("*")
-          .eq("project_id", activeProject.id);
-
-        if (isSalesFiltered) {
-          if (customerIds.length === 0) {
-            return [];
-          }
-          query = query.in("customer_id", customerIds);
-        }
-
-        const { data, error } = await query
+          .eq("project_id", activeProject.id)
           .order("created_at", { ascending: false })
-          .range(from, from + limit - 1);
-        if (error) throw error;
-        results = [...results, ...(data || [])];
-        if ((data || []).length < limit) hasMore = false;
-        else from += limit;
-      }
-      return results;
-    };
-
-    // Fetch all traffic clicks with pagination
-    const fetchAllTraffic = async () => {
-      let results: any[] = [];
-      let from = 0;
-      const limit = 1000;
-      let hasMore = true;
-      while (hasMore) {
-        const { data, error } = await supabase
+          .range(from, to);
+      }),
+      fetchAllPaged((from, to) => {
+        return adminSupabase
           .from("traffic_clicks")
           .select("*")
           .eq("project_id", activeProject.id)
           .order("created_at", { ascending: false })
-          .range(from, from + limit - 1);
-        if (error) throw error;
-        results = [...results, ...(data || [])];
-        if ((data || []).length < limit) hasMore = false;
-        else from += limit;
-      }
-      return results;
-    };
-
-    // Fetch single project data in sequence/parallel
-    const allCustomers = await fetchAllCustomers();
-    const [allOrders, allTraffic, costsRes] = await Promise.all([
-      fetchAllOrders(allCustomers.map((c) => c.id)),
-      fetchAllTraffic(),
-      supabase.from("daily_traffic_and_costs").select("*").eq("project_id", activeProject.id).order("date", { ascending: false }),
+          .range(from, to);
+      }),
+      adminSupabase
+        .from("daily_traffic_and_costs")
+        .select("*")
+        .eq("project_id", activeProject.id)
+        .order("date", { ascending: false })
     ]);
 
     const costs = costsRes.data || [];
@@ -527,6 +784,683 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
       };
     });
 
+    // --- DSU Clustering / Deduplication engine on server ---
+    const size = formattedLeads.length;
+    const dsu = new DSU(size);
+
+    const phoneMap = new Map<string, number>();
+    const tgMap = new Map<string, number>();
+    const emailMap = new Map<string, number>();
+    const uuidMap = new Map<string, number>();
+
+    const getDiagnosticsComment = (groupLeads: any[]): string => {
+      const answers: string[] = [];
+      groupLeads.forEach((lead) => {
+        const meta = lead.metadata || {};
+        const raw = meta.raw_row || {};
+        
+        const quizFields = [
+          { key: "що турбує", label: "Що турбує" },
+          { key: "Чи колола ботокс, або подібне", label: "Ботокс" },
+          { key: "Тип старіння", label: "Тип старіння" },
+          { key: "Рівень доходу", label: "Дохід" },
+          { key: "Дохід", label: "Дохід" },
+          { key: "Фінансова ціль", label: "Фінансова ціль" },
+          { key: "Ціль", label: "Ціль" },
+          { key: "Борги", label: "Борги" },
+          { key: "Чи є борги зараз", label: "Борги" },
+          { key: "За який термін вийти на 100 000$", label: "Термін 100k$" },
+          { key: "Відповідь 1 (скільки витрачаєш на косметику в міс.)", label: "Витрати на косметику" },
+          { key: "niche", label: "Ніша" },
+          { key: "Коментар", label: "Коментар" },
+          { key: "request", label: "Запит" },
+          { key: "tariff", label: "Тариф" }
+        ];
+
+        quizFields.forEach((f) => {
+          const val = raw[f.key] || meta[f.key];
+          if (val && String(val).trim()) {
+            answers.push(`${f.label}: ${String(val).trim()}`);
+          }
+        });
+
+        Object.keys(raw).forEach((k) => {
+          if (k.toLowerCase().includes("питання") || k.toLowerCase().includes("відповідь")) {
+            const val = raw[k];
+            if (val && String(val).trim()) {
+              answers.push(`${k}: ${String(val).trim()}`);
+            }
+          }
+        });
+
+        const quizResult = raw.quiz_result || meta.quiz_result;
+        if (quizResult) {
+          if (typeof quizResult === "object") {
+            Object.entries(quizResult).forEach(([k, v]) => {
+              if (v) answers.push(`${k}: ${v}`);
+            });
+          } else {
+            answers.push(`Quiz: ${quizResult}`);
+          }
+        }
+        const queryVal = raw.query || meta.query;
+        if (queryVal) {
+          if (typeof queryVal === "object") {
+            Object.entries(queryVal).forEach(([k, v]) => {
+              if (v) answers.push(`${k}: ${v}`);
+            });
+          } else {
+            answers.push(`Запит: ${queryVal}`);
+          }
+        }
+      });
+
+      return Array.from(new Set(answers)).join("\n");
+    };
+
+    // Cluster leads
+    formattedLeads.forEach((lead: any, i: number) => {
+      const phone = lead.phone?.replace(/\D/g, "") || "";
+      const tg = lead.telegram?.toLowerCase().replace("@", "").trim() || "";
+      const email = lead.email?.toLowerCase().trim() || "";
+      const uuid = lead.visitor_uuid || "";
+
+      if (phone.length >= 7) {
+        if (phoneMap.has(phone)) dsu.union(i, phoneMap.get(phone)!);
+        else phoneMap.set(phone, i);
+      }
+      if (tg) {
+        if (tgMap.has(tg)) dsu.union(i, tgMap.get(tg)!);
+        else tgMap.set(tg, i);
+      }
+      if (email) {
+        if (emailMap.has(email)) dsu.union(i, emailMap.get(email)!);
+        else emailMap.set(email, i);
+      }
+      if (uuid) {
+        if (uuidMap.has(uuid)) dsu.union(i, uuidMap.get(uuid)!);
+        else uuidMap.set(uuid, i);
+      }
+    });
+
+    const groups = new Map<number, number[]>();
+    for (let i = 0; i < size; i++) {
+      const root = dsu.find(i);
+      if (!groups.has(root)) groups.set(root, []);
+      groups.get(root)!.push(i);
+    }
+
+    const normalizeStatus = (lead: any): string => {
+      const s = lead.status;
+      if (!s) return "Новий лід";
+      const normalized = statusMapper.normalize(s);
+      
+      const originalSheet = String(lead.metadata?.original_sheet || lead.metadata?.lead?.original_sheet || "").trim();
+      const targetSheet = String(lead.metadata?.target_sheet || lead.metadata?.lead?.target_sheet || "").trim();
+      const courseName = String(lead.metadata?.leadData?.course || lead.metadata?.lead?.leadData?.course || "").trim();
+      const orderProj = allowedProjects.find((p: any) => p.id === lead.project_id);
+      const orderSlug = orderProj?.slug || "";
+
+      const isTripwire = 
+        ["Практикум", "Practicum_Leads", "Заявки на практикум", "Miні-курс"].includes(originalSheet) ||
+        ["Практикум", "Practicum_Leads", "Заявки на практикум", "Miні-курс"].includes(targetSheet) ||
+        courseName.includes("Mini-Course") || 
+        courseName.includes("Practicum") || 
+        courseName.includes("Практикум") ||
+        courseName.includes("Міні-курс") ||
+        orderSlug === "sofia" ||
+        orderSlug === "valeria" ||
+        activeProject?.slug === "sofia" ||
+        activeProject?.slug === "valeria";
+
+      const isProjectAlwaysTripwire = 
+        ["sofia", "valeria"].includes(orderSlug) || 
+        ["sofia", "valeria"].includes(activeProject?.slug || "");
+
+      if (normalized === "closed_won") {
+        return (isTripwire || isProjectAlwaysTripwire) ? "Купив(-ла) Трипвайер" : "Купив курс";
+      }
+      if (normalized === "declined") {
+        return "Відмова";
+      }
+      const lower = s.toLowerCase().trim();
+      if (
+        lower === "new" ||
+        lower === "pending" ||
+        lower === "зареєстровано" ||
+        lower.includes("очікується") ||
+        lower === "новий лід" ||
+        lower === "новий" ||
+        lower === "передано у вп" ||
+        lower === "очікує оплати"
+      ) {
+        return "Новий лід";
+      }
+      if (lower === "діагностика" || lower === "диагностика" || lower === "заявка") {
+        return "Залишив заявку";
+      }
+      if (lower === "в роботі" || lower === "списались") {
+        return "Списались";
+      }
+      if (lower === "зустріч призначена" || lower === "назначено дзвінок" || lower === "діагн. запланована") {
+        return "Назначено Дзвінок";
+      }
+      if (lower === "зустріч проведена" || lower === "дзвінок проведено" || lower === "діагн. проведена") {
+        return "Дзвінок проведено";
+      }
+      if (lower === "вирішив подумати" || lower.includes("подумати")) {
+        return "Вирішив подумати";
+      }
+      if (lower === "купив трипвайєр" || lower === "купив трипвайер" || lower === "купив(-ла) трипвайер") {
+        return "Купив(-ла) Трипвайер";
+      }
+      if (lower === "купив курс" || lower === "купив_курс") {
+        return isProjectAlwaysTripwire ? "Купив(-ла) Трипвайер" : "Купив курс";
+      }
+      if (lower === "зацікавлений лід" || lower === "зацікавлений") {
+        return "Зацікавлений лід";
+      }
+      return "Новий лід";
+    };
+
+    const allClustered = Array.from(groups.values()).map((indices) => {
+      const groupLeads = indices.map((idx) => formattedLeads[idx]);
+
+      const normalizedGroupLeads = groupLeads.map((item) => {
+        return {
+          ...item,
+          status: normalizeStatus(item)
+        };
+      });
+
+      const primaryLead = normalizedGroupLeads.reduce((best, curr) => {
+        const bestScore = (best.name?.length || 0) + (best.phone ? 5 : 0) + (best.telegram ? 5 : 0);
+        const currScore = (curr.name?.length || 0) + (curr.phone ? 5 : 0) + (curr.telegram ? 5 : 0);
+        return currScore > bestScore ? curr : best;
+      }, normalizedGroupLeads[0]);
+
+      let usdCoursePaid = 0;
+      let uahCoursePaid = 0;
+      let eurCoursePaid = 0;
+      let usdTripwirePaid = 0;
+      let uahTripwirePaid = 0;
+      let eurTripwirePaid = 0;
+      let usdAttempted = 0;
+      let uahAttempted = 0;
+      let eurAttempted = 0;
+
+      const uniqueOrders = new Map<string, any>();
+      normalizedGroupLeads.forEach((item) => {
+        const orderId = item.order_id || item.id;
+        const projectId = item.project_id;
+        const orderKey = `${orderId}_${projectId}`;
+        
+        const existing = uniqueOrders.get(orderKey);
+        if (!existing) {
+          uniqueOrders.set(orderKey, item);
+        } else {
+          const existingIsPaid = existing.status === "Купив курс" || existing.status === "Купив(-ла) Трипвайер";
+          const itemIsPaid = item.status === "Купив курс" || item.status === "Купив(-ла) Трипвайер";
+          
+          if (itemIsPaid && !existingIsPaid) {
+            uniqueOrders.set(orderKey, item);
+          } else if (!itemIsPaid && existingIsPaid) {
+            // Keep existing
+          } else {
+            const existingTime = new Date(existing.created_at || 0).getTime();
+            const itemTime = new Date(item.created_at || 0).getTime();
+            if (itemTime > existingTime) {
+              uniqueOrders.set(orderKey, item);
+            } else if (itemTime === existingTime) {
+              if (Number(item.amount || 0) > Number(existing.amount || 0)) {
+                uniqueOrders.set(orderKey, item);
+              }
+            }
+          }
+        }
+      });
+
+      uniqueOrders.forEach((item) => {
+        const amt = Number(item.amount || 0);
+        if (amt === 0) return;
+
+        const metaCurrency = String(
+          item.metadata?.currency || 
+          item.metadata?.lead?.currency || 
+          item.metadata?.raw_row?.currency ||
+          item.metadata?.raw_row?.raw_payload?.currency ||
+          ""
+        ).trim().toLowerCase();
+        const orderProj = allowedProjects.find((p: any) => p.id === item.project_id);
+        const orderSlug = orderProj?.slug || "";
+        
+        const isEur = ["eur", "€"].includes(metaCurrency);
+        const isUsd = !isEur && (["usd", "$"].includes(metaCurrency) || 
+                      orderSlug === "sofia" || 
+                      orderSlug === "valeria" || 
+                      activeProject?.slug === "sofia" || 
+                      activeProject?.slug === "valeria");
+
+        const isProjectAlwaysTripwire = 
+          ["sofia", "valeria"].includes(orderSlug) || 
+          ["sofia", "valeria"].includes(activeProject?.slug || "");
+
+        if (item.status === "Купив курс" && !isProjectAlwaysTripwire) {
+          if (isUsd) usdCoursePaid += amt;
+          else if (isEur) eurCoursePaid += amt;
+          else uahCoursePaid += amt;
+        } else if (item.status === "Купив(-ла) Трипвайер" || (item.status === "Купив курс" && isProjectAlwaysTripwire)) {
+          if (isUsd) usdTripwirePaid += amt;
+          else if (isEur) eurTripwirePaid += amt;
+          else uahTripwirePaid += amt;
+        } else {
+          if (isUsd) usdAttempted += amt;
+          else if (isEur) eurAttempted += amt;
+          else uahAttempted += amt;
+        }
+      });
+
+      const primaryStatus = normalizedGroupLeads.reduce((best, curr) => {
+        return statusPriority(curr.status) > statusPriority(best) ? curr.status : best;
+      }, "Новий лід");
+
+      let finalStatus = primaryStatus;
+      if (normalizedGroupLeads.length >= 2 && statusPriority(finalStatus) <= statusPriority("Зацікавлений лід")) {
+        finalStatus = "Зацікавлений лід";
+      }
+
+      const isMultiSource = new Set(normalizedGroupLeads.map((l) => getTouchUtm(l, "source")).filter(Boolean)).size > 1;
+
+      const actualOrdersDesc = normalizedGroupLeads
+        .filter((l) => l.status !== "Клик" && l.status !== "КликФормы")
+        .sort((a, b) => getLeadDate(b).getTime() - getLeadDate(a).getTime());
+
+      const coldClicksDesc = normalizedGroupLeads
+        .filter((l) => l.status === "Клик" || l.status === "КликФормы")
+        .sort((a, b) => getLeadDate(b).getTime() - getLeadDate(a).getTime());
+
+      const prioritizedTouches = [...actualOrdersDesc, ...coldClicksDesc];
+
+      const utm_source = prioritizedTouches.map((l) => getTouchUtm(l, "source")).find(Boolean) || "";
+      const utm_medium = prioritizedTouches.map((l) => getTouchUtm(l, "medium")).find(Boolean) || "";
+      const utm_campaign = prioritizedTouches.map((l) => getTouchUtm(l, "campaign")).find(Boolean) || "";
+      const utm_content = prioritizedTouches.map((l) => getTouchUtm(l, "content")).find(Boolean) || "";
+      const utm_term = prioritizedTouches.map((l) => getTouchUtm(l, "term")).find(Boolean) || "";
+
+      const page_path = normalizedGroupLeads.find((l) => l.page_path && l.page_path !== "/")?.page_path || primaryLead.page_path || "/";
+      const page_url = prioritizedTouches.map(getTouchPageUrl).find((url) => url !== "") || getTouchPageUrl(primaryLead);
+
+      return {
+        ...primaryLead,
+        name: primaryLead.name || "Невідомий",
+        phone: primaryLead.phone || "",
+        telegram: primaryLead.telegram || "",
+        email: primaryLead.email || "",
+        page_path,
+        page_url,
+        status: finalStatus,
+        usdPaid: usdCoursePaid,
+        uahPaid: uahCoursePaid,
+        eurPaid: eurCoursePaid,
+        usdTripwirePaid,
+        uahTripwirePaid,
+        eurTripwirePaid,
+        usdAttempted,
+        uahAttempted,
+        eurAttempted,
+        amount: usdCoursePaid,
+        uahAmount: uahCoursePaid,
+        eurAmount: eurCoursePaid,
+        attemptedAmount: usdAttempted,
+        uahAttemptedAmount: uahAttempted,
+        eurAttemptedAmount: eurAttempted,
+        utm_source: utm_source || getTouchUtm(primaryLead, "source"),
+        utm_medium: utm_medium || getTouchUtm(primaryLead, "medium"),
+        utm_campaign: utm_campaign || getTouchUtm(primaryLead, "campaign"),
+        utm_content: utm_content || getTouchUtm(primaryLead, "content"),
+        utm_term: utm_term || getTouchUtm(primaryLead, "term"),
+        history: [...normalizedGroupLeads].sort((a, b) => getLeadDate(a).getTime() - getLeadDate(b).getTime()),
+        isMultiSource,
+        touchCount: normalizedGroupLeads.length,
+        diagnosticsComment: getDiagnosticsComment(normalizedGroupLeads),
+        managerComment: primaryLead.managerComment || "",
+      };
+    });
+
+    const clusteredFiltered = allClustered.filter((lead: any) => {
+      const nameVal = lead.name?.trim();
+      const hasRealName = nameVal && nameVal !== "" && nameVal !== "Невідомий";
+      const hasPhone = !!lead.phone?.trim();
+      const hasTelegram = !!lead.telegram?.trim();
+      const hasEmail = !!lead.email?.trim();
+      const hasContacts = hasRealName || hasPhone || hasTelegram || hasEmail;
+      const isPaid = lead.status === "Купив курс" || lead.status === "Купив(-ла) Трипвайер";
+      return hasContacts || isPaid;
+    });
+
+    // --- Apply CRM Filters on server ---
+    const page = filters?.page || 1;
+    const pageSize = filters?.pageSize || 50;
+    const searchQuery = filters?.searchQuery || "";
+    const statusFilter = filters?.statusFilter || "all";
+    const touchCountFilter = filters?.touchCountFilter || "all";
+    const sourceFilter = filters?.sourceFilter || "all";
+    const unpaidIntentOnly = filters?.unpaidIntentOnly || false;
+    const startDate = filters?.startDate || "";
+    const endDate = filters?.endDate || "";
+    const selectedLanding = filters?.selectedLanding || "all";
+
+    const filteredLeads = clusteredFiltered.filter((lead: any) => {
+      // 1. Search Query
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matchSearch =
+          lead.name?.toLowerCase().includes(query) ||
+          lead.phone?.toLowerCase().includes(query) ||
+          lead.telegram?.toLowerCase().includes(query) ||
+          lead.email?.toLowerCase().includes(query);
+        if (!matchSearch) return false;
+      }
+
+      // 2. Status
+      if (statusFilter !== "all" && lead.status !== statusFilter) return false;
+
+      // 3. Touch Count
+      if (touchCountFilter !== "all") {
+        if (touchCountFilter === "multi") {
+          if (lead.touchCount < 2) return false;
+        } else if (touchCountFilter === "single") {
+          if (lead.touchCount !== 1) return false;
+        }
+      }
+
+      // 4. Source
+      if (sourceFilter !== "all") {
+        const source = lead.metadata?.target_sheet || lead.metadata?.lead?.target_sheet || lead.utm_source || "";
+        if (source.toLowerCase() !== sourceFilter.toLowerCase()) return false;
+      }
+
+      // 5. Unpaid intent
+      if (unpaidIntentOnly) {
+        const hasPayment = lead.history.some((o: any) => o.status === "Купив курс" || o.status === "Купив(-ла) Трипвайер" || o.amount > 0);
+        const hasCheckout = lead.history.some(
+          (o: any) => o.status === "⏳ Очікується оплата" || (o.order_id && !o.order_id.startsWith("ELT_ORD_")) || o.metadata?.payment_intent
+        );
+        if (hasPayment || !hasCheckout) return false;
+      }
+
+      // 6. Dates
+      if (startDate) {
+        const leadDate = getLeadDate(lead);
+        if (leadDate < new Date(startDate)) return false;
+      }
+      if (endDate) {
+        const leadDate = getLeadDate(lead);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        if (leadDate > end) return false;
+      }
+
+      // 7. Landing
+      if (!isLeadMatchingLanding(lead, selectedLanding, activeSlug)) return false;
+
+      return true;
+    });
+
+    // --- Statistics Calculations on server ---
+    const totalLeads = filteredLeads.length;
+
+    // Filter costs
+    const filteredCosts = costs.filter((c: any) => {
+      if (startDate) {
+        const cDate = new Date(c.date);
+        if (cDate < new Date(startDate)) return false;
+      }
+      if (endDate) {
+        const cDate = new Date(c.date);
+        const end = new Date(endDate);
+        if (cDate > end) return false;
+      }
+      return true;
+    });
+    const totalCostsSpend = filteredCosts.reduce((sum: number, c: any) => sum + Number(c.spend || 0), 0);
+
+    const totalApplications = filteredLeads.filter((l: any) => 
+      statusPriority(l.status) >= 3 || 
+      l.history.some((h: any) => statusPriority(h.status) >= 3)
+    ).length;
+
+    const usdCourseRevenue = filteredLeads.reduce((sum, l) => sum + Number(l.usdPaid || 0), 0);
+    const uahCourseRevenue = filteredLeads.reduce((sum, l) => sum + Number(l.uahPaid || 0), 0);
+    const eurCourseRevenue = filteredLeads.reduce((sum, l) => sum + Number(l.eurPaid || 0), 0);
+    const usdTripwireRevenue = filteredLeads.reduce((sum, l) => sum + Number(l.usdTripwirePaid || 0), 0);
+    const uahTripwireRevenue = filteredLeads.reduce((sum, l) => sum + Number(l.uahTripwirePaid || 0), 0);
+    const eurTripwireRevenue = filteredLeads.reduce((sum, l) => sum + Number(l.eurTripwirePaid || 0), 0);
+
+    const totalUsdRevenue = usdCourseRevenue + usdTripwireRevenue;
+    const totalUahRevenue = uahCourseRevenue + uahTripwireRevenue;
+    const totalEurRevenue = eurCourseRevenue + eurTripwireRevenue;
+
+    const netProfitUsd = totalUsdRevenue - totalCostsSpend;
+    const blendedRevenue = totalUsdRevenue + (totalUahRevenue / 41.0) + (totalEurRevenue * 1.08);
+    const roi = totalCostsSpend > 0 ? (blendedRevenue / totalCostsSpend) * 100 : 0;
+
+    const paidLeadsCount = filteredLeads.filter((l) => l.status === "Купив курс").length;
+    const paidTripwiresCount = filteredLeads.filter((l) => l.status === "Купив(-ла) Трипвайер").length;
+    const totalSales = paidLeadsCount + paidTripwiresCount;
+
+    const usdSalesCount = filteredLeads.filter(
+      (l) => (l.status === "Купив курс" || l.status === "Купив(-ла) Трипвайер") && (Number(l.usdPaid || 0) + Number(l.usdTripwirePaid || 0) > 0)
+    ).length;
+    const uahSalesCount = filteredLeads.filter(
+      (l) => (l.status === "Купив курс" || l.status === "Купив(-ла) Трипвайер") && (Number(l.uahPaid || 0) + Number(l.uahTripwirePaid || 0) > 0)
+    ).length;
+    const eurSalesCount = filteredLeads.filter(
+      (l) => (l.status === "Купив курс" || l.status === "Купив(-ла) Трипвайер") && (Number(l.eurPaid || 0) + Number(l.eurTripwirePaid || 0) > 0)
+    ).length;
+
+    const aovUsd = usdSalesCount > 0 ? (usdCourseRevenue + usdTripwireRevenue) / usdSalesCount : 0;
+    const aovUah = uahSalesCount > 0 ? (uahCourseRevenue + uahTripwireRevenue) / uahSalesCount : 0;
+    const aovEur = eurSalesCount > 0 ? (eurCourseRevenue + eurTripwireRevenue) / eurSalesCount : 0;
+
+    // Filter traffic
+    const filteredTraffic = allTraffic.filter((t: any) => {
+      if (startDate) {
+        const tDate = new Date(t.created_at);
+        if (tDate < new Date(startDate)) return false;
+      }
+      if (endDate) {
+        const tDate = new Date(t.created_at);
+        const end = new Date(endDate);
+        if (tDate > end) return false;
+      }
+      return true;
+    });
+    const totalClicks = filteredTraffic.length;
+    const conversionRate = totalClicks > 0 ? (totalLeads / totalClicks) * 100 : 0;
+    const cpl = totalLeads > 0 ? totalCostsSpend / totalLeads : 0;
+    const leadToSaleConv = totalLeads > 0 ? (totalSales / totalLeads) * 100 : 0;
+
+    const singleProjectStats = {
+      totalLeads,
+      totalClicks,
+      totalSpend: totalCostsSpend,
+      totalApplications,
+      conversionRate,
+      cpl,
+      usdRevenue: totalUsdRevenue,
+      uahRevenue: totalUahRevenue,
+      eurRevenue: totalEurRevenue,
+      usdCourseRevenue,
+      uahCourseRevenue,
+      eurCourseRevenue,
+      usdTripwireRevenue,
+      uahTripwireRevenue,
+      eurTripwireRevenue,
+      netProfitUsd,
+      roi,
+      totalSales,
+      paidLeadsCount,
+      paidTripwiresCount,
+      leadToSaleConv,
+      leadToSaleConvUsd: totalLeads > 0 ? (usdSalesCount / totalLeads) * 100 : 0,
+      leadToSaleConvUah: totalLeads > 0 ? (uahSalesCount / totalLeads) * 100 : 0,
+      leadToSaleConvEur: totalLeads > 0 ? (eurSalesCount / totalLeads) * 100 : 0,
+      aovUsd,
+      aovUah,
+      aovEur
+    };
+
+    // --- Pre-aggregated Spline Trend Data via RPC ---
+    const startRpcDate = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const endRpcDate = endDate ? new Date(endDate) : new Date();
+    const { data: splineTrendData } = await adminSupabase.rpc("get_project_daily_stats", {
+      p_project_id: activeProject.id,
+      p_start_date: startRpcDate.toISOString(),
+      p_end_date: endRpcDate.toISOString()
+    });
+
+    // --- UTM Attribution Tree on server ---
+    const utmTreeRoot: Record<string, any> = {};
+    const getOrCreateUtmNode = (parent: any, name: string) => {
+      if (!parent[name]) {
+        parent[name] = {
+          name,
+          clicks: 0,
+          leads: 0,
+          usd_revenue: 0,
+          uah_revenue: 0,
+          revenue: 0,
+          children: {}
+        };
+      }
+      return parent[name];
+    };
+
+    filteredLeads.forEach((lead: any) => {
+      const source = lead.utm_source || "direct";
+      const medium = lead.utm_medium || "";
+      const campaign = lead.utm_campaign || "";
+      const content = lead.utm_content || "";
+
+      const path = [source, medium, campaign, content].filter(Boolean);
+      let curr = utmTreeRoot;
+      path.forEach((part) => {
+        const node = getOrCreateUtmNode(curr, part);
+        node.leads += 1;
+        const usdPaid = Number(lead.usdPaid || 0);
+        const uahPaid = Number(lead.uahPaid || 0);
+        node.usd_revenue += usdPaid;
+        node.uah_revenue += uahPaid;
+        node.revenue += usdPaid + (uahPaid / 41.0);
+        curr = node.children;
+      });
+    });
+
+    filteredTraffic.forEach((t: any) => {
+      const source = t.utm_source || "direct";
+      const medium = t.utm_medium || "";
+      const campaign = t.utm_campaign || "";
+      const content = t.utm_content || "";
+
+      const path = [source, medium, campaign, content].filter(Boolean);
+      let curr = utmTreeRoot;
+      let possible = true;
+      path.forEach((part) => {
+        if (!possible) return;
+        if (curr[part]) {
+          curr[part].clicks += 1;
+          curr = curr[part].children;
+        } else {
+          possible = false;
+        }
+      });
+    });
+
+    const finalizeUtmNodes = (nodesRecord: Record<string, any>): any[] => {
+      return Object.values(nodesRecord)
+        .map((node: any) => {
+          const cr = node.clicks > 0 ? (node.leads / node.clicks) * 100 : 0;
+          return {
+            ...node,
+            cr,
+            children: finalizeUtmNodes(node.children)
+          };
+        })
+        .sort((a, b) => b.revenue - a.revenue || b.leads - a.leads);
+    };
+    const utmAttributionTree = finalizeUtmNodes(utmTreeRoot);
+
+    // --- Diagnostics Issues on server ---
+    const nameless: any[] = [];
+    const unmatchedUrls: Record<string, { count: number; rawUrl: string; originalSheet: string; sampleLead: string }> = {};
+    const currencyErrors: any[] = [];
+
+    clusteredFiltered.forEach((lead: any) => {
+      const nameVal = lead.name?.trim();
+      const hasContacts = lead.phone || lead.telegram || lead.email;
+      if ((!nameVal || nameVal === "Невідомий") && hasContacts) {
+        nameless.push(lead);
+      }
+
+      lead.history?.forEach((touch: any) => {
+        const url = getTouchPageUrl(touch);
+        if (url) {
+          const matched = PROJECT_LANDINGS[activeSlug]?.some((land) => {
+            const normLand = land.url.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").toLowerCase();
+            const normTouch = url.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").toLowerCase();
+            return normTouch.includes(normLand);
+          });
+          if (!matched) {
+            const cleanUrl = url.replace(/^https?:\/\//i, "").replace(/^www\./i, "").trim();
+            if (!unmatchedUrls[cleanUrl]) {
+              unmatchedUrls[cleanUrl] = {
+                count: 0,
+                rawUrl: url,
+                originalSheet: touch.metadata?.original_sheet || touch.metadata?.target_sheet || "direct",
+                sampleLead: lead.name
+              };
+            }
+            unmatchedUrls[cleanUrl].count++;
+          }
+        }
+
+        const amt = Number(touch.amount || 0);
+        if (amt > 0) {
+          const metaCurrency = String(
+            touch.metadata?.currency || 
+            touch.metadata?.lead?.currency || 
+            touch.metadata?.raw_row?.currency ||
+            ""
+          ).trim().toLowerCase();
+          if (!["usd", "$", "uah", "₴", "eur", "€"].includes(metaCurrency)) {
+            currencyErrors.push({
+              leadId: lead.id,
+              leadName: lead.name,
+              amount: amt,
+              currency: metaCurrency || "missing",
+              date: getLeadDate(touch)
+            });
+          }
+        }
+      });
+    });
+
+    const diagnosticsIssues = {
+      nameless,
+      unmatchedUrls: Object.values(unmatchedUrls).sort((a, b) => b.count - a.count),
+      currencyErrors
+    };
+
+    // --- Page Slice (Pagination) ---
+    const startIndex = (page - 1) * pageSize;
+    const paginatedLeads = filteredLeads.slice(startIndex, startIndex + pageSize);
+
+    // List of unique sources for filter dropdown
+    const uniqueSources = Array.from(new Set(clusteredFiltered.map((l: any) => {
+      return l.metadata?.target_sheet || l.metadata?.lead?.target_sheet || l.utm_source || "";
+    }).filter(Boolean)));
+
     // Fetch sales managers for the active project
     let salesManagers: { id: string; email: string; full_name: string }[] = [];
     if (activeProject && ["admin", "superman", "producer", "rop"].includes(profile.role)) {
@@ -551,11 +1485,27 @@ export async function getUnifiedCRMData(selectedProjectSlug?: string) {
       allowedProjects,
       activeSlug,
       activeProject,
-      leads: formattedLeads,
-      traffic: traffic,
-      costs: costs,
+      leads: paginatedLeads,
+      totalCount: filteredLeads.length,
+      stats: singleProjectStats,
+      splineTrendData: splineTrendData || [],
+      utmAttributionTree,
+      diagnosticsIssues,
+      uniqueSources,
       salesManagers,
       unresolvedOrders: unresolvedOrders.filter((o) => o.projectId === activeProject.id),
+      filters: {
+        page,
+        pageSize,
+        searchQuery,
+        statusFilter,
+        touchCountFilter,
+        sourceFilter,
+        unpaidIntentOnly,
+        startDate,
+        endDate,
+        selectedLanding
+      }
     };
   } catch (err: any) {
     console.error("Unified CRM fetching error:", err.message);
