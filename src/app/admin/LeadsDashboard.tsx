@@ -291,20 +291,25 @@ const normalizeUrlForMatching = (url: string) => {
     .toLowerCase();
 };
 
+const getTouchPageUrl = (l: any) => {
+  if (!l) return "";
+  return (
+    l.metadata?.page_url ||
+    l.metadata?.pageUrl ||
+    l.metadata?.full_url ||
+    l.metadata?.fullUrl ||
+    l.page_url ||
+    ""
+  );
+};
+
 const isLeadMatchingLanding = (lead: any, landingUrl: string) => {
   if (landingUrl === "all") return true;
   const targetNorm = normalizeUrlForMatching(landingUrl);
   const targetHasPath = targetNorm.includes("/");
   
   return lead.history?.some((touch: any) => {
-    const touchUrl = normalizeUrlForMatching(
-      touch.page_url || 
-      touch.metadata?.page_url || 
-      touch.metadata?.pageUrl || 
-      touch.metadata?.full_url || 
-      touch.metadata?.fullUrl || 
-      ""
-    );
+    const touchUrl = normalizeUrlForMatching(getTouchPageUrl(touch));
     
     const originalSheet = (
       touch.metadata?.original_sheet || 
@@ -653,7 +658,9 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           { key: "За який термін вийти на 100 000$", label: "Термін 100k$" },
           { key: "Відповідь 1 (скільки витрачаєш на косметику в міс.)", label: "Витрати на косметику" },
           { key: "niche", label: "Ніша" },
-          { key: "Коментар", label: "Коментар" }
+          { key: "Коментар", label: "Коментар" },
+          { key: "request", label: "Запит" },
+          { key: "tariff", label: "Тариф" }
         ];
 
         quizFields.forEach((f) => {
@@ -672,22 +679,24 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           }
         });
 
-        if (meta.quiz_result) {
-          if (typeof meta.quiz_result === "object") {
-            Object.entries(meta.quiz_result).forEach(([k, v]) => {
+        const quizResult = raw.quiz_result || meta.quiz_result;
+        if (quizResult) {
+          if (typeof quizResult === "object") {
+            Object.entries(quizResult).forEach(([k, v]) => {
               if (v) answers.push(`${k}: ${v}`);
             });
           } else {
-            answers.push(`Quiz: ${meta.quiz_result}`);
+            answers.push(`Quiz: ${quizResult}`);
           }
         }
-        if (meta.query) {
-          if (typeof meta.query === "object") {
-            Object.entries(meta.query).forEach(([k, v]) => {
+        const queryVal = raw.query || meta.query;
+        if (queryVal) {
+          if (typeof queryVal === "object") {
+            Object.entries(queryVal).forEach(([k, v]) => {
               if (v) answers.push(`${k}: ${v}`);
             });
           } else {
-            answers.push(`Запит: ${meta.query}`);
+            answers.push(`Запит: ${queryVal}`);
           }
         }
       });
@@ -894,7 +903,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       const utm_term = normalizedGroupLeads.find((l) => l.utm_term)?.utm_term || "";
 
       const page_path = normalizedGroupLeads.find((l) => l.page_path && l.page_path !== "/")?.page_path || primaryLead.page_path || "/";
-      const page_url = normalizedGroupLeads.find((l) => l.page_url && l.page_url !== "")?.page_url || primaryLead.page_url || "";
+      const page_url = normalizedGroupLeads.map(getTouchPageUrl).find((url) => url !== "") || getTouchPageUrl(primaryLead);
 
       return {
         ...primaryLead,
@@ -1073,7 +1082,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       }
 
       lead.history?.forEach((touch: any) => {
-        const url = touch.page_url || touch.metadata?.page_url || "";
+        const url = getTouchPageUrl(touch);
         if (url) {
           const matched = PROJECT_LANDINGS[activeSlug]?.some((land) => {
             const normLand = land.url.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").toLowerCase();
@@ -1150,7 +1159,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
       // 2. Mismatched URLs
       lead.history?.forEach((touch: any) => {
-        const url = touch.page_url || touch.metadata?.page_url || "";
+        const url = getTouchPageUrl(touch);
         if (url) {
           // Check if this URL is matched by any rule in PROJECT_LANDINGS
           const matched = PROJECT_LANDINGS[activeSlug]?.some((land) => {
