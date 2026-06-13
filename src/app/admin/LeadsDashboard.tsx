@@ -46,7 +46,8 @@ import {
   updateCustomerCommentAction,
   assignLeadToManagerAction,
   updateOrderCurrencyAction,
-  getUnifiedCRMData
+  getUnifiedCRMData,
+  traceVisitorUuidAction
 } from "./actions";
 import { useTheme } from "./ThemeProvider";
 import { statusMapper } from "@/lib/statusMapper";
@@ -507,6 +508,32 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     localStorage.setItem("crm_dev_mode", String(newVal));
   };
   const [showUnresolvedModal, setShowUnresolvedModal] = useState(false);
+  const [traceQuery, setTraceQuery] = useState("");
+  const [traceResults, setTraceResults] = useState<any[] | null>(null);
+  const [isTracing, setIsTracing] = useState(false);
+  const [traceError, setTraceError] = useState("");
+  const [isQaPanelExpanded, setIsQaPanelExpanded] = useState(false);
+
+  const handleTraceVisitor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!traceQuery.trim()) return;
+    setIsTracing(true);
+    setTraceError("");
+    setTraceResults(null);
+    try {
+      const res = await traceVisitorUuidAction(traceQuery, activeProject.id);
+      if (res.error) {
+        setTraceError(res.error);
+      } else {
+        setTraceResults(res.chain || []);
+      }
+    } catch (err: any) {
+      setTraceError(err.message || "Помилка при трасуванні користувача");
+    } finally {
+      setIsTracing(false);
+    }
+  };
+
   const [updatingCurrencyId, setUpdatingCurrencyId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [touchCountFilter, setTouchCountFilter] = useState("all");
@@ -745,6 +772,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const splineTrendData = dashboardData.splineTrendData || [];
   const utmAttributionTree = dashboardData.utmAttributionTree || [];
   const diagnosticsIssues = dashboardData.diagnosticsIssues || { nameless: [], unmatchedUrls: [], currencyErrors: [] };
+  const dataHealth = dashboardData.dataHealth || { leadsWithoutUuidCount: 0, ordersWithAmountAndClickStatusCount: 0, unparseableMetadataDatesCount: 0 };
+  const performanceInfo = dashboardData.performance;
   const totalCount = dashboardData.totalCount || 0;
   const uniqueSources = dashboardData.uniqueSources || [];
   const displayedLandings = PROJECT_LANDINGS[activeSlug] || [];
@@ -2187,6 +2216,214 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
               </table>
             </div>
           </div>
+
+          {/* QA Debug Mode / Superman Data Verification Panel */}
+          {(role === "admin" || role === "superman" || isDevMode) && (
+            <div className={`${cardClass} rounded-2xl p-6 shadow-2xl backdrop-blur-md space-y-6 border border-red-500/20`}>
+              <div className="flex justify-between items-center cursor-pointer select-none" onClick={() => setIsQaPanelExpanded(!isQaPanelExpanded)}>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500 animate-pulse">
+                    <Shield className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black uppercase tracking-widest text-red-400">Панель верификации данных (QA Debug Mode)</h3>
+                    <p className="text-[11px] text-white/45 font-semibold mt-0.5">Полуавтоматический модуль диагностики сквозной аналитики и производительности</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    isQaPanelExpanded 
+                      ? "bg-white/10 text-white" 
+                      : "bg-red-500/10 text-red-405 hover:bg-red-500/25"
+                  }`}
+                >
+                  {isQaPanelExpanded ? "Свернуть" : "Развернуть"}
+                </button>
+              </div>
+
+              {isQaPanelExpanded && (
+                <div className="space-y-6 pt-4 border-t border-white/5 animate-in fade-in duration-300">
+                  
+                  {/* 1. Tracing visitor_uuid (User Verification) */}
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-2">
+                      <Search className="w-4 h-4 text-red-500" />
+                      1. Трассировка visitor_uuid (Проверка сквозной аналитики)
+                    </h4>
+                    
+                    <form onSubmit={handleTraceVisitor} className="flex gap-2 max-w-lg">
+                      <input
+                        type="text"
+                        value={traceQuery}
+                        onChange={(e) => setTraceQuery(e.target.value)}
+                        placeholder="Введите телефон или visitor_uuid..."
+                        className={`flex-grow px-4 py-3 rounded-xl focus:outline-none text-xs font-semibold ${inputClass}`}
+                      />
+                      <button
+                        type="submit"
+                        disabled={isTracing}
+                        className="px-5 py-3 rounded-xl bg-red-500 hover:bg-red-450 text-black font-black text-xs transition-all disabled:opacity-50"
+                      >
+                        {isTracing ? "Проверка..." : "Проверить"}
+                      </button>
+                    </form>
+
+                    {traceError && (
+                      <p className="text-xs text-red-400 font-bold flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        {traceError}
+                      </p>
+                    )}
+
+                    {traceResults && (
+                      <div className="overflow-x-auto border border-white/5 rounded-xl">
+                        <table className="w-full border-collapse text-left text-xs">
+                          <thead>
+                            <tr className="bg-white/[0.02] text-white/40 uppercase tracking-widest font-black border-b border-white/5">
+                              <th className="p-3">Тип</th>
+                              <th className="p-3">Время создания</th>
+                              <th className="p-3">Статус / Событие</th>
+                              <th className="p-3">UTM Метки</th>
+                              <th className="p-3">visitor_uuid</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5 text-white/80">
+                            {traceResults.length === 0 ? (
+                              <tr>
+                                <td colSpan={5} className="p-6 text-center text-white/20 italic">Пользователь не найден или цепочка пуста</td>
+                              </tr>
+                            ) : (
+                              traceResults.map((item: any, idx: number) => {
+                                const isClick = item.type === "click";
+                                return (
+                                  <tr 
+                                    key={idx} 
+                                    className={`hover:bg-white/[0.01] transition-all ${
+                                      item.is_broken ? "bg-red-500/10 hover:bg-red-500/20" : ""
+                                    }`}
+                                  >
+                                    <td className="p-3 font-bold uppercase tracking-wider text-[10px]">
+                                      <span className={`px-2 py-0.5 rounded ${
+                                        isClick 
+                                          ? "bg-blue-500/10 text-blue-400" 
+                                          : "bg-emerald-500/10 text-emerald-450"
+                                      }`}>
+                                        {isClick ? "Клик" : "Заказ"}
+                                      </span>
+                                    </td>
+                                    <td className="p-3 font-semibold text-neutral-400">
+                                      {new Date(item.created_at).toLocaleString("uk-UA")}
+                                    </td>
+                                    <td className="p-3 font-extrabold">
+                                      <div className="flex items-center gap-2">
+                                        <span>{item.status}</span>
+                                        {item.amount > 0 && (
+                                          <span className="text-emerald-400">({item.amount} ₴)</span>
+                                        )}
+                                        {item.is_broken && (
+                                          <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-red-400 bg-red-500/10 px-2 py-0.5 rounded animate-pulse">
+                                            <AlertCircle className="w-3 h-3" />
+                                            {item.error_message}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="p-3">
+                                      <span className="font-mono text-[10px] bg-white/5 px-2 py-0.5 rounded text-white/60">
+                                        src: {item.utm_source || "—"} | med: {item.utm_medium || "—"} | camp: {item.utm_campaign || "—"}
+                                      </span>
+                                    </td>
+                                    <td className="p-3 font-mono text-[10px] text-white/60">
+                                      {item.visitor_uuid || (
+                                        <span className="text-red-400 font-bold">ОТСУТСТВУЕТ (Потерян)</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 2. Database Integrity Validator (Data Health Check) */}
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-red-500 animate-pulse" />
+                      2. Валидатор целостности базы данных (Data Health Check)
+                    </h4>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div className={`p-4 rounded-xl border ${
+                        dataHealth.leadsWithoutUuidCount > 0 
+                          ? "bg-red-500/5 border-red-500/20" 
+                          : "bg-white/[0.01] border-white/5"
+                      }`}>
+                        <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest block">Лиды без visitor_uuid</span>
+                        <p className={`text-2xl font-black mt-2 ${dataHealth.leadsWithoutUuidCount > 0 ? "text-red-400" : "text-emerald-450"}`}>
+                          {dataHealth.leadsWithoutUuidCount}
+                        </p>
+                        <p className="text-[10px] text-white/30 mt-1 font-medium">Количество реальных лидов с потерянным трекером</p>
+                      </div>
+
+                      <div className={`p-4 rounded-xl border ${
+                        dataHealth.ordersWithAmountAndClickStatusCount > 0 
+                          ? "bg-red-500/5 border-red-500/20" 
+                          : "bg-white/[0.01] border-white/5"
+                      }`}>
+                        <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest block">Клики с суммами &gt; 0</span>
+                        <p className={`text-2xl font-black mt-2 ${dataHealth.ordersWithAmountAndClickStatusCount > 0 ? "text-red-400" : "text-emerald-450"}`}>
+                          {dataHealth.ordersWithAmountAndClickStatusCount}
+                        </p>
+                        <p className="text-[10px] text-white/30 mt-1 font-medium">Проверка на некорректно классифицированные транзакции</p>
+                      </div>
+
+                      <div className={`p-4 rounded-xl border ${
+                        dataHealth.unparseableMetadataDatesCount > 0 
+                          ? "bg-amber-500/5 border-amber-500/20" 
+                          : "bg-white/[0.01] border-white/5"
+                      }`}>
+                        <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest block">Битые даты в метаданных</span>
+                        <p className={`text-2xl font-black mt-2 ${dataHealth.unparseableMetadataDatesCount > 0 ? "text-amber-500" : "text-emerald-450"}`}>
+                          {dataHealth.unparseableMetadataDatesCount}
+                        </p>
+                        <p className="text-[10px] text-white/30 mt-1 font-medium">Лиды с нечитаемыми датами из архивных импортов</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3. Server-Side Performance Profiler */}
+                  {performanceInfo && (
+                    <div className="space-y-4">
+                      <h4 className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-red-500" />
+                        3. Логгер производительности API (Server-Side Performance Profiler)
+                      </h4>
+                      
+                      <div className="p-4 rounded-xl bg-black/40 border border-white/5 font-mono text-xs text-white/70 space-y-2 max-w-2xl">
+                        <div className="flex justify-between border-b border-white/5 pb-2">
+                          <span className="text-white/45">БД время (RPC / Выборка):</span>
+                          <span className="text-emerald-400 font-extrabold">{performanceInfo.dbRpcMs} ms / {performanceInfo.dbFetchMs} ms</span>
+                        </div>
+                        <div className="flex justify-between border-b border-white/5 pb-2">
+                          <span className="text-white/45">JS-кластеризация на сервере (DSU):</span>
+                          <span className="text-emerald-400 font-extrabold">{performanceInfo.jsClusteringMs} ms</span>
+                        </div>
+                        <div className="flex justify-between pb-1">
+                          <span className="text-white/45">Сетевой вес пакета:</span>
+                          <span className="text-emerald-400 font-extrabold">{performanceInfo.payloadSizeKb} КБ</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

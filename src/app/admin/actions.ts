@@ -709,6 +709,7 @@ export async function getUnifiedCRMData(
     };
 
     // Parallel fetch using adminSupabase (bypassing RLS safely)
+    const dbFetchStart = performance.now();
     const [allCustomers, allOrders, allTraffic, costsRes] = await Promise.all([
       fetchAllPaged((from, to) => {
         let q = adminSupabase.from("unified_customers").select("*").eq("project_id", activeProject.id);
@@ -739,6 +740,8 @@ export async function getUnifiedCRMData(
         .eq("project_id", activeProject.id)
         .order("date", { ascending: false })
     ]);
+    const dbFetchEnd = performance.now();
+    const dbFetchMs = dbFetchEnd - dbFetchStart;
 
     const costs = costsRes.data || [];
 
@@ -772,6 +775,7 @@ export async function getUnifiedCRMData(
     });
 
     // --- DSU Clustering / Deduplication engine on server ---
+    const jsClusteringStart = performance.now();
     const size = formattedLeads.length;
     const dsu = new DSU(size);
 
@@ -1113,6 +1117,8 @@ export async function getUnifiedCRMData(
         managerComment: primaryLead.managerComment || "",
       };
     });
+    const jsClusteringEnd = performance.now();
+    const jsClusteringMs = jsClusteringEnd - jsClusteringStart;
 
     const clusteredFiltered = allClustered.filter((lead: any) => {
       const nameVal = lead.name?.trim();
@@ -1301,11 +1307,14 @@ export async function getUnifiedCRMData(
     // --- Pre-aggregated Spline Trend Data via RPC ---
     const startRpcDate = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const endRpcDate = endDate ? new Date(endDate) : new Date();
+    const dbRpcStart = performance.now();
     const { data: splineTrendData } = await adminSupabase.rpc("get_project_daily_stats", {
       p_project_id: activeProject.id,
       p_start_date: startRpcDate.toISOString(),
       p_end_date: endRpcDate.toISOString()
     });
+    const dbRpcEnd = performance.now();
+    const dbRpcMs = dbRpcEnd - dbRpcStart;
 
     // --- UTM Attribution Tree on server ---
     const utmTreeRoot: Record<string, any> = {};
@@ -1466,7 +1475,72 @@ export async function getUnifiedCRMData(
         }));
     }
 
-    return {
+    // Prepare dataHealth Check stats
+    const checkLeadDateParseable = (lead: any): boolean => {
+      const rawDateStr = 
+        lead.metadata?.raw_row?.Дата || 
+        lead.metadata?.raw_row?.дата || 
+        lead.metadata?.raw_row?.Date || 
+        lead.metadata?.raw_row?.date ||
+        lead.metadata?.created_at ||
+        lead.metadata?.lead?.created_at;
+
+      if (!rawDateStr) return true;
+
+      const str = String(rawDateStr).trim();
+      const dotParts = str.split(" ")[0].split(".");
+      if (dotParts.length === 3) {
+        const day = parseInt(dotParts[0], 10);
+        const month = parseInt(dotParts[1], 10) - 1;
+        const year = parseInt(dotParts[2], 10);
+        if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+          return true;
+        }
+      }
+      let cleanStr = str;
+      if (str.includes("(")) {
+        cleanStr = str.split("(")[0].trim();
+      }
+      const parsed = Date.parse(cleanStr);
+      return !isNaN(parsed);
+    };
+
+    let leadsWithoutUuidCount = 0;
+    let ordersWithAmountAndClickStatusCount = 0;
+    let unparseableMetadataDatesCount = 0;
+
+    allOrders.forEach((o: any) => {
+      const statusStr = String(o.status || "").toLowerCase().trim();
+      if (statusStr !== "клик" && statusStr !== "кликформы") {
+        if (!o.visitor_uuid) {
+          leadsWithoutUuidCount++;
+        }
+      }
+
+      if ((statusStr === "клик" || statusStr === "кликформы") && Number(o.amount || 0) > 0) {
+        ordersWithAmountAndClickStatusCount++;
+      }
+
+      const hasMetadataDate = 
+        o.metadata?.raw_row?.Дата || 
+        o.metadata?.raw_row?.дата || 
+        o.metadata?.raw_row?.Date || 
+        o.metadata?.raw_row?.date ||
+        o.metadata?.created_at ||
+        o.metadata?.lead?.created_at;
+
+      if (hasMetadataDate && !checkLeadDateParseable(o)) {
+        unparseableMetadataDatesCount++;
+      }
+    });
+
+    const dataHealth = {
+      leadsWithoutUuidCount,
+      ordersWithAmountAndClickStatusCount,
+      unparseableMetadataDatesCount
+    };
+
+    const finalResult = {
       viewType: "single",
       role: profile.role,
       allowedProjects,
@@ -1492,6 +1566,21 @@ export async function getUnifiedCRMData(
         startDate,
         endDate,
         selectedLanding
+      },
+      dataHealth
+    };
+
+    // Calculate JSON weight in KB
+    const stringified = JSON.stringify(finalResult);
+    const payloadSizeKb = Math.round((stringified.length / 1024) * 10) / 10;
+
+    return {
+      ...finalResult,
+      performance: {
+        dbFetchMs: Math.round(dbFetchMs),
+        dbRpcMs: Math.round(dbRpcMs),
+        jsClusteringMs: Math.round(jsClusteringMs),
+        payloadSizeKb
       }
     };
   } catch (err: any) {
@@ -2030,5 +2119,146 @@ export async function impersonateRoleAction(role: string | null) {
     return { success: true };
   } catch (err: any) {
     return { error: err.message || "Failed to override role" };
+  }
+}
+
+export async function traceVisitorUuidAction(phoneOrUuid: string, projectId: string) {
+  try {
+    const { isSuperman } = await getSessionAndAccess();
+    if (!isSuperman) throw new Error("Unauthorized");
+
+    const adminSupabase = createAdminClient();
+    const cleanInput = phoneOrUuid.trim();
+    if (!cleanInput) return { chain: [] };
+
+    let visitorUuids: string[] = [];
+    let phoneMatch = "";
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidRegex.test(cleanInput)) {
+      visitorUuids.push(cleanInput);
+    } else {
+      const digits = cleanInput.replace(/\D/g, "");
+      if (digits.length >= 7) {
+        phoneMatch = digits;
+        const { data: orders } = await adminSupabase
+          .from("unified_orders")
+          .select("visitor_uuid, customer_id")
+          .eq("project_id", projectId);
+        
+        const { data: customers } = await adminSupabase
+          .from("unified_customers")
+          .select("id, phone")
+          .eq("project_id", projectId);
+        
+        const matchedCustomerIds = customers
+          ?.filter(c => c.phone && c.phone.replace(/\D/g, "").includes(digits))
+          .map(c => c.id) || [];
+        
+        if (orders) {
+          orders.forEach(o => {
+            if (o.visitor_uuid && (matchedCustomerIds.includes(o.customer_id))) {
+              visitorUuids.push(o.visitor_uuid);
+            }
+          });
+        }
+      }
+    }
+
+    visitorUuids = Array.from(new Set(visitorUuids)).filter(Boolean);
+
+    let clicks: any[] = [];
+    let orders: any[] = [];
+
+    if (visitorUuids.length > 0) {
+      const [clicksRes, ordersRes] = await Promise.all([
+        adminSupabase
+          .from("traffic_clicks")
+          .select("*")
+          .eq("project_id", projectId)
+          .in("visitor_uuid", visitorUuids),
+        adminSupabase
+          .from("unified_orders")
+          .select("*")
+          .eq("project_id", projectId)
+          .in("visitor_uuid", visitorUuids)
+      ]);
+      clicks = clicksRes.data || [];
+      orders = ordersRes.data || [];
+    }
+
+    if (phoneMatch) {
+      const { data: customerData } = await adminSupabase
+        .from("unified_customers")
+        .select("id, phone")
+        .eq("project_id", projectId);
+      
+      const matchedCustomerIds = customerData
+        ?.filter(c => c.phone && c.phone.replace(/\D/g, "").includes(phoneMatch))
+        .map(c => c.id) || [];
+
+      if (matchedCustomerIds.length > 0) {
+        const { data: phoneOrders } = await adminSupabase
+          .from("unified_orders")
+          .select("*")
+          .eq("project_id", projectId)
+          .in("customer_id", matchedCustomerIds);
+        
+        if (phoneOrders) {
+          phoneOrders.forEach(o => {
+            if (!orders.some(existing => existing.id === o.id)) {
+              orders.push(o);
+            }
+          });
+        }
+      }
+    }
+
+    const chain: any[] = [];
+
+    clicks.forEach(c => {
+      chain.push({
+        type: "click",
+        id: c.id,
+        created_at: c.created_at,
+        status: c.status,
+        utm_source: c.utm_source,
+        utm_medium: c.utm_medium,
+        utm_campaign: c.utm_campaign,
+        utm_content: c.utm_content,
+        utm_term: c.utm_term,
+        page_path: c.page_path,
+        page_url: c.page_url,
+        visitor_uuid: c.visitor_uuid,
+        is_broken: false,
+      });
+    });
+
+    orders.forEach(o => {
+      const isBroken = !o.visitor_uuid;
+      chain.push({
+        type: "order",
+        id: o.id,
+        created_at: o.created_at,
+        status: o.status,
+        utm_source: o.utm_source,
+        utm_medium: o.utm_medium,
+        utm_campaign: o.utm_campaign,
+        utm_content: o.utm_content,
+        utm_term: o.utm_term,
+        page_path: o.page_path,
+        page_url: o.page_url,
+        visitor_uuid: o.visitor_uuid,
+        amount: o.amount,
+        is_broken: isBroken,
+        error_message: isBroken ? "Потерян трекер сессии" : null
+      });
+    });
+
+    chain.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+    return { chain };
+  } catch (err: any) {
+    return { error: err.message || "Failed to trace visitor" };
   }
 }
