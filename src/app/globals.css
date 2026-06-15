@@ -83,3 +83,23 @@
 
 /* Shared styles and effects */
 
+/* Force CRM utility classes to map directly to CSS variables, bypassing any compile-time theme resolution bugs */
+.bg-crm-bg {
+  background-color: var(--crm-bg) !important;
+}
+.bg-crm-card {
+  background-color: var(--crm-card) !important;
+}
+.border-crm-border {
+  border-color: var(--crm-border) !important;
+}
+.text-crm-text {
+  color: var(--crm-text) !important;
+}
+.text-crm-muted {
+  color: var(--crm-text-muted) !important;
+}
+.bg-crm-input-bg {
+  background-color: var(--crm-input-bg) !important;
+}
+
