@@ -4390,49 +4390,49 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       {/* Modal for Unresolved Orders */}
       {showUnresolvedModal && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="relative w-full max-w-2xl max-h-[80vh] bg-[#0C0C0F] border border-white/10 rounded-3xl p-6 shadow-2xl flex flex-col space-y-6 animate-in slide-in-from-bottom-4 duration-300">
+          <div className={`relative w-full max-w-2xl max-h-[80vh] ${modalBgClass} rounded-3xl p-6 shadow-2xl flex flex-col space-y-6 animate-in slide-in-from-bottom-4 duration-300`}>
             <button
               onClick={() => setShowUnresolvedModal(false)}
-              className="absolute top-4 right-4 p-2 rounded-xl text-white/40 hover:text-white hover:bg-white/5 cursor-pointer transition-all"
+              className="absolute top-4 right-4 p-2 rounded-xl text-crm-muted hover:text-crm-text hover:bg-crm-card/50 cursor-pointer transition-all"
             >
               <XCircle className="w-5 h-5" />
             </button>
 
             <div>
-              <h3 className="text-lg font-black uppercase tracking-tight text-white flex items-center gap-2">
+              <h3 className="text-lg font-black uppercase tracking-tight text-crm-text flex items-center gap-2">
                 <AlertCircle className="w-5 h-5 text-red-500 animate-pulse" />
                 Транзакції без вказаної валюти
               </h3>
-              <p className="text-white/40 text-xs mt-1">
+              <p className="text-crm-muted text-xs mt-1">
                 Будь ласка, оберіть валюту для кожної транзакції, щоб вони правильно відображалися в аналітиці.
               </p>
             </div>
 
             <div className="flex-grow overflow-y-auto custom-scrollbar space-y-3 pr-2">
               {unresolvedOrders.length === 0 ? (
-                <p className="text-center text-xs text-white/30 py-8 italic">Усі транзакції мають вказану валюту!</p>
+                <p className="text-center text-xs text-crm-muted/60 py-8 italic">Усі транзакції мають вказану валюту!</p>
               ) : (
                 unresolvedOrders.map((order: any) => (
                   <div
                     key={order.id}
-                    className="p-4 rounded-xl border border-white/5 bg-white/[0.01] hover:bg-white/[0.02] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-all"
+                    className="p-4 rounded-xl border border-crm-border bg-white/[0.01] hover:bg-white/[0.02] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-all"
                   >
                     <div className="space-y-1">
-                      <p className="text-xs font-bold text-white/90">
+                      <p className="text-xs font-bold text-crm-text">
                         {order.customerName || "Невідомий клієнт"}
                       </p>
-                      <p className="text-[10px] text-white/40">
+                      <p className="text-[10px] text-crm-muted">
                         Проект: {order.projectName} | Дата: {new Date(order.created_at).toLocaleString("uk-UA")}
                       </p>
                       {order.customerPhone && (
-                        <p className="text-[10px] text-white/40">
+                        <p className="text-[10px] text-crm-muted">
                           Тел: {order.customerPhone}
                         </p>
                       )}
                     </div>
 
                     <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
-                      <span className="text-sm font-black text-white pr-2">
+                      <span className="text-sm font-black text-crm-text pr-2">
                         {formatLocaleNumber(order.amount)}
                       </span>
                       <div className="flex gap-1.5 shrink-0">
@@ -4469,7 +4469,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                                 setUpdatingCurrencyId(null);
                               }
                             }}
-                            className="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-emerald-500 hover:text-black disabled:opacity-40 text-[10px] font-extrabold text-white/80 border border-white/10 hover:border-emerald-550 transition-all cursor-pointer"
+                            className="px-2.5 py-1.5 rounded-lg bg-crm-input-bg hover:bg-emerald-500 hover:text-black disabled:opacity-40 text-[10px] font-extrabold text-crm-text border border-crm-border hover:border-emerald-550 transition-all cursor-pointer"
                           >
                             {curr.symbol}
                           </button>

@@ -1397,7 +1397,11 @@ export async function getUnifiedCRMData(
         p_start_date: startRpcDate.toISOString(),
         p_end_date: endRpcDate.toISOString()
       });
-      splineTrendData = data || [];
+      splineTrendData = (data || []).map((row: any) => ({
+        name: row.date_str,
+        leads: Number(row.leads_count || 0),
+        clicks: Number(row.clicks_count || 0)
+      }));
       const dbRpcEnd = performance.now();
       dbRpcMs = dbRpcEnd - dbRpcStart;
     }

@@ -20,7 +20,7 @@
 }
 
 /* CRM Design Tokens */
-.admin-layout-root {
+:root {
   --crm-bg: #060608;
   --crm-card: #0C0C0F;
   --crm-border: rgba(255, 255, 255, 0.05);
@@ -30,7 +30,7 @@
   --crm-input-bg: rgba(255, 255, 255, 0.03);
 }
 
-.admin-layout-root.theme-light {
+.theme-light {
   --crm-bg: #f8f9fc;
   --crm-card: #ffffff;
   --crm-border: #e5e5e5;
