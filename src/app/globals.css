@@ -3,6 +3,13 @@
 @theme {
   --color-hairline: #2A2A32;
   --color-surface2: #1A1A1F;
+  --color-crm-bg: var(--crm-bg);
+  --color-crm-card: var(--crm-card);
+  --color-crm-border: var(--crm-border);
+  --color-crm-border-hover: var(--crm-border-hover);
+  --color-crm-text: var(--crm-text);
+  --color-crm-muted: var(--crm-text-muted);
+  --color-crm-input-bg: var(--crm-input-bg);
 }
 
 :root {
@@ -10,6 +17,27 @@
   --foreground: #ffffff;
   --accent-emerald: #10b981;
   --accent-emerald-glow: rgba(16, 185, 129, 0.15);
+}
+
+/* CRM Design Tokens */
+.admin-layout-root {
+  --crm-bg: #060608;
+  --crm-card: #0C0C0F;
+  --crm-border: rgba(255, 255, 255, 0.05);
+  --crm-border-hover: rgba(255, 255, 255, 0.1);
+  --crm-text: #ffffff;
+  --crm-text-muted: rgba(255, 255, 255, 0.4);
+  --crm-input-bg: rgba(255, 255, 255, 0.03);
+}
+
+.admin-layout-root.theme-light {
+  --crm-bg: #f8f9fc;
+  --crm-card: #ffffff;
+  --crm-border: #e5e5e5;
+  --crm-border-hover: #d4d4d4;
+  --crm-text: #171717;
+  --crm-text-muted: #737373;
+  --crm-input-bg: #ffffff;
 }
 
 @layer base {

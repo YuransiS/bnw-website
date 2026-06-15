@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 import { getDashboardData, updateLeadStatus } from "./actions";
 import { useTheme } from "./ThemeProvider";
+import { devLogger } from "@/utils/logger";
+import DevLogConsole from "./DevLogConsole";
 
 interface Lead {
   id: string;
@@ -166,6 +168,58 @@ function parsePipelineStatus(status: string, buttonId: string): PipelineStatus {
   return "in_progress";
 }
 
+const getUkraineOffset = (year: number, month: number, day: number): string => {
+  if (month > 2 && month < 9) return "+03:00";
+  if (month < 2 || month > 9) return "+02:00";
+  
+  const lastSunday = (m: number) => {
+    const d = new Date(year, m + 1, 0);
+    const dayOfWeek = d.getDay();
+    return d.getDate() - dayOfWeek;
+  };
+  
+  if (month === 2) {
+    return day >= lastSunday(2) ? "+03:00" : "+02:00";
+  }
+  if (month === 9) {
+    return day < lastSunday(9) ? "+03:00" : "+02:00";
+  }
+  return "+02:00";
+};
+
+const getLeadDate = (lead: any): Date => {
+  const rawDateStr = lead.created_at;
+  if (rawDateStr) {
+    const str = String(rawDateStr).trim();
+    const dotParts = str.split(" ")[0].split(".");
+    if (dotParts.length === 3) {
+      const day = parseInt(dotParts[0], 10);
+      const month = parseInt(dotParts[1], 10) - 1;
+      const year = parseInt(dotParts[2], 10);
+      if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+        const timeStr = str.split(" ")[1];
+        const hour = timeStr ? (parseInt(timeStr.split(":")[0], 10) || 0) : 12;
+        const min = timeStr ? (parseInt(timeStr.split(":")[1], 10) || 0) : 0;
+        const sec = timeStr ? (parseInt(timeStr.split(":")[2], 10) || 0) : 0;
+        
+        const offset = getUkraineOffset(year, month, day);
+        const isoStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}${offset}`;
+        return new Date(isoStr);
+      }
+    }
+    
+    let cleanStr = str;
+    if (str.includes("(")) {
+      cleanStr = str.split("(")[0].trim();
+    }
+    const parsed = Date.parse(cleanStr);
+    if (!isNaN(parsed)) {
+      return new Date(parsed);
+    }
+  }
+  return new Date(lead.created_at);
+};
+
 export default function BwMainDashboard({
   initialLeads,
   initialPageViews,
@@ -181,6 +235,17 @@ export default function BwMainDashboard({
   const tableRowClass = isLight ? "hover:bg-neutral-50 border-neutral-200 text-neutral-800" : "hover:bg-white/[0.01] border-white/5 text-white/80";
   const inputClass = isLight ? "bg-white border border-neutral-300 text-neutral-900 placeholder:text-neutral-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-xs" : "bg-white/[0.03] border border-white/10 text-white placeholder:text-white/20 focus:border-emerald-500 text-xs";
   const dropdownClass = isLight ? "bg-white border border-neutral-200 shadow-2xl text-neutral-900" : "bg-[#0C0C0F]/95 border border-white/10 text-white shadow-2xl";
+
+  const [hasMounted, setHasMounted] = useState(false);
+  const [isDevMode, setIsDevMode] = useState(false);
+  useEffect(() => {
+    setHasMounted(true);
+    devLogger.info("BwMainDashboard", "BwMainDashboard component mounted");
+    const saved = localStorage.getItem("crm_dev_mode");
+    if (saved === "true") {
+      setIsDevMode(true);
+    }
+  }, []);
 
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
   const [pageViews, setPageViews] = useState<PageView[]>(initialPageViews);
@@ -213,10 +278,21 @@ export default function BwMainDashboard({
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
+        devLogger.info("BwMainDashboard", "Polling latest main site dashboard data...");
         const freshData = await getDashboardData();
         
+        devLogger.info("BwMainDashboard", "Polling success. Latest data fetched", {
+          leadsCount: freshData.leads.length,
+          pageViewsCount: freshData.pageViews.length,
+          clicksCount: freshData.clicks.length
+        });
+
         // Push notification if new leads detected
         if (freshData.leads.length > leadsLengthRef.current) {
+          devLogger.info("BwMainDashboard", "New leads detected!", {
+            prevCount: leadsLengthRef.current,
+            newCount: freshData.leads.length
+          });
           triggerNotification("Зареєстровано новий лід");
         }
 
@@ -224,7 +300,8 @@ export default function BwMainDashboard({
         setLeads(freshData.leads);
         setPageViews(freshData.pageViews);
         setClicks(freshData.clicks);
-      } catch (err) {
+      } catch (err: any) {
+        devLogger.error("BwMainDashboard", `Polling failed: ${err.message}`, { error: err });
         console.error("[Polling] Failed to fetch latest data:", err);
       }
     }, 10000); // 10 seconds
@@ -396,6 +473,17 @@ export default function BwMainDashboard({
       </a>
     );
   };
+
+  if (!hasMounted) {
+    return (
+      <div className="min-h-[400px] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+          <span className={`text-xs ${textMutedClass}`}>Завантаження панелі...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-10 font-sans">
@@ -682,7 +770,7 @@ export default function BwMainDashboard({
                       <div className={`flex justify-between items-center text-[10px] mt-2 font-medium ${textMutedClass}`}>
                         <span>Джерело: {BUTTON_LABELS[getBaseButtonId(lead.button_id)] || getBaseButtonId(lead.button_id)}</span>
                         <span>
-                          {new Date(lead.created_at).toLocaleDateString("uk-UA", {
+                          {getLeadDate(lead).toLocaleDateString("uk-UA", {
                             day: "2-digit",
                             month: "2-digit",
                             year: "numeric",
@@ -775,7 +863,7 @@ export default function BwMainDashboard({
 
                         {/* Created Date */}
                         <td className={`p-4 ${isLight ? "text-neutral-500" : "text-white/50"}`}>
-                          {new Date(lead.created_at).toLocaleString("uk-UA", {
+                          {getLeadDate(lead).toLocaleString("uk-UA", {
                             day: "2-digit",
                             month: "2-digit",
                             year: "numeric",
@@ -883,7 +971,7 @@ export default function BwMainDashboard({
                         </div>
                       </div>
                       <span className={`text-[10px] ${textMutedClass} font-semibold shrink-0`}>
-                        {new Date(lead.created_at).toLocaleDateString("uk-UA")}
+                        {getLeadDate(lead).toLocaleDateString("uk-UA")}
                       </span>
                     </div>
 
@@ -983,6 +1071,7 @@ export default function BwMainDashboard({
         </>
       )}
       </div>
+      {isDevMode && <DevLogConsole />}
     </div>
   );
 }

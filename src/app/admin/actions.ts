@@ -5,6 +5,7 @@ import { statusMapper } from "@/lib/statusMapper";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
+import { devLogger } from "@/utils/logger";
 
 export async function signOutAction() {
   const supabase = await createClient();
@@ -89,6 +90,12 @@ export async function getSessionAndAccess(selectedProjectSlug?: string) {
   if (activeSlug && activeSlug !== "all" && !allowedProjects.some((p) => p.slug === activeSlug)) {
     activeSlug = allowedProjects.length > 0 ? allowedProjects[0].slug : undefined;
   }
+
+  devLogger.info(
+    "Auth & Session",
+    `User ${user.email} authenticated. Role: ${profile.role}. Active Project: ${activeSlug}`,
+    { allowedProjects: allowedProjects.map((p) => p.slug) }
+  );
 
   return {
     user,
@@ -241,6 +248,25 @@ const getTouchUtm = (l: any, key: 'source' | 'medium' | 'campaign' | 'content' |
   return "";
 };
 
+const getUkraineOffset = (year: number, month: number, day: number): string => {
+  if (month > 2 && month < 9) return "+03:00";
+  if (month < 2 || month > 9) return "+02:00";
+  
+  const lastSunday = (m: number) => {
+    const d = new Date(year, m + 1, 0);
+    const dayOfWeek = d.getDay();
+    return d.getDate() - dayOfWeek;
+  };
+  
+  if (month === 2) {
+    return day >= lastSunday(2) ? "+03:00" : "+02:00";
+  }
+  if (month === 9) {
+    return day < lastSunday(9) ? "+03:00" : "+02:00";
+  }
+  return "+02:00";
+};
+
 const getLeadDate = (lead: any): Date => {
   const rawDateStr =
     lead.metadata?.raw_row?.Дата ||
@@ -259,14 +285,13 @@ const getLeadDate = (lead: any): Date => {
       const year = parseInt(dotParts[2], 10);
       if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
         const timeStr = str.split(" ")[1];
-        if (timeStr) {
-          const timeParts = timeStr.split(":");
-          const hour = parseInt(timeParts[0], 10) || 0;
-          const min = parseInt(timeParts[1], 10) || 0;
-          const sec = parseInt(timeParts[2], 10) || 0;
-          return new Date(Date.UTC(year, month, day, hour, min, sec));
-        }
-        return new Date(Date.UTC(year, month, day, 12, 0, 0));
+        const hour = timeStr ? (parseInt(timeStr.split(":")[0], 10) || 0) : 12;
+        const min = timeStr ? (parseInt(timeStr.split(":")[1], 10) || 0) : 0;
+        const sec = timeStr ? (parseInt(timeStr.split(":")[2], 10) || 0) : 0;
+        
+        const offset = getUkraineOffset(year, month, day);
+        const isoStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}${offset}`;
+        return new Date(isoStr);
       }
     }
     let cleanStr = str;
@@ -418,6 +443,7 @@ export async function getUnifiedCRMData(
     startDate?: string;
     endDate?: string;
     selectedLanding?: string;
+    skipTraffic?: boolean;
   }
 ) {
   try {
@@ -523,22 +549,43 @@ export async function getUnifiedCRMData(
             return statusMapper.normalize(o.status) === "closed_won";
           });
 
+          // Filter out tripwires to match the SQL function get_projects_summary()
+          const coursePaidOrders = paidOrders.filter((o) => {
+            const originalSheet = String(o.metadata?.original_sheet || o.metadata?.lead?.original_sheet || "").trim();
+            const targetSheet = String(o.metadata?.target_sheet || o.metadata?.lead?.target_sheet || "").trim();
+            const courseName = String(o.metadata?.leadData?.course || o.metadata?.lead?.leadData?.course || "").trim();
+            const orderSlug = proj.slug || "";
+
+            const isTripwire =
+              ["Практикум", "Practicum_Leads", "Заявки на практикум", "Miні-курс"].includes(originalSheet) ||
+              ["Практикум", "Practicum_Leads", "Заявки на практикум", "Miні-курс"].includes(targetSheet) ||
+              courseName.includes("Mini-Course") ||
+              courseName.includes("Practicum") ||
+              courseName.includes("Практикум") ||
+              courseName.includes("Міні-курс") ||
+              orderSlug === "sofia" ||
+              orderSlug === "valeria";
+
+            return !isTripwire;
+          });
+
           let usd_revenue = 0;
           let uah_revenue = 0;
           let eur_revenue = 0;
 
-          paidOrders.forEach((o) => {
+          coursePaidOrders.forEach((o) => {
             const amt = Number(o.amount || 0);
             const metaCurrency = String(o.metadata?.currency || o.metadata?.lead?.currency || "").trim().toLowerCase();
 
-            const isUsd = ["usd", "$"].includes(metaCurrency) || proj.slug === "sofia" || proj.slug === "valeria";
+            const isUsd = ["usd", "$"].includes(metaCurrency);
             const isEur = ["eur", "€"].includes(metaCurrency);
+            const isUah = ["uah", "₴"].includes(metaCurrency);
 
             if (isUsd) {
               usd_revenue += amt;
             } else if (isEur) {
               eur_revenue += amt;
-            } else {
+            } else if (isUah) {
               uah_revenue += amt;
             }
           });
@@ -600,15 +647,15 @@ export async function getUnifiedCRMData(
           const amt = Number(o.amount || 0);
           const metaCurrency = String(o.metadata?.currency || o.metadata?.lead?.currency || "").trim().toLowerCase();
 
-          const orderProj = projects.find(p => p.id === o.project_id);
-          const isUsd = ["usd", "$"].includes(metaCurrency) || orderProj?.slug === "sofia" || orderProj?.slug === "valeria";
+          const isUsd = ["usd", "$"].includes(metaCurrency);
           const isEur = ["eur", "€"].includes(metaCurrency);
+          const isUah = ["uah", "₴"].includes(metaCurrency);
 
           if (isUsd) {
             usd_revenue += amt;
           } else if (isEur) {
             eur_revenue += amt;
-          } else {
+          } else if (isUah) {
             uah_revenue += amt;
           }
         });
@@ -751,17 +798,19 @@ export async function getUnifiedCRMData(
             .range(from, to);
         }
       ),
-      fetchAllParallel(
-        () => adminSupabase.from("traffic_clicks").select("*", { count: "exact", head: true }).eq("project_id", activeProject.id),
-        (from, to) => {
-          return adminSupabase
-            .from("traffic_clicks")
-            .select("*")
-            .eq("project_id", activeProject.id)
-            .order("created_at", { ascending: false })
-            .range(from, to);
-        }
-      ),
+      filters?.skipTraffic
+        ? Promise.resolve([])
+        : fetchAllParallel(
+            () => adminSupabase.from("traffic_clicks").select("*", { count: "exact", head: true }).eq("project_id", activeProject.id),
+            (from, to) => {
+              return adminSupabase
+                .from("traffic_clicks")
+                .select("*")
+                .eq("project_id", activeProject.id)
+                .order("created_at", { ascending: false })
+                .range(from, to);
+            }
+          ),
       adminSupabase
         .from("daily_traffic_and_costs")
         .select("*")
@@ -1039,6 +1088,13 @@ export async function getUnifiedCRMData(
         }
       });
 
+      let usdCourseCount = 0;
+      let uahCourseCount = 0;
+      let eurCourseCount = 0;
+      let usdTripwireCount = 0;
+      let uahTripwireCount = 0;
+      let eurTripwireCount = 0;
+
       uniqueOrders.forEach((item) => {
         const amt = Number(item.amount || 0);
         if (amt === 0) return;
@@ -1054,28 +1110,25 @@ export async function getUnifiedCRMData(
         const orderSlug = orderProj?.slug || "";
 
         const isEur = ["eur", "€"].includes(metaCurrency);
-        const isUsd = !isEur && (["usd", "$"].includes(metaCurrency) ||
-          orderSlug === "sofia" ||
-          orderSlug === "valeria" ||
-          activeProject?.slug === "sofia" ||
-          activeProject?.slug === "valeria");
+        const isUsd = ["usd", "$"].includes(metaCurrency);
+        const isUah = ["uah", "₴"].includes(metaCurrency);
 
         const isProjectAlwaysTripwire =
           ["sofia", "valeria"].includes(orderSlug) ||
           ["sofia", "valeria"].includes(activeProject?.slug || "");
 
         if (item.status === "Купив курс" && !isProjectAlwaysTripwire) {
-          if (isUsd) usdCoursePaid += amt;
-          else if (isEur) eurCoursePaid += amt;
-          else uahCoursePaid += amt;
+          if (isUsd) { usdCoursePaid += amt; usdCourseCount++; }
+          else if (isEur) { eurCoursePaid += amt; eurCourseCount++; }
+          else if (isUah) { uahCoursePaid += amt; uahCourseCount++; }
         } else if (item.status === "Купив(-ла) Трипвайер" || (item.status === "Купив курс" && isProjectAlwaysTripwire)) {
-          if (isUsd) usdTripwirePaid += amt;
-          else if (isEur) eurTripwirePaid += amt;
-          else uahTripwirePaid += amt;
+          if (isUsd) { usdTripwirePaid += amt; usdTripwireCount++; }
+          else if (isEur) { eurTripwirePaid += amt; eurTripwireCount++; }
+          else if (isUah) { uahTripwirePaid += amt; uahTripwireCount++; }
         } else {
           if (isUsd) usdAttempted += amt;
           else if (isEur) eurAttempted += amt;
-          else uahAttempted += amt;
+          else if (isUah) uahAttempted += amt;
         }
       });
 
@@ -1133,6 +1186,12 @@ export async function getUnifiedCRMData(
         attemptedAmount: usdAttempted,
         uahAttemptedAmount: uahAttempted,
         eurAttemptedAmount: eurAttempted,
+        usdCourseCount,
+        uahCourseCount,
+        eurCourseCount,
+        usdTripwireCount,
+        uahTripwireCount,
+        eurTripwireCount,
         utm_source: utm_source || getTouchUtm(primaryLead, "source"),
         utm_medium: utm_medium || getTouchUtm(primaryLead, "medium"),
         utm_campaign: utm_campaign || getTouchUtm(primaryLead, "campaign"),
@@ -1266,19 +1325,13 @@ export async function getUnifiedCRMData(
     const blendedRevenue = totalUsdRevenue + (totalUahRevenue / 41.0) + (totalEurRevenue * 1.08);
     const roi = totalCostsSpend > 0 ? (blendedRevenue / totalCostsSpend) * 100 : 0;
 
-    const paidLeadsCount = filteredLeads.filter((l) => l.status === "Купив курс").length;
-    const paidTripwiresCount = filteredLeads.filter((l) => l.status === "Купив(-ла) Трипвайер").length;
+    const paidLeadsCount = filteredLeads.reduce((sum, l) => sum + (l.usdCourseCount || 0) + (l.uahCourseCount || 0) + (l.eurCourseCount || 0), 0);
+    const paidTripwiresCount = filteredLeads.reduce((sum, l) => sum + (l.usdTripwireCount || 0) + (l.uahTripwireCount || 0) + (l.eurTripwireCount || 0), 0);
     const totalSales = paidLeadsCount + paidTripwiresCount;
 
-    const usdSalesCount = filteredLeads.filter(
-      (l) => (l.status === "Купив курс" || l.status === "Купив(-ла) Трипвайер") && (Number(l.usdPaid || 0) + Number(l.usdTripwirePaid || 0) > 0)
-    ).length;
-    const uahSalesCount = filteredLeads.filter(
-      (l) => (l.status === "Купив курс" || l.status === "Купив(-ла) Трипвайер") && (Number(l.uahPaid || 0) + Number(l.uahTripwirePaid || 0) > 0)
-    ).length;
-    const eurSalesCount = filteredLeads.filter(
-      (l) => (l.status === "Купив курс" || l.status === "Купив(-ла) Трипвайер") && (Number(l.eurPaid || 0) + Number(l.eurTripwirePaid || 0) > 0)
-    ).length;
+    const usdSalesCount = filteredLeads.reduce((sum, l) => sum + (l.usdCourseCount || 0) + (l.usdTripwireCount || 0), 0);
+    const uahSalesCount = filteredLeads.reduce((sum, l) => sum + (l.uahCourseCount || 0) + (l.uahTripwireCount || 0), 0);
+    const eurSalesCount = filteredLeads.reduce((sum, l) => sum + (l.eurCourseCount || 0) + (l.eurTripwireCount || 0), 0);
 
     const aovUsd = usdSalesCount > 0 ? (usdCourseRevenue + usdTripwireRevenue) / usdSalesCount : 0;
     const aovUah = uahSalesCount > 0 ? (uahCourseRevenue + uahTripwireRevenue) / uahSalesCount : 0;
@@ -1333,16 +1386,21 @@ export async function getUnifiedCRMData(
     };
 
     // --- Pre-aggregated Spline Trend Data via RPC ---
-    const startRpcDate = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const endRpcDate = endDate ? new Date(endDate) : new Date();
-    const dbRpcStart = performance.now();
-    const { data: splineTrendData } = await adminSupabase.rpc("get_project_daily_stats", {
-      p_project_id: activeProject.id,
-      p_start_date: startRpcDate.toISOString(),
-      p_end_date: endRpcDate.toISOString()
-    });
-    const dbRpcEnd = performance.now();
-    const dbRpcMs = dbRpcEnd - dbRpcStart;
+    let splineTrendData = [];
+    let dbRpcMs = 0;
+    if (!filters?.skipTraffic) {
+      const startRpcDate = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const endRpcDate = endDate ? new Date(endDate) : new Date();
+      const dbRpcStart = performance.now();
+      const { data } = await adminSupabase.rpc("get_project_daily_stats", {
+        p_project_id: activeProject.id,
+        p_start_date: startRpcDate.toISOString(),
+        p_end_date: endRpcDate.toISOString()
+      });
+      splineTrendData = data || [];
+      const dbRpcEnd = performance.now();
+      dbRpcMs = dbRpcEnd - dbRpcStart;
+    }
 
     // --- UTM Attribution Tree on server ---
     const utmTreeRoot: Record<string, any> = {};
@@ -1602,6 +1660,18 @@ export async function getUnifiedCRMData(
     const stringified = JSON.stringify(finalResult);
     const payloadSizeKb = Math.round((stringified.length / 1024) * 10) / 10;
 
+    const totalDuration = dbFetchMs + dbRpcMs + jsClusteringMs;
+    devLogger.perf("getUnifiedCRMData", `Loaded CRM Data for slug: ${activeSlug}`, totalDuration, {
+      activeSlug,
+      dbFetchMs,
+      dbRpcMs,
+      jsClusteringMs,
+      payloadSizeKb,
+      unresolvedOrdersCount: unresolvedOrders.length,
+      leadsCount: finalResult.leads.length,
+      skipTraffic: !!filters?.skipTraffic
+    });
+
     return {
       ...finalResult,
       performance: {
@@ -1612,6 +1682,7 @@ export async function getUnifiedCRMData(
       }
     };
   } catch (err: any) {
+    devLogger.error("getUnifiedCRMData", `Failed to load CRM data: ${err.message}`, { error: err });
     console.error("Unified CRM fetching error:", err.message);
     throw err;
   }

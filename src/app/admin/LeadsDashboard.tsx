@@ -51,6 +51,8 @@ import {
 } from "./actions";
 import { useTheme } from "./ThemeProvider";
 import { statusMapper } from "@/lib/statusMapper";
+import { devLogger } from "@/utils/logger";
+import DevLogConsole from "./DevLogConsole";
 
 // Safe locale number formatting to avoid server/client hydration mismatch
 const formatLocaleNumber = (num: number) => {
@@ -135,6 +137,25 @@ const parseComments = (rawComment: string | null): CommentItem[] => {
   }];
 };
 
+const getUkraineOffset = (year: number, month: number, day: number): string => {
+  if (month > 2 && month < 9) return "+03:00";
+  if (month < 2 || month > 9) return "+02:00";
+  
+  const lastSunday = (m: number) => {
+    const d = new Date(year, m + 1, 0);
+    const dayOfWeek = d.getDay();
+    return d.getDate() - dayOfWeek;
+  };
+  
+  if (month === 2) {
+    return day >= lastSunday(2) ? "+03:00" : "+02:00";
+  }
+  if (month === 9) {
+    return day < lastSunday(9) ? "+03:00" : "+02:00";
+  }
+  return "+02:00";
+};
+
 const getLeadDate = (lead: any): Date => {
   const rawDateStr =
     lead.metadata?.raw_row?.Дата ||
@@ -156,14 +177,13 @@ const getLeadDate = (lead: any): Date => {
       if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
         // Try parsing time if present
         const timeStr = str.split(" ")[1];
-        if (timeStr) {
-          const timeParts = timeStr.split(":");
-          const hour = parseInt(timeParts[0], 10) || 0;
-          const min = parseInt(timeParts[1], 10) || 0;
-          const sec = parseInt(timeParts[2], 10) || 0;
-          return new Date(Date.UTC(year, month, day, hour, min, sec));
-        }
-        return new Date(Date.UTC(year, month, day, 12, 0, 0));
+        const hour = timeStr ? (parseInt(timeStr.split(":")[0], 10) || 0) : 12;
+        const min = timeStr ? (parseInt(timeStr.split(":")[1], 10) || 0) : 0;
+        const sec = timeStr ? (parseInt(timeStr.split(":")[2], 10) || 0) : 0;
+        
+        const offset = getUkraineOffset(year, month, day);
+        const isoStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}${offset}`;
+        return new Date(isoStr);
       }
     }
 
@@ -462,6 +482,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   // Reference to track last fetched parameters to prevent duplicate/redundant client-side fetches
   const lastFetchedParamsRef = React.useRef<string>("");
 
+  const [hasMounted, setHasMounted] = useState(false);
+  useEffect(() => {
+    setHasMounted(true);
+    devLogger.info("CRM Client", "LeadsDashboard component mounted");
+  }, []);
+
   // Sync state when props change (like when switching projects and router.refresh() runs)
   useEffect(() => {
     setDashboardData(initialData);
@@ -526,6 +552,19 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     setIsDevMode(newVal);
     localStorage.setItem("crm_dev_mode", String(newVal));
   };
+
+  useEffect(() => {
+    if (hasMounted) {
+      devLogger.info("CRM Navigation", `Active tab switched to: ${activeTab}`);
+    }
+  }, [activeTab, hasMounted]);
+
+  useEffect(() => {
+    if (hasMounted) {
+      devLogger.info("CRM Project Switch", `Active project switched to: ${activeSlug}`);
+    }
+  }, [activeSlug, hasMounted]);
+
   const [showUnresolvedModal, setShowUnresolvedModal] = useState(false);
   const [traceQuery, setTraceQuery] = useState("");
   const [traceResults, setTraceResults] = useState<any[] | null>(null);
@@ -598,22 +637,22 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
   // Dynamic theme support definitions
   const isLight = theme === "light";
-  const bgClass = isLight ? "bg-[#F8F9FC] text-neutral-900" : "bg-[#060608] text-white";
-  const cardClass = isLight ? "bg-white border border-neutral-200/85 text-neutral-900 shadow-sm" : "bg-[#0C0C0F] border border-white/5 text-white";
-  const textMutedClass = isLight ? "text-neutral-500" : "text-white/40";
-  const textTitleClass = isLight ? "text-neutral-900 font-extrabold" : "text-white font-extrabold";
-  const inputClass = isLight ? "bg-white border border-neutral-300 text-neutral-900 placeholder:text-neutral-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" : "bg-white/5 border border-white/10 text-white placeholder:text-white/20 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500";
-  const selectClass = isLight ? "bg-white border border-neutral-300 text-neutral-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" : "bg-white/[0.02] border border-white/10 text-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500";
-  const borderClass = isLight ? "border-neutral-200" : "border-white/5";
-  const tableHeaderClass = isLight ? "bg-neutral-100 text-neutral-500 border-neutral-200" : "bg-white/[0.02] text-white/40 border-white/5";
-  const tableRowClass = isLight ? "hover:bg-neutral-50 border-neutral-200 text-neutral-800" : "hover:bg-white/[0.01] border-white/5 text-white/80";
-  const modalBgClass = isLight ? "bg-white border border-neutral-300 shadow-2xl text-neutral-900" : "bg-[#0C0C0F] border border-white/10 shadow-2xl text-white";
-  const bgMutedClass = isLight ? "bg-neutral-50" : "bg-white/[0.02]";
-  const bgHoverMutedClass = isLight ? "hover:bg-neutral-100" : "hover:bg-white/[0.05]";
-  const textHeadingClass = isLight ? "text-neutral-900 font-black" : "text-white font-black";
-  const textNormalClass = isLight ? "text-neutral-800" : "text-white/80";
-  const textMutedLightClass = isLight ? "text-neutral-400" : "text-white/20";
-  const optionClass = isLight ? "bg-white text-neutral-900" : "bg-[#0C0C0F] text-white";
+  const bgClass = "bg-crm-bg text-crm-text";
+  const cardClass = "bg-crm-card border border-crm-border text-crm-text shadow-sm";
+  const textMutedClass = "text-crm-muted";
+  const textTitleClass = "text-crm-text font-extrabold";
+  const inputClass = "bg-crm-input-bg border border-crm-border text-crm-text placeholder:text-crm-muted focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500";
+  const selectClass = "bg-crm-input-bg border border-crm-border text-crm-text focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500";
+  const borderClass = "border-crm-border";
+  const tableHeaderClass = "bg-white/[0.02] text-crm-muted border-crm-border";
+  const tableRowClass = "hover:bg-white/[0.01] border-crm-border text-crm-text/80";
+  const modalBgClass = "bg-crm-card border border-crm-border shadow-2xl text-crm-text";
+  const bgMutedClass = "bg-white/[0.02]";
+  const bgHoverMutedClass = "hover:bg-white/[0.05]";
+  const textHeadingClass = "text-crm-text font-black";
+  const textNormalClass = "text-crm-text/80";
+  const textMutedLightClass = "text-crm-muted/50";
+  const optionClass = "bg-crm-card text-crm-text";
 
   // Reset page number on filter changes
   useEffect(() => {
@@ -654,6 +693,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     if (viewType !== "single" || !activeSlug) return;
 
     const isKanban = activeTab === "kanban";
+    const skipTraffic = activeTab !== "analytics";
     const currentParamsKey = JSON.stringify({
       activeSlug,
       page: isKanban ? 1 : currentPage,
@@ -665,7 +705,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       unpaidIntentOnly: isKanban ? false : unpaidIntentOnly,
       startDate: startDate,
       endDate: endDate,
-      selectedLanding: selectedLanding
+      selectedLanding: selectedLanding,
+      skipTraffic
     });
 
     // Skip redundant fetching if parameters haven't changed
@@ -676,7 +717,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     lastFetchedParamsRef.current = currentParamsKey;
     setIsLoading(true);
 
-    getUnifiedCRMData(activeSlug, {
+    const paramsPayload = {
       page: isKanban ? 1 : currentPage,
       pageSize: isKanban ? 500 : pageSize,
       searchQuery: isKanban ? debouncedKanbanSearchQuery : debouncedSearchQuery,
@@ -686,13 +727,24 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       unpaidIntentOnly: isKanban ? false : unpaidIntentOnly,
       startDate: startDate,
       endDate: endDate,
-      selectedLanding: selectedLanding
-    }).then((res) => {
+      selectedLanding: selectedLanding,
+      skipTraffic
+    };
+
+    devLogger.info("CRM Client", `Requesting getUnifiedCRMData for project: ${activeSlug}`, paramsPayload);
+
+    getUnifiedCRMData(activeSlug, paramsPayload).then((res: any) => {
       if (isMounted) {
+        devLogger.info("CRM Client", "Successfully received CRM data", {
+          performance: res.performance,
+          leadsCount: res.leads?.length || 0,
+          unresolvedCount: res.unresolvedOrders?.length || 0
+        });
         setDashboardData(res);
         setIsLoading(false);
       }
-    }).catch((err) => {
+    }).catch((err: any) => {
+      devLogger.error("CRM Client", `Failed to retrieve CRM data: ${err.message}`, { error: err });
       console.error("Failed to fetch dashboard data:", err);
       if (isMounted) {
         setDashboardData((prev: any) => ({ ...prev, error: err.message || "Невідома помилка" }));
@@ -1042,6 +1094,17 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       </React.Fragment>
     );
   };
+
+  if (!hasMounted) {
+    return (
+      <div className="min-h-screen bg-crm-bg text-crm-text flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <RefreshCw className="w-8 h-8 animate-spin text-emerald-500" />
+          <span className="text-xs text-crm-text/50">Завантаження CRM...</span>
+        </div>
+      </div>
+    );
+  }
 
   if (viewType === "none" || allowedProjects.length === 0 || dashboardData?.error) {
     const hasError = !!dashboardData?.error;
@@ -1621,47 +1684,91 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
               </h2>
 
               <div className={`overflow-x-auto border ${borderClass} rounded-xl`}>
-                <table className="w-full border-collapse text-left text-xs">
+                <table className="w-full border-collapse text-left text-[11px]">
                   <thead>
-                    <tr className={`${tableHeaderClass} uppercase tracking-widest font-black border-b`}>
-                      <th className="p-4">Проект</th>
+                    <tr className={`${tableHeaderClass} uppercase tracking-wider font-black border-b`}>
                       <th className="p-4">Кампанія</th>
-                      <th className="p-4 text-center">Витрати</th>
-                      <th className="p-4 text-center">Кліки</th>
-                      <th className="p-4 text-center">Продажі</th>
-                      <th className="p-4 text-center">Виручка</th>
-                      <th className="p-4 text-center">Прибуток</th>
-                      <th className="p-4 text-center">ROI</th>
+                      <th className="p-4 text-center">Покази / Кліки / CTR</th>
+                      <th className="p-4 text-center">Витрати / CPM / CPC</th>
+                      <th className="p-4 text-center">Заявки / CR / CPL</th>
+                      <th className="p-4 text-center">Продажі / CR / Середній чек</th>
+                      <th className="p-4 text-center">Виручка / Прибуток</th>
+                      <th className="p-4 text-center">ROAS / ROI</th>
                     </tr>
                   </thead>
                   <tbody className={`divide-y ${borderClass} ${isLight ? "text-neutral-700" : "text-white/80"}`}>
                     {campaignsData.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="p-6 text-center text-white/30 italic">Відсутні дані про рекламні кампанії</td>
+                        <td colSpan={7} className="p-6 text-center text-white/30 italic">Відсутні дані про рекламні кампанії</td>
                       </tr>
                     ) : (
-                      campaignsData.map((c: any, idx: number) => (
-                        <tr key={idx} className={`${tableRowClass} transition-all`}>
-                          <td className="p-4 font-bold">{c.project_name}</td>
-                          <td className="p-4">
-                            <div className="font-extrabold max-w-xs truncate">{c.campaign_name}</div>
-                            <div className={`text-[9px] ${textMutedClass} font-semibold`}>{c.campaign_id}</div>
-                          </td>
-                          <td className="p-4 text-center font-semibold text-red-400">${Number(c.spend).toFixed(2)}</td>
-                          <td className="p-4 text-center">{c.clicks}</td>
-                          <td className="p-4 text-center font-extrabold">{c.sales}</td>
-                          <td className="p-4 text-center font-bold text-emerald-400">${Number(c.revenue).toFixed(2)}</td>
-                          <td className={`p-4 text-center font-bold ${c.profit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                            ${Number(c.profit).toFixed(2)}
-                          </td>
-                          <td className="p-4 text-center font-black">
-                            <span className={`px-2 py-0.5 rounded text-[9px] ${c.roi >= 120 ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"
+                      campaignsData.map((c: any, idx: number) => {
+                        const usdRev = Number(c.usd_revenue || 0);
+                        const uahRev = Number(c.uah_revenue || 0);
+                        const eurRev = Number(c.eur_revenue || 0);
+                        const revenue = usdRev + (uahRev / 41.0) + (eurRev * 1.08);
+                        const spend = Number(c.spend || 0);
+                        const clicks = Number(c.clicks || 0);
+                        const impressions = Number(c.impressions || 0);
+                        const leads = Number(c.leads_count || 0);
+                        const sales = Number(c.sales || 0);
+
+                        const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
+                        const cpm = impressions > 0 ? (spend / impressions) * 1000 : 0;
+                        const cpc = clicks > 0 ? spend / clicks : 0;
+                        const crWebsite = clicks > 0 ? (leads / clicks) * 100 : 0;
+                        const cpl = leads > 0 ? spend / leads : 0;
+                        const crSale = leads > 0 ? (sales / leads) * 100 : 0;
+                        const aov = sales > 0 ? revenue / sales : 0;
+                        const roas = spend > 0 ? revenue / spend : 0;
+                        const roi = spend > 0 ? (revenue / spend) * 100 : 0;
+                        const profit = revenue - spend;
+
+                        return (
+                          <tr key={idx} className={`${tableRowClass} transition-all`}>
+                            <td className="p-4">
+                              <div className="font-extrabold max-w-xs truncate text-xs">{c.campaign_name}</div>
+                              <div className="text-[10px] text-crm-muted font-semibold mt-0.5">{c.project_name} | {c.campaign_id}</div>
+                            </td>
+                            <td className="p-4 text-center">
+                              <div className="font-bold">{impressions.toLocaleString()}</div>
+                              <div className="text-[10px] text-crm-muted mt-0.5">{clicks.toLocaleString()} кліків</div>
+                              <div className="text-[10px] text-blue-500 font-bold mt-0.5">CTR: {ctr.toFixed(2)}%</div>
+                            </td>
+                            <td className="p-4 text-center">
+                              <div className="font-bold text-red-400">${spend.toFixed(2)}</div>
+                              <div className="text-[10px] text-crm-muted mt-0.5">CPM: ${cpm.toFixed(2)}</div>
+                              <div className="text-[10px] text-crm-muted mt-0.5">CPC: ${cpc.toFixed(2)}</div>
+                            </td>
+                            <td className="p-4 text-center">
+                              <div className="font-bold">{leads.toLocaleString()}</div>
+                              <div className="text-[10px] text-blue-500 font-bold mt-0.5">CR: {crWebsite.toFixed(1)}%</div>
+                              <div className="text-[10px] text-crm-muted mt-0.5">CPL: ${cpl.toFixed(2)}</div>
+                            </td>
+                            <td className="p-4 text-center">
+                              <div className="font-bold">{sales.toLocaleString()}</div>
+                              <div className="text-[10px] text-emerald-500 font-bold mt-0.5">CR: {crSale.toFixed(1)}%</div>
+                              <div className="text-[10px] text-crm-muted mt-0.5">AOV: ${aov.toFixed(1)}</div>
+                            </td>
+                            <td className="p-4 text-center font-bold">
+                              <div className="text-emerald-500">${revenue.toFixed(2)}</div>
+                              <div className={`text-[10px] mt-0.5 ${profit >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                                {profit >= 0 ? "+" : "-"}${Math.abs(profit).toFixed(2)}
+                              </div>
+                            </td>
+                            <td className="p-4 text-center font-black">
+                              <div className="text-indigo-400">ROAS: {roas.toFixed(2)}</div>
+                              <span className={`inline-block px-2 py-0.5 rounded text-[9px] mt-1 ${
+                                roi >= 150 ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                                roi >= 100 ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20" :
+                                "bg-red-500/10 text-red-400 border border-red-500/20"
                               }`}>
-                              {Number(c.roi).toFixed(0)}%
-                            </span>
-                          </td>
-                        </tr>
-                      ))
+                                {roi.toFixed(0)}%
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -4376,6 +4483,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           </div>
         </div>
       )}
+      {isDevMode && <DevLogConsole />}
     </div>
   );
 }
