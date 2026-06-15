@@ -136,17 +136,17 @@ const parseComments = (rawComment: string | null): CommentItem[] => {
 };
 
 const getLeadDate = (lead: any): Date => {
-  const rawDateStr = 
-    lead.metadata?.raw_row?.Дата || 
-    lead.metadata?.raw_row?.дата || 
-    lead.metadata?.raw_row?.Date || 
+  const rawDateStr =
+    lead.metadata?.raw_row?.Дата ||
+    lead.metadata?.raw_row?.дата ||
+    lead.metadata?.raw_row?.Date ||
     lead.metadata?.raw_row?.date ||
     lead.metadata?.created_at ||
     lead.metadata?.lead?.created_at;
 
   if (rawDateStr) {
     const str = String(rawDateStr).trim();
-    
+
     // Check dd.mm.yyyy format
     const dotParts = str.split(" ")[0].split(".");
     if (dotParts.length === 3) {
@@ -166,7 +166,7 @@ const getLeadDate = (lead: any): Date => {
         return new Date(Date.UTC(year, month, day, 12, 0, 0));
       }
     }
-    
+
     let cleanStr = str;
     if (str.includes("(")) {
       cleanStr = str.split("(")[0].trim();
@@ -176,7 +176,7 @@ const getLeadDate = (lead: any): Date => {
       return new Date(parsed);
     }
   }
-  
+
   return new Date(lead.created_at);
 };
 
@@ -308,27 +308,27 @@ const getTouchPageUrl = (l: any) => {
 
 const getTouchUtm = (l: any, key: 'source' | 'medium' | 'campaign' | 'content' | 'term'): string => {
   if (!l) return "";
-  
+
   // Try column first
   const colVal = l[`utm_${key}`];
   if (colVal && colVal.trim()) return colVal.trim();
-  
+
   // Try metadata -> raw_row -> raw_payload -> utms -> key
-  const utms = 
-    l.metadata?.raw_row?.raw_payload?.utms || 
-    l.metadata?.raw_payload?.utms || 
-    l.metadata?.utms || 
+  const utms =
+    l.metadata?.raw_row?.raw_payload?.utms ||
+    l.metadata?.raw_payload?.utms ||
+    l.metadata?.utms ||
     null;
-  
+
   if (utms) {
     const val = utms[key] || utms[key === 'campaign' ? 'utm_campaign' : key === 'source' ? 'utm_source' : key === 'medium' ? 'utm_medium' : key === 'content' ? 'utm_content' : key === 'term' ? 'utm_term' : ''];
     if (val && String(val).trim()) return String(val).trim();
   }
-  
+
   // Try direct metadata values
   const metaVal = l.metadata?.[`utm_${key}`] || l.metadata?.[`utm${key.charAt(0).toUpperCase() + key.slice(1)}`] || l.metadata?.raw_row?.[`utm_${key}`];
   if (metaVal && String(metaVal).trim()) return String(metaVal).trim();
-  
+
   return "";
 };
 
@@ -336,34 +336,34 @@ const isLeadMatchingLanding = (lead: any, landingUrl: string) => {
   if (landingUrl === "all") return true;
   const targetNorm = normalizeUrlForMatching(landingUrl);
   const targetHasPath = targetNorm.includes("/");
-  
+
   return lead.history?.some((touch: any) => {
     const touchUrl = normalizeUrlForMatching(getTouchPageUrl(touch));
-    
+
     const originalSheet = (
-      touch.metadata?.original_sheet || 
-      touch.metadata?.originalSheet || 
+      touch.metadata?.original_sheet ||
+      touch.metadata?.originalSheet ||
       touch.metadata?.raw_row?.original_sheet ||
       touch.metadata?.raw_row?.originalSheet ||
       ""
     ).trim();
-    
+
     const targetSheet = (
-      touch.metadata?.target_sheet || 
-      touch.metadata?.targetSheet || 
-      touch.metadata?.raw_row?.target_sheet || 
+      touch.metadata?.target_sheet ||
+      touch.metadata?.targetSheet ||
+      touch.metadata?.raw_row?.target_sheet ||
       touch.metadata?.raw_row?.targetSheet ||
       touch.metadata?.raw_row?.raw_payload?.sheet_name ||
       ""
     ).trim();
     const tariff = (touch.metadata?.tariff || touch.metadata?.raw_row?.tariff || "").trim();
-    
+
     // 1. URL match
     if (touchUrl) {
       let urlMatch = false;
       if (targetHasPath) {
         urlMatch = touchUrl.includes(targetNorm);
-        
+
         // Alias matching for Svitlana body-taping
         if (!urlMatch && targetNorm.includes("body-taping")) {
           urlMatch = touchUrl.includes("/body-taping");
@@ -380,7 +380,7 @@ const isLeadMatchingLanding = (lead: any, landingUrl: string) => {
       }
       if (urlMatch) return true;
     }
-    
+
     // 2. Sheet semantic matching fallback
     if (targetNorm.includes("svitlana3web.vercel.app")) {
       if (originalSheet === "ВЕБ (бот)" || originalSheet === "Заявки ленд Веб" || originalSheet === "новый веб") return true;
@@ -428,7 +428,7 @@ const isLeadMatchingLanding = (lead: any, landingUrl: string) => {
     if (targetNorm.includes("/office")) {
       if (originalSheet === "Practicum_Leads") return true;
     }
-    
+
     // 3. Fallback to main page if sheet matches default and target is main page (no path)
     if (!targetHasPath) {
       // For Victoria
@@ -444,7 +444,7 @@ const isLeadMatchingLanding = (lead: any, landingUrl: string) => {
         if (!originalSheet && !targetSheet) return true; // default
       }
     }
-    
+
     return false;
   }) || false;
 };
@@ -459,9 +459,28 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   // Local state to hold dashboard data (pre-calculated server side)
   const [dashboardData, setDashboardData] = useState(initialData);
 
+  // Reference to track last fetched parameters to prevent duplicate/redundant client-side fetches
+  const lastFetchedParamsRef = React.useRef<string>("");
+
   // Sync state when props change (like when switching projects and router.refresh() runs)
   useEffect(() => {
     setDashboardData(initialData);
+
+    // Sync the parameter reference with the new server-provided initialData
+    const isKan = activeTab === "kanban";
+    lastFetchedParamsRef.current = JSON.stringify({
+      activeSlug: initialData.activeSlug || "",
+      page: isKan ? 1 : currentPage,
+      pageSize: isKan ? 500 : pageSize,
+      searchQuery: isKan ? debouncedKanbanSearchQuery : debouncedSearchQuery,
+      statusFilter: isKan ? "all" : statusFilter,
+      touchCountFilter: isKan ? kanbanTouchFilter : touchCountFilter,
+      sourceFilter: isKan ? kanbanSourceFilter : sourceFilter,
+      unpaidIntentOnly: isKan ? false : unpaidIntentOnly,
+      startDate: startDate,
+      endDate: endDate,
+      selectedLanding: selectedLanding
+    });
   }, [initialData]);
 
   // Unified data structures
@@ -634,9 +653,28 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     let isMounted = true;
     if (viewType !== "single" || !activeSlug) return;
 
-    setIsLoading(true);
-
     const isKanban = activeTab === "kanban";
+    const currentParamsKey = JSON.stringify({
+      activeSlug,
+      page: isKanban ? 1 : currentPage,
+      pageSize: isKanban ? 500 : pageSize,
+      searchQuery: isKanban ? debouncedKanbanSearchQuery : debouncedSearchQuery,
+      statusFilter: isKanban ? "all" : statusFilter,
+      touchCountFilter: isKanban ? kanbanTouchFilter : touchCountFilter,
+      sourceFilter: isKanban ? kanbanSourceFilter : sourceFilter,
+      unpaidIntentOnly: isKanban ? false : unpaidIntentOnly,
+      startDate: startDate,
+      endDate: endDate,
+      selectedLanding: selectedLanding
+    });
+
+    // Skip redundant fetching if parameters haven't changed
+    if (currentParamsKey === lastFetchedParamsRef.current) {
+      return;
+    }
+
+    lastFetchedParamsRef.current = currentParamsKey;
+    setIsLoading(true);
 
     getUnifiedCRMData(activeSlug, {
       page: isKanban ? 1 : currentPage,
@@ -895,7 +933,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     try {
       const res = await updateCustomerCommentAction(selectedLeadInfo.customerId, tempManagerComment);
       if (res.error) throw new Error(res.error);
-      
+
       setSelectedLeadInfo((prev: any) => prev ? { ...prev, managerComment: res.managerComment } : null);
       setTempManagerComment("");
       router.refresh();
@@ -913,16 +951,16 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     try {
       const res = await assignLeadToManagerAction(selectedLeadInfo.customerId, val);
       if (res.error) throw new Error(res.error);
-      
+
       const matchedManager = salesManagers.find((m: any) => m.id === val);
       const matchedName = matchedManager ? (matchedManager.full_name || matchedManager.email) : "";
 
-      setSelectedLeadInfo((prev: any) => prev ? { 
-        ...prev, 
+      setSelectedLeadInfo((prev: any) => prev ? {
+        ...prev,
         assigned_manager_id: val,
         assigned_manager_name: matchedName
       } : null);
-      
+
       setTempAssignedManagerId(managerId);
       router.refresh();
     } catch (err: any) {
@@ -962,11 +1000,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
     return (
       <React.Fragment key={currentPath}>
-        <tr 
+        <tr
           onClick={() => hasChildren && toggleUtmNode(currentPath)}
-          className={`transition-all border-b border-white/5 cursor-pointer ${
-            depth === 0 ? "bg-white/[0.01] hover:bg-white/[0.03]" : "hover:bg-white/[0.02]"
-          }`}
+          className={`transition-all border-b border-white/5 cursor-pointer ${depth === 0 ? "bg-white/[0.01] hover:bg-white/[0.03]" : "hover:bg-white/[0.02]"
+            }`}
         >
           <td className="p-4 flex items-center gap-2" style={{ paddingLeft: `${16 + depth * 24}px` }}>
             {hasChildren ? (
@@ -980,15 +1017,14 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             ) : (
               <span className="w-3.5 h-3.5 shrink-0" />
             )}
-            <span className={`truncate text-xs ${
-              depth === 0 
-                ? "font-extrabold text-white uppercase tracking-wider" 
+            <span className={`truncate text-xs ${depth === 0
+                ? "font-extrabold text-white uppercase tracking-wider"
                 : depth === 1
-                ? "font-bold text-indigo-400"
-                : depth === 2
-                ? "font-medium text-amber-400/90"
-                : "font-normal text-white/60"
-            }`}>
+                  ? "font-bold text-indigo-400"
+                  : depth === 2
+                    ? "font-medium text-amber-400/90"
+                    : "font-normal text-white/60"
+              }`}>
               {node.name}
             </span>
           </td>
@@ -1000,7 +1036,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           </td>
         </tr>
 
-        {hasChildren && isExpanded && node.children.map((child: any) => 
+        {hasChildren && isExpanded && node.children.map((child: any) =>
           renderUtmNodeRow(child, depth + 1, currentPath)
         )}
       </React.Fragment>
@@ -1011,19 +1047,18 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     const hasError = !!dashboardData?.error;
     return (
       <div className={`${bgClass} min-h-screen transition-all font-sans w-full max-w-full pb-20 flex flex-col items-center justify-center text-center p-6 ${isLight ? "theme-light" : ""}`}>
-        <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-6 shadow-lg ${
-          hasError 
-            ? "bg-red-500/10 border border-red-500/20 text-red-500" 
+        <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-6 shadow-lg ${hasError
+            ? "bg-red-500/10 border border-red-500/20 text-red-500"
             : "bg-yellow-500/10 border border-yellow-500/20 text-yellow-500"
-        }`}>
+          }`}>
           {hasError ? <AlertCircle className="w-8 h-8 animate-pulse" /> : <Briefcase className="w-8 h-8 animate-pulse" />}
         </div>
         <h1 className="text-2xl font-black text-white uppercase tracking-tight mb-3">
           {hasError ? "Помилка завантаження" : "Немає доступних проектів"}
         </h1>
         <p className="text-white/50 text-sm max-w-md leading-relaxed mb-6">
-          {hasError 
-            ? `Не вдалося завантажити дані аналитики: ${dashboardData.error}` 
+          {hasError
+            ? `Не вдалося завантажити дані аналитики: ${dashboardData.error}`
             : `Ваш профіль підтверджено з роллю ${role === "admin" || role === "superman" ? "Супермен" : role === "producer" ? "Продюсер" : role === "rop" ? "Керівник ВП (РОП)" : role === "sales" ? "Відділ продажів" : role}, але в системі немає активних проектів або вони не прив'язані до вашого акаунту. Будь ласка, зверніться до Супермена для налаштування доступів.`}
         </p>
       </div>
@@ -1108,12 +1143,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         <div className="space-y-1.5">
           <div className="flex items-center gap-3">
             <span className={`text-xs font-black uppercase px-2.5 py-0.5 rounded tracking-widest ${role === "admin" || role === "superman"
-                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                : role === "producer"
-                  ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
-                  : role === "rop"
-                    ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
-                    : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+              : role === "producer"
+                ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                : role === "rop"
+                  ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
+                  : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
               }`}>
               {role === "admin" || role === "superman" ? "Супермен" : role === "producer" ? "Продюсер" : role === "rop" ? "Керівник ВП (РОП)" : "Відділ продажів"}
             </span>
@@ -1143,13 +1178,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           {/* Developer Mode Toggle */}
           <button
             onClick={toggleDevMode}
-            className={`px-4 py-3 rounded-xl border transition-all cursor-pointer flex items-center gap-2 text-xs font-black ${
-              isDevMode
+            className={`px-4 py-3 rounded-xl border transition-all cursor-pointer flex items-center gap-2 text-xs font-black ${isDevMode
                 ? "bg-red-500/10 border-red-500/30 text-red-400"
                 : isLight
-                ? "border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-500"
-                : "border-white/10 bg-white/[0.02] hover:bg-white/[0.06] text-white/50"
-            }`}
+                  ? "border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-500"
+                  : "border-white/10 bg-white/[0.02] hover:bg-white/[0.06] text-white/50"
+              }`}
             title="Перемкнути режим розробника"
           >
             <AlertCircle className="w-4 h-4 animate-pulse" />
@@ -1175,12 +1209,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           <button
             onClick={() => setActiveTab("hub")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${activeTab === "hub"
-                ? isLight
-                  ? "bg-neutral-900 text-white shadow-sm"
-                  : "bg-white text-black shadow-lg"
-                : isLight
-                  ? "text-neutral-500 hover:text-neutral-900"
-                  : "text-white/40 hover:text-white"
+              ? isLight
+                ? "bg-neutral-900 text-white shadow-sm"
+                : "bg-white text-black shadow-lg"
+              : isLight
+                ? "text-neutral-500 hover:text-neutral-900"
+                : "text-white/40 hover:text-white"
               }`}
           >
             <Layers className="w-4 h-4" />
@@ -1193,12 +1227,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           <button
             onClick={() => setActiveTab("leaderboard")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${activeTab === "leaderboard"
-                ? isLight
-                  ? "bg-neutral-900 text-white shadow-sm"
-                  : "bg-white text-black shadow-lg"
-                : isLight
-                  ? "text-neutral-500 hover:text-neutral-900"
-                  : "text-white/40 hover:text-white"
+              ? isLight
+                ? "bg-neutral-900 text-white shadow-sm"
+                : "bg-white text-black shadow-lg"
+              : isLight
+                ? "text-neutral-500 hover:text-neutral-900"
+                : "text-white/40 hover:text-white"
               }`}
           >
             <Users className="w-4 h-4" />
@@ -1211,12 +1245,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           <button
             onClick={() => setActiveTab("analytics")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${activeTab === "analytics"
-                ? isLight
-                  ? "bg-neutral-900 text-white shadow-sm"
-                  : "bg-white text-black shadow-lg"
-                : isLight
-                  ? "text-neutral-500 hover:text-neutral-900"
-                  : "text-white/40 hover:text-white"
+              ? isLight
+                ? "bg-neutral-900 text-white shadow-sm"
+                : "bg-white text-black shadow-lg"
+              : isLight
+                ? "text-neutral-500 hover:text-neutral-900"
+                : "text-white/40 hover:text-white"
               }`}
           >
             <BarChart4 className="w-4 h-4" />
@@ -1229,12 +1263,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           <button
             onClick={() => setActiveTab("quizzes")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${activeTab === "quizzes"
-                ? isLight
-                  ? "bg-neutral-900 text-white shadow-sm"
-                  : "bg-white text-black shadow-lg"
-                : isLight
-                  ? "text-neutral-500 hover:text-neutral-900"
-                  : "text-white/40 hover:text-white"
+              ? isLight
+                ? "bg-neutral-900 text-white shadow-sm"
+                : "bg-white text-black shadow-lg"
+              : isLight
+                ? "text-neutral-500 hover:text-neutral-900"
+                : "text-white/40 hover:text-white"
               }`}
           >
             <ClipboardCheck className="w-4 h-4 text-emerald-450" />
@@ -1247,12 +1281,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           <button
             onClick={() => setActiveTab("kanban")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${activeTab === "kanban"
-                ? isLight
-                  ? "bg-neutral-900 text-white shadow-sm"
-                  : "bg-white text-black shadow-lg"
-                : isLight
-                  ? "text-neutral-500 hover:text-neutral-900"
-                  : "text-white/40 hover:text-white"
+              ? isLight
+                ? "bg-neutral-900 text-white shadow-sm"
+                : "bg-white text-black shadow-lg"
+              : isLight
+                ? "text-neutral-500 hover:text-neutral-900"
+                : "text-white/40 hover:text-white"
               }`}
           >
             <KanbanSquare className="w-4 h-4" />
@@ -1265,12 +1299,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           <button
             onClick={() => setActiveTab("leads")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${activeTab === "leads"
-                ? isLight
-                  ? "bg-neutral-900 text-white shadow-sm"
-                  : "bg-white text-black shadow-lg"
-                : isLight
-                  ? "text-neutral-500 hover:text-neutral-900"
-                  : "text-white/40 hover:text-white"
+              ? isLight
+                ? "bg-neutral-900 text-white shadow-sm"
+                : "bg-white text-black shadow-lg"
+              : isLight
+                ? "text-neutral-500 hover:text-neutral-900"
+                : "text-white/40 hover:text-white"
               }`}
           >
             <Grid className="w-4 h-4" />
@@ -1283,12 +1317,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           <button
             onClick={() => setActiveTab("paylink")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${activeTab === "paylink"
-                ? isLight
-                  ? "bg-neutral-900 text-white shadow-sm"
-                  : "bg-white text-black shadow-lg"
-                : isLight
-                  ? "text-neutral-500 hover:text-neutral-900"
-                  : "text-white/40 hover:text-white"
+              ? isLight
+                ? "bg-neutral-900 text-white shadow-sm"
+                : "bg-white text-black shadow-lg"
+              : isLight
+                ? "text-neutral-500 hover:text-neutral-900"
+                : "text-white/40 hover:text-white"
               }`}
           >
             <LinkIcon className="w-4 h-4" />
@@ -1301,10 +1335,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           <button
             onClick={() => setActiveTab("diagnostics")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 border border-red-500/20 bg-red-500/5 ${activeTab === "diagnostics"
-                ? isLight
-                  ? "bg-neutral-900 text-white shadow-sm"
-                  : "bg-white text-black shadow-lg"
-                : "text-red-400 hover:text-red-300"
+              ? isLight
+                ? "bg-neutral-900 text-white shadow-sm"
+                : "bg-white text-black shadow-lg"
+              : "text-red-400 hover:text-red-300"
               }`}
           >
             <AlertCircle className="w-4 h-4 animate-pulse" />
@@ -1324,15 +1358,14 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
               </span>
               <button
                 onClick={() => setSelectedLanding("all")}
-                className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                  selectedLanding === "all"
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${selectedLanding === "all"
                     ? isLight
                       ? "bg-neutral-900 text-white shadow-sm"
                       : "bg-white text-black shadow-lg"
                     : isLight
                       ? "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
                       : "bg-white/5 text-white/70 hover:bg-white/10"
-                }`}
+                  }`}
               >
                 Усі сторінки
               </button>
@@ -1357,16 +1390,15 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                 return (
                   <div key={idx} className="flex items-center gap-0.5">
                     <button
-                       onClick={() => setSelectedLanding(land.url)}
-                      className={`px-4 py-2 rounded-l-xl text-xs font-black transition-all cursor-pointer ${
-                        isSelected
+                      onClick={() => setSelectedLanding(land.url)}
+                      className={`px-4 py-2 rounded-l-xl text-xs font-black transition-all cursor-pointer ${isSelected
                           ? isLight
                             ? "bg-emerald-600 text-white shadow-sm"
                             : "bg-emerald-500 text-black shadow-lg"
                           : isLight
                             ? "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
                             : "bg-white/5 text-white/70 hover:bg-white/10"
-                      }`}
+                        }`}
                     >
                       {land.label}
                     </button>
@@ -1374,15 +1406,14 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                       href={land.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className={`px-2.5 py-2.5 rounded-r-xl border-l transition-all cursor-pointer flex items-center justify-center ${
-                        isSelected
+                      className={`px-2.5 py-2.5 rounded-r-xl border-l transition-all cursor-pointer flex items-center justify-center ${isSelected
                           ? isLight
                             ? "bg-emerald-600 border-emerald-700/30 text-white/80 hover:text-white"
                             : "bg-emerald-500 border-emerald-600/30 text-black/80 hover:text-black"
                           : isLight
                             ? "bg-neutral-100 border-neutral-200 text-neutral-400 hover:text-neutral-900 hover:bg-neutral-200"
                             : "bg-white/5 border-white/5 text-white/40 hover:text-white hover:bg-white/10"
-                      }`}
+                        }`}
                       title={`Відкрити посилання: ${land.url}`}
                     >
                       <ExternalLink className="w-3 h-3" />
@@ -1405,15 +1436,14 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                   <div key={idx} className="flex items-center gap-0.5">
                     <button
                       onClick={() => setSelectedLanding(land.url)}
-                      className={`px-4 py-2 rounded-l-xl text-xs font-black transition-all cursor-pointer ${
-                        isSelected
+                      className={`px-4 py-2 rounded-l-xl text-xs font-black transition-all cursor-pointer ${isSelected
                           ? isLight
                             ? "bg-emerald-600 text-white shadow-sm"
                             : "bg-emerald-500 text-black shadow-lg"
                           : isLight
                             ? "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
                             : "bg-white/5 text-white/70 hover:bg-white/10"
-                      }`}
+                        }`}
                     >
                       {land.label}
                     </button>
@@ -1421,15 +1451,14 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                       href={land.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className={`px-2.5 py-2.5 rounded-r-xl border-l transition-all cursor-pointer flex items-center justify-center ${
-                        isSelected
+                      className={`px-2.5 py-2.5 rounded-r-xl border-l transition-all cursor-pointer flex items-center justify-center ${isSelected
                           ? isLight
                             ? "bg-emerald-600 border-emerald-700/30 text-white/80 hover:text-white"
                             : "bg-emerald-500 border-emerald-600/30 text-black/80 hover:text-black"
                           : isLight
                             ? "bg-neutral-100 border-neutral-200 text-neutral-400 hover:text-neutral-900 hover:bg-neutral-200"
                             : "bg-white/5 border-white/5 text-white/40 hover:text-white hover:bg-white/10"
-                      }`}
+                        }`}
                       title={`Відкрити посилання: ${land.url}`}
                     >
                       <ExternalLink className="w-3 h-3" />
@@ -1547,10 +1576,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                             </td>
                             <td className="p-4 text-center font-black">
                               <span className={`px-2.5 py-1 rounded-full text-[10px] ${projRoi >= 150
-                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                  : projRoi >= 100
-                                    ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20"
-                                    : "bg-red-500/10 text-red-400 border border-red-500/20"
+                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                : projRoi >= 100
+                                  ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20"
+                                  : "bg-red-500/10 text-red-400 border border-red-500/20"
                                 }`}>
                                 {projRoi.toFixed(0)}%
                               </span>
@@ -1698,10 +1727,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                         </td>
                         <td className="p-4 text-center font-black">
                           <span className={`px-2.5 py-1 rounded-full text-[10px] ${prod.roi >= 150
-                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                              : prod.roi >= 100
-                                ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20"
-                                : "bg-red-500/10 text-red-400 border border-red-500/20"
+                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                            : prod.roi >= 100
+                              ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20"
+                              : "bg-red-500/10 text-red-400 border border-red-500/20"
                             }`}>
                             {Number(prod.roi).toFixed(0)}%
                           </span>
@@ -1750,8 +1779,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                       key={preset.id}
                       onClick={() => applyPreset(preset.id as any)}
                       className={`flex-1 sm:flex-none px-3.5 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-150 cursor-pointer text-center ${isActive
-                          ? "bg-white text-black shadow-lg"
-                          : "text-white/40 hover:text-white hover:bg-white/5"
+                        ? "bg-white text-black shadow-lg"
+                        : "text-white/40 hover:text-white hover:bg-white/5"
                         }`}
                     >
                       {preset.label}
@@ -1770,8 +1799,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                     setDateRangePreset("custom");
                   }}
                   className={`px-3 py-2 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 w-full sm:w-36 ${isLight
-                      ? "bg-neutral-100 border border-neutral-300 text-neutral-900"
-                      : "bg-[#050507] border border-white/5 text-white"
+                    ? "bg-neutral-100 border border-neutral-300 text-neutral-900"
+                    : "bg-[#050507] border border-white/5 text-white"
                     }`}
                   placeholder="Від"
                 />
@@ -1784,8 +1813,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                     setDateRangePreset("custom");
                   }}
                   className={`px-3 py-2 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 w-full sm:w-36 ${isLight
-                      ? "bg-neutral-100 border border-neutral-300 text-neutral-900"
-                      : "bg-[#050507] border border-white/5 text-white"
+                    ? "bg-neutral-100 border border-neutral-300 text-neutral-900"
+                    : "bg-[#050507] border border-white/5 text-white"
                     }`}
                   placeholder="До"
                 />
@@ -1793,8 +1822,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                   <button
                     onClick={() => applyPreset("all")}
                     className={`p-2 rounded-xl border transition-all cursor-pointer ${isLight
-                        ? "border-neutral-200 hover:bg-neutral-100 text-neutral-600"
-                        : "border-white/10 hover:bg-white/5 text-white/60 hover:text-white"
+                      ? "border-neutral-200 hover:bg-neutral-100 text-neutral-600"
+                      : "border-white/10 hover:bg-white/5 text-white/60 hover:text-white"
                       }`}
                     title="Скинути період"
                   >
@@ -2191,7 +2220,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
               Ефективність UTM Джерел
             </h2>
 
-             <div className="overflow-x-auto border border-white/5 rounded-xl">
+            <div className="overflow-x-auto border border-white/5 rounded-xl">
               <table className="w-full border-collapse text-left text-xs">
                 <thead>
                   <tr className="bg-white/[0.02] text-white/40 uppercase tracking-widest font-black border-b border-white/5">
@@ -2208,7 +2237,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                       <td colSpan={5} className="p-6 text-center text-white/30 italic">Кампанії не визначені</td>
                     </tr>
                   ) : (
-                    utmAttributionTree.map((node: any) => 
+                    utmAttributionTree.map((node: any) =>
                       renderUtmNodeRow(node)
                     )
                   )}
@@ -2232,11 +2261,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                 </div>
                 <button
                   type="button"
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    isQaPanelExpanded 
-                      ? "bg-white/10 text-white" 
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isQaPanelExpanded
+                      ? "bg-white/10 text-white"
                       : "bg-red-500/10 text-red-405 hover:bg-red-500/25"
-                  }`}
+                    }`}
                 >
                   {isQaPanelExpanded ? "Свернуть" : "Развернуть"}
                 </button>
@@ -2244,14 +2272,14 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
               {isQaPanelExpanded && (
                 <div className="space-y-6 pt-4 border-t border-white/5 animate-in fade-in duration-300">
-                  
+
                   {/* 1. Tracing visitor_uuid (User Verification) */}
                   <div className="space-y-4">
                     <h4 className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-2">
                       <Search className="w-4 h-4 text-red-500" />
                       1. Трассировка visitor_uuid (Проверка сквозной аналитики)
                     </h4>
-                    
+
                     <form onSubmit={handleTraceVisitor} className="flex gap-2 max-w-lg">
                       <input
                         type="text"
@@ -2297,18 +2325,16 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                               traceResults.map((item: any, idx: number) => {
                                 const isClick = item.type === "click";
                                 return (
-                                  <tr 
-                                    key={idx} 
-                                    className={`hover:bg-white/[0.01] transition-all ${
-                                      item.is_broken ? "bg-red-500/10 hover:bg-red-500/20" : ""
-                                    }`}
+                                  <tr
+                                    key={idx}
+                                    className={`hover:bg-white/[0.01] transition-all ${item.is_broken ? "bg-red-500/10 hover:bg-red-500/20" : ""
+                                      }`}
                                   >
                                     <td className="p-3 font-bold uppercase tracking-wider text-[10px]">
-                                      <span className={`px-2 py-0.5 rounded ${
-                                        isClick 
-                                          ? "bg-blue-500/10 text-blue-400" 
+                                      <span className={`px-2 py-0.5 rounded ${isClick
+                                          ? "bg-blue-500/10 text-blue-400"
                                           : "bg-emerald-500/10 text-emerald-450"
-                                      }`}>
+                                        }`}>
                                         {isClick ? "Клик" : "Заказ"}
                                       </span>
                                     </td>
@@ -2355,13 +2381,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                       <Activity className="w-4 h-4 text-red-500 animate-pulse" />
                       2. Валидатор целостности базы данных (Data Health Check)
                     </h4>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <div className={`p-4 rounded-xl border ${
-                        dataHealth.leadsWithoutUuidCount > 0 
-                          ? "bg-red-500/5 border-red-500/20" 
+                      <div className={`p-4 rounded-xl border ${dataHealth.leadsWithoutUuidCount > 0
+                          ? "bg-red-500/5 border-red-500/20"
                           : "bg-white/[0.01] border-white/5"
-                      }`}>
+                        }`}>
                         <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest block">Лиды без visitor_uuid</span>
                         <p className={`text-2xl font-black mt-2 ${dataHealth.leadsWithoutUuidCount > 0 ? "text-red-400" : "text-emerald-450"}`}>
                           {dataHealth.leadsWithoutUuidCount}
@@ -2369,11 +2394,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                         <p className="text-[10px] text-white/30 mt-1 font-medium">Количество реальных лидов с потерянным трекером</p>
                       </div>
 
-                      <div className={`p-4 rounded-xl border ${
-                        dataHealth.ordersWithAmountAndClickStatusCount > 0 
-                          ? "bg-red-500/5 border-red-500/20" 
+                      <div className={`p-4 rounded-xl border ${dataHealth.ordersWithAmountAndClickStatusCount > 0
+                          ? "bg-red-500/5 border-red-500/20"
                           : "bg-white/[0.01] border-white/5"
-                      }`}>
+                        }`}>
                         <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest block">Клики с суммами &gt; 0</span>
                         <p className={`text-2xl font-black mt-2 ${dataHealth.ordersWithAmountAndClickStatusCount > 0 ? "text-red-400" : "text-emerald-450"}`}>
                           {dataHealth.ordersWithAmountAndClickStatusCount}
@@ -2381,11 +2405,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                         <p className="text-[10px] text-white/30 mt-1 font-medium">Проверка на некорректно классифицированные транзакции</p>
                       </div>
 
-                      <div className={`p-4 rounded-xl border ${
-                        dataHealth.unparseableMetadataDatesCount > 0 
-                          ? "bg-amber-500/5 border-amber-500/20" 
+                      <div className={`p-4 rounded-xl border ${dataHealth.unparseableMetadataDatesCount > 0
+                          ? "bg-amber-500/5 border-amber-500/20"
                           : "bg-white/[0.01] border-white/5"
-                      }`}>
+                        }`}>
                         <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest block">Битые даты в метаданных</span>
                         <p className={`text-2xl font-black mt-2 ${dataHealth.unparseableMetadataDatesCount > 0 ? "text-amber-500" : "text-emerald-450"}`}>
                           {dataHealth.unparseableMetadataDatesCount}
@@ -2402,7 +2425,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                         <Clock className="w-4 h-4 text-red-500" />
                         3. Логгер производительности API (Server-Side Performance Profiler)
                       </h4>
-                      
+
                       <div className="p-4 rounded-xl bg-black/40 border border-white/5 font-mono text-xs text-white/70 space-y-2 max-w-2xl">
                         <div className="flex justify-between border-b border-white/5 pb-2">
                           <span className="text-white/45">БД время (RPC / Выборка):</span>
@@ -2534,10 +2557,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                             setSelectedLeadInfo(lead);
                           }}
                           className={`p-4 rounded-xl border bg-white/[0.01] hover:bg-white/[0.03] transition-all cursor-grab active:cursor-grabbing relative overflow-hidden group ${updatingId === lead.id
-                              ? "opacity-50 pointer-events-none scale-95 border-emerald-500/50"
-                              : lead.usdPaid > 0 || lead.uahPaid > 0
-                                ? "border-emerald-500/15"
-                                : "border-white/5"
+                            ? "opacity-50 pointer-events-none scale-95 border-emerald-500/50"
+                            : lead.usdPaid > 0 || lead.uahPaid > 0
+                              ? "border-emerald-500/15"
+                              : "border-white/5"
                             }`}
                         >
                           {(lead.usdPaid > 0 || lead.uahPaid > 0) && (
@@ -2609,23 +2632,21 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                   key={col.key}
                   type="button"
                   onClick={() => setActiveKanbanCol(col.key)}
-                  className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider shrink-0 transition-all border flex items-center gap-2 cursor-pointer ${
-                    isActive
+                  className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider shrink-0 transition-all border flex items-center gap-2 cursor-pointer ${isActive
                       ? isLight
                         ? "bg-neutral-900 text-white border-neutral-900 shadow-md"
                         : "bg-white text-black border-white shadow-lg"
                       : isLight
-                      ? "bg-white border-neutral-200 text-neutral-500 hover:text-neutral-900"
-                      : "bg-white/5 border-white/5 text-white/40 hover:text-white"
-                  }`}
+                        ? "bg-white border-neutral-200 text-neutral-500 hover:text-neutral-900"
+                        : "bg-white/5 border-white/5 text-white/40 hover:text-white"
+                    }`}
                 >
                   <span className={`w-2 h-2 rounded-full ${col.dotColor}`} />
                   <span>{col.label}</span>
-                  <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black ${
-                    isActive 
+                  <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black ${isActive
                       ? isLight ? "bg-black/10 text-black/60" : "bg-black/10 text-black/60"
                       : "bg-white/5 text-white/30"
-                  }`}>
+                    }`}>
                     {colLeadsCount}
                   </span>
                 </button>
@@ -2665,11 +2686,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                             setSelectedLeadHistory(lead.history);
                             setSelectedLeadInfo(lead);
                           }}
-                          className={`p-4 rounded-xl border bg-white/[0.01] hover:bg-white/[0.03] transition-all cursor-pointer relative overflow-hidden group ${
-                            lead.usdPaid > 0 || lead.uahPaid > 0
+                          className={`p-4 rounded-xl border bg-white/[0.01] hover:bg-white/[0.03] transition-all cursor-pointer relative overflow-hidden group ${lead.usdPaid > 0 || lead.uahPaid > 0
                               ? "border-emerald-500/15"
                               : "border-white/5"
-                          }`}
+                            }`}
                         >
                           {(lead.usdPaid > 0 || lead.uahPaid > 0) && (
                             <div className="absolute top-0 right-0 px-2 py-0.5 rounded-bl-lg bg-emerald-500/10 border-l border-b border-emerald-500/20 text-[9px] font-black text-emerald-400">
@@ -2822,8 +2842,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                   type="button"
                   onClick={() => setUnpaidIntentOnly(!unpaidIntentOnly)}
                   className={`px-4 py-2.5 rounded-full border text-[11px] font-black uppercase transition-all cursor-pointer flex items-center gap-1.5 ${unpaidIntentOnly
-                      ? "bg-red-500/10 text-red-400 border-red-500/20"
-                      : "bg-white/[0.02] text-white/50 border-white/10 hover:text-white"
+                    ? "bg-red-500/10 text-red-400 border-red-500/20"
+                    : "bg-white/[0.02] text-white/50 border-white/10 hover:text-white"
                     }`}
                 >
                   <AlertCircle className="w-3.5 h-3.5" />
@@ -2843,15 +2863,14 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                       applyPreset("1d");
                     }
                   }}
-                  className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-150 cursor-pointer flex items-center gap-1.5 ${
-                    dateRangePreset === "1d"
+                  className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-150 cursor-pointer flex items-center gap-1.5 ${dateRangePreset === "1d"
                       ? isLight
                         ? "bg-emerald-500 text-white shadow-sm hover:bg-emerald-600"
                         : "bg-emerald-500 text-black shadow-lg hover:bg-emerald-400"
                       : isLight
                         ? "bg-neutral-100 hover:bg-neutral-200 text-neutral-800 border border-neutral-300"
                         : "bg-white/[0.02] hover:bg-white/5 text-white/60 hover:text-white border border-white/10"
-                  }`}
+                    }`}
                 >
                   <Calendar className="w-3.5 h-3.5" />
                   За останню добу
@@ -2864,11 +2883,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                       setStartDate(e.target.value);
                       setDateRangePreset("custom");
                     }}
-                    className={`px-3 py-2 rounded-lg text-[10px] font-extrabold focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
-                      isLight
+                    className={`px-3 py-2 rounded-lg text-[10px] font-extrabold focus:outline-none focus:ring-1 focus:ring-emerald-500 ${isLight
                         ? "bg-neutral-100 border border-neutral-300 text-neutral-900"
                         : "bg-white/[0.02] border border-white/10 text-white"
-                    }`}
+                      }`}
                   />
                   <span className={isLight ? "text-neutral-300" : "text-white/20"}>—</span>
                   <input
@@ -2878,11 +2896,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                       setEndDate(e.target.value);
                       setDateRangePreset("custom");
                     }}
-                    className={`px-3 py-2 rounded-lg text-[10px] font-extrabold focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
-                      isLight
+                    className={`px-3 py-2 rounded-lg text-[10px] font-extrabold focus:outline-none focus:ring-1 focus:ring-emerald-500 ${isLight
                         ? "bg-neutral-100 border border-neutral-300 text-neutral-900"
                         : "bg-white/[0.02] border border-white/10 text-white"
-                    }`}
+                      }`}
                   />
                   {(startDate || endDate) && (
                     <button
@@ -2890,9 +2907,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                       onClick={() => {
                         applyPreset("all");
                       }}
-                      className={`p-2 transition-all rounded-lg ${
-                        isLight ? "text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100" : "text-white/40 hover:text-white hover:bg-white/5"
-                      }`}
+                      className={`p-2 transition-all rounded-lg ${isLight ? "text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100" : "text-white/40 hover:text-white hover:bg-white/5"
+                        }`}
                     >
                       <XCircle className="w-3.5 h-3.5" />
                     </button>
@@ -3034,12 +3050,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                           {/* Pipeline status pill */}
                           <td className="p-4 text-center">
                             <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[10px] font-extrabold ${lead.status === "Купив курс" || lead.status === "Купив(-ла) Трипвайер"
-                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                                : lead.status === "Відмова"
-                                  ? "bg-red-500/10 text-red-400 border-red-500/20"
-                                  : isLight
-                                    ? "bg-neutral-150 border-neutral-300 text-neutral-700"
-                                    : "bg-neutral-800 border-neutral-700 text-neutral-300"
+                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                              : lead.status === "Відмова"
+                                ? "bg-red-500/10 text-red-400 border-red-500/20"
+                                : isLight
+                                  ? "bg-neutral-150 border-neutral-300 text-neutral-700"
+                                  : "bg-neutral-800 border-neutral-700 text-neutral-300"
                               }`}>
                               <span className={`w-1.5 h-1.5 rounded-full ${col.dotColor}`} />
                               {lead.status}
@@ -3093,7 +3109,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                             ID: {lead.visitor_uuid?.substring(0, 8)}...
                           </div>
                         </div>
-                        
+
                         <div className="text-right shrink-0">
                           {lead.usdPaid > 0 || lead.uahPaid > 0 || lead.eurPaid > 0 ? (
                             <span className="text-emerald-450 font-black text-xs block">
@@ -3141,7 +3157,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                           <span className={`font-semibold uppercase text-[9px] tracking-wider px-2 py-0.5 rounded ${isLight ? "bg-neutral-100 text-neutral-600 border border-neutral-200" : "bg-white/5 text-white/60 border border-white/5"}`}>
                             {lead.utm_source || "direct"}
                           </span>
-                          
+
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -3161,7 +3177,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                             : isLight
                               ? "bg-neutral-150 border-neutral-300 text-neutral-700"
                               : "bg-neutral-800 border-neutral-700 text-neutral-300"
-                        }`}>
+                          }`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${col.dotColor}`} />
                           {lead.status}
                         </span>
@@ -3183,8 +3199,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                     disabled={currentPage === 1}
                     onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                     className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all disabled:opacity-30 ${isLight
-                        ? "border-neutral-200 hover:bg-neutral-100 disabled:hover:bg-transparent"
-                        : "border-white/10 hover:bg-white/5 disabled:hover:bg-transparent"
+                      ? "border-neutral-200 hover:bg-neutral-100 disabled:hover:bg-transparent"
+                      : "border-white/10 hover:bg-white/5 disabled:hover:bg-transparent"
                       }`}
                   >
                     Назад
@@ -3193,8 +3209,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                     disabled={currentPage * pageSize >= totalCount}
                     onClick={() => setCurrentPage(prev => prev + 1)}
                     className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all disabled:opacity-30 ${isLight
-                        ? "border-neutral-200 hover:bg-neutral-100 disabled:hover:bg-transparent"
-                        : "border-white/10 hover:bg-white/5 disabled:hover:bg-transparent"
+                      ? "border-neutral-200 hover:bg-neutral-100 disabled:hover:bg-transparent"
+                      : "border-white/10 hover:bg-white/5 disabled:hover:bg-transparent"
                       }`}
                   >
                     Вперед
@@ -3387,15 +3403,14 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                       applyPreset("1d");
                     }
                   }}
-                  className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-150 cursor-pointer flex items-center gap-1.5 ${
-                    dateRangePreset === "1d"
+                  className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-150 cursor-pointer flex items-center gap-1.5 ${dateRangePreset === "1d"
                       ? isLight
                         ? "bg-emerald-500 text-white shadow-sm hover:bg-emerald-600"
                         : "bg-emerald-500 text-black shadow-lg hover:bg-emerald-400"
                       : isLight
                         ? "bg-neutral-100 hover:bg-neutral-200 text-neutral-800 border border-neutral-300"
                         : "bg-white/[0.02] hover:bg-white/5 text-white/60 hover:text-white border border-white/10"
-                  }`}
+                    }`}
                 >
                   <Calendar className="w-3.5 h-3.5" />
                   За останню добу
@@ -3408,11 +3423,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                       setStartDate(e.target.value);
                       setDateRangePreset("custom");
                     }}
-                    className={`px-3 py-2 rounded-lg text-[10px] font-extrabold focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
-                      isLight
+                    className={`px-3 py-2 rounded-lg text-[10px] font-extrabold focus:outline-none focus:ring-1 focus:ring-emerald-500 ${isLight
                         ? "bg-neutral-100 border border-neutral-300 text-neutral-900"
                         : "bg-white/[0.02] border border-white/10 text-white"
-                    }`}
+                      }`}
                   />
                   <span className={isLight ? "text-neutral-300" : "text-white/20"}>—</span>
                   <input
@@ -3422,11 +3436,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                       setEndDate(e.target.value);
                       setDateRangePreset("custom");
                     }}
-                    className={`px-3 py-2 rounded-lg text-[10px] font-extrabold focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
-                      isLight
+                    className={`px-3 py-2 rounded-lg text-[10px] font-extrabold focus:outline-none focus:ring-1 focus:ring-emerald-500 ${isLight
                         ? "bg-neutral-100 border border-neutral-300 text-neutral-900"
                         : "bg-white/[0.02] border border-white/10 text-white"
-                    }`}
+                      }`}
                   />
                   {(startDate || endDate) && (
                     <button
@@ -3434,9 +3447,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                       onClick={() => {
                         applyPreset("all");
                       }}
-                      className={`p-2 transition-all rounded-lg ${
-                        isLight ? "text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100" : "text-white/40 hover:text-white hover:bg-white/5"
-                      }`}
+                      className={`p-2 transition-all rounded-lg ${isLight ? "text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100" : "text-white/40 hover:text-white hover:bg-white/5"
+                        }`}
                     >
                       <XCircle className="w-3.5 h-3.5" />
                     </button>
@@ -3460,23 +3472,21 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                       <div
                         key={lead.id}
                         onClick={() => setActiveQuizLeadId(lead.id)}
-                        className={`p-4 rounded-xl border transition-all cursor-pointer ${
-                          isSelected
+                        className={`p-4 rounded-xl border transition-all cursor-pointer ${isSelected
                             ? isLight
                               ? "bg-emerald-50 border-emerald-500 shadow-md"
                               : "bg-emerald-950/20 border-emerald-500/20 shadow-lg"
                             : isLight
                               ? "bg-white border-neutral-200 hover:border-neutral-300"
                               : "bg-[#0C0C0F] border-white/5 hover:border-white/10"
-                        }`}
+                          }`}
                       >
                         <div className="flex justify-between items-start">
                           <h4 className="font-extrabold text-sm truncate max-w-[150px]">{lead.name}</h4>
-                          <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${
-                            lead.status === "Купив курс"
+                          <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${lead.status === "Купив курс"
                               ? "bg-emerald-500/10 text-emerald-400"
                               : "bg-white/5 text-white/40"
-                          }`}>
+                            }`}>
                             {lead.status}
                           </span>
                         </div>
@@ -3591,7 +3601,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                 Автоматичний аналіз розбіжностей у бд, незареєстрованих лендінгів та аномальних UTM-метрик
               </p>
             </div>
-            
+
             <div className="flex items-center gap-4">
               <div className="px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-wider text-white/50">
                 Загалом лідів у кластері: {totalCount}
@@ -3864,22 +3874,20 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
               <button
                 type="button"
                 onClick={() => setActiveModalTab("journey")}
-                className={`flex-1 pb-2 text-center text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
-                  activeModalTab === "journey"
+                className={`flex-1 pb-2 text-center text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${activeModalTab === "journey"
                     ? "border-emerald-500 text-white"
                     : "border-transparent text-white/45"
-                }`}
+                  }`}
               >
                 Шлях клієнта
               </button>
               <button
                 type="button"
                 onClick={() => setActiveModalTab("details")}
-                className={`flex-1 pb-2 text-center text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
-                  activeModalTab === "details"
+                className={`flex-1 pb-2 text-center text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${activeModalTab === "details"
                     ? "border-emerald-500 text-white"
                     : "border-transparent text-white/45"
-                }`}
+                  }`}
               >
                 Дані & Коментарі
               </button>
@@ -3941,10 +3949,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                           <div className="flex items-center gap-2.5">
                             <span className="text-[10px] font-black uppercase text-white/30 tracking-widest">Крок #{idx + 1}</span>
                             <span className={`px-2.5 py-0.5 rounded text-[9px] font-black uppercase border ${isPaidCourse
-                                ? "bg-emerald-500/10 text-emerald-455 border-emerald-500/20"
-                                : isTripwire
-                                  ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
-                                  : "bg-white/5 text-white/50 border-white/5"
+                              ? "bg-emerald-500/10 text-emerald-455 border-emerald-500/20"
+                              : isTripwire
+                                ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
+                                : "bg-white/5 text-white/50 border-white/5"
                               }`}>
                               {touch.status}
                             </span>
@@ -3968,8 +3976,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                                 {(() => {
                                   const amt = Number(touch.amount || 0);
                                   const metaCurrency = String(
-                                    touch.metadata?.currency || 
-                                    touch.metadata?.lead?.currency || 
+                                    touch.metadata?.currency ||
+                                    touch.metadata?.lead?.currency ||
                                     touch.metadata?.raw_row?.currency ||
                                     touch.metadata?.raw_row?.raw_payload?.currency ||
                                     ""
@@ -4140,7 +4148,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                   <span className="text-[10px] font-black uppercase text-white/40 tracking-widest block">
                     Історія коментарів ({commentsList.length})
                   </span>
-                  
+
                   {commentsList.length === 0 ? (
                     <p className="text-xs text-white/30 italic py-1">Коментарів ще немає</p>
                   ) : (
@@ -4341,7 +4349,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                                 const bulkParam = updateAll ? { landingName: order.landingName, amount: order.amount } : undefined;
                                 const res = await updateOrderCurrencyAction(order.id, curr.code as any, bulkParam);
                                 if (res.error) throw new Error(res.error);
-                                
+
                                 if (updateAll) {
                                   setUnresolvedOrders(prev => prev.filter(o => !(o.landingName === order.landingName && o.amount === order.amount)));
                                 } else {

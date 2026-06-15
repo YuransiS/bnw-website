@@ -34,8 +34,8 @@ export async function getSessionAndAccess(selectedProjectSlug?: string) {
   let profile = profileData;
 
   const devEmails = ["yura3zaxar@outlook.com", "yura3zaxar@gmail.com"];
-  const isActualDev = (user.email && devEmails.includes(user.email.toLowerCase())) || 
-                     (profile && (profile.role === "admin" || profile.role === "superman"));
+  const isActualDev = (user.email && devEmails.includes(user.email.toLowerCase())) ||
+    (profile && (profile.role === "admin" || profile.role === "superman"));
 
   if (isActualDev) {
     const cookieStore = await cookies();
@@ -227,10 +227,10 @@ const getTouchUtm = (l: any, key: 'source' | 'medium' | 'campaign' | 'content' |
   if (!l) return "";
   const colVal = l[`utm_${key}`];
   if (colVal && colVal.trim()) return colVal.trim();
-  const utms = 
-    l.metadata?.raw_row?.raw_payload?.utms || 
-    l.metadata?.raw_payload?.utms || 
-    l.metadata?.utms || 
+  const utms =
+    l.metadata?.raw_row?.raw_payload?.utms ||
+    l.metadata?.raw_payload?.utms ||
+    l.metadata?.utms ||
     null;
   if (utms) {
     const val = utms[key] || utms[key === 'campaign' ? 'utm_campaign' : key === 'source' ? 'utm_source' : key === 'medium' ? 'utm_medium' : key === 'content' ? 'utm_content' : key === 'term' ? 'utm_term' : ''];
@@ -242,10 +242,10 @@ const getTouchUtm = (l: any, key: 'source' | 'medium' | 'campaign' | 'content' |
 };
 
 const getLeadDate = (lead: any): Date => {
-  const rawDateStr = 
-    lead.metadata?.raw_row?.Дата || 
-    lead.metadata?.raw_row?.дата || 
-    lead.metadata?.raw_row?.Date || 
+  const rawDateStr =
+    lead.metadata?.raw_row?.Дата ||
+    lead.metadata?.raw_row?.дата ||
+    lead.metadata?.raw_row?.Date ||
     lead.metadata?.raw_row?.date ||
     lead.metadata?.created_at ||
     lead.metadata?.lead?.created_at;
@@ -299,28 +299,28 @@ const isLeadMatchingLanding = (lead: any, landingUrl: string, activeSlug: string
   if (landingUrl === "all") return true;
   const targetNorm = normalizeUrlForMatching(landingUrl);
   const targetHasPath = targetNorm.includes("/");
-  
+
   return lead.history?.some((touch: any) => {
     const touchUrl = normalizeUrlForMatching(getTouchPageUrl(touch));
-    
+
     const originalSheet = (
-      touch.metadata?.original_sheet || 
-      touch.metadata?.originalSheet || 
+      touch.metadata?.original_sheet ||
+      touch.metadata?.originalSheet ||
       touch.metadata?.raw_row?.original_sheet ||
       touch.metadata?.raw_row?.originalSheet ||
       ""
     ).trim();
-    
+
     const targetSheet = (
-      touch.metadata?.target_sheet || 
-      touch.metadata?.targetSheet || 
-      touch.metadata?.raw_row?.target_sheet || 
+      touch.metadata?.target_sheet ||
+      touch.metadata?.targetSheet ||
+      touch.metadata?.raw_row?.target_sheet ||
       touch.metadata?.raw_row?.targetSheet ||
       touch.metadata?.raw_row?.raw_payload?.sheet_name ||
       ""
     ).trim();
     const tariff = (touch.metadata?.tariff || touch.metadata?.raw_row?.tariff || "").trim();
-    
+
     if (touchUrl) {
       let urlMatch = false;
       if (targetHasPath) {
@@ -340,7 +340,7 @@ const isLeadMatchingLanding = (lead: any, landingUrl: string, activeSlug: string
       }
       if (urlMatch) return true;
     }
-    
+
     if (targetNorm.includes("svitlana3web.vercel.app")) {
       if (originalSheet === "ВЕБ (бот)" || originalSheet === "Заявки ленд Веб" || originalSheet === "новый веб") return true;
     }
@@ -387,7 +387,7 @@ const isLeadMatchingLanding = (lead: any, landingUrl: string, activeSlug: string
     if (targetNorm.includes("/office")) {
       if (originalSheet === "Practicum_Leads") return true;
     }
-    
+
     if (!targetHasPath) {
       if (activeSlug === "victoria" && targetNorm.includes("victoria-mc.vercel.app")) {
         if (["Ленд 1", "Ленд 2", "Ленд 3", "МК 2.0", "Автовеб", "Webinars", "Ліди МК"].includes(originalSheet)) return true;
@@ -399,7 +399,7 @@ const isLeadMatchingLanding = (lead: any, landingUrl: string, activeSlug: string
         if (!originalSheet && !targetSheet) return true;
       }
     }
-    
+
     return false;
   }) || false;
 };
@@ -522,7 +522,7 @@ export async function getUnifiedCRMData(
           const paidOrders = projOrders.filter((o) => {
             return statusMapper.normalize(o.status) === "closed_won";
           });
-          
+
           let usd_revenue = 0;
           let uah_revenue = 0;
           let eur_revenue = 0;
@@ -591,7 +591,7 @@ export async function getUnifiedCRMData(
         const prodPaidOrders = prodOrders.filter((o) => {
           return statusMapper.normalize(o.status) === "closed_won";
         });
-        
+
         let usd_revenue = 0;
         let uah_revenue = 0;
         let eur_revenue = 0;
@@ -692,48 +692,76 @@ export async function getUnifiedCRMData(
 
     const isSalesFiltered = profile.role === "sales" && hasRop;
 
-    // Fetch all paged records helper function
-    const fetchAllPaged = async (fetchFn: (from: number, to: number) => any) => {
-      let results: any[] = [];
-      let from = 0;
+    // Fetch all paged records helper function in parallel
+    const fetchAllParallel = async (
+      countQuery: () => Promise<any> | any,
+      fetchPageFn: (from: number, to: number) => Promise<any> | any
+    ) => {
+      const { count, error: countErr } = await countQuery();
+      if (countErr) throw countErr;
+      const total = count || 0;
+      if (total === 0) return [];
+
       const limit = 1000;
-      let hasMore = true;
-      while (hasMore) {
-        const { data, error } = await fetchFn(from, from + limit - 1);
-        if (error) throw error;
-        results = [...results, ...(data || [])];
-        if ((data || []).length < limit) hasMore = false;
-        else from += limit;
+      const pagesCount = Math.ceil(total / limit);
+      const promises = [];
+
+      for (let i = 0; i < pagesCount; i++) {
+        const from = i * limit;
+        const to = from + limit - 1;
+        promises.push(fetchPageFn(from, to));
       }
-      return results;
+
+      const results = await Promise.all(promises);
+      let combinedData: any[] = [];
+      for (const res of results) {
+        if (res.error) throw res.error;
+        combinedData = [...combinedData, ...(res.data || [])];
+      }
+      return combinedData;
     };
 
     // Parallel fetch using adminSupabase (bypassing RLS safely)
     const dbFetchStart = performance.now();
     const [allCustomers, allOrders, allTraffic, costsRes] = await Promise.all([
-      fetchAllPaged((from, to) => {
-        let q = adminSupabase.from("unified_customers").select("*").eq("project_id", activeProject.id);
-        if (isSalesFiltered) {
-          q = q.eq("assigned_manager_id", user.id);
+      fetchAllParallel(
+        () => {
+          let q = adminSupabase.from("unified_customers").select("*", { count: "exact", head: true }).eq("project_id", activeProject.id);
+          if (isSalesFiltered) {
+            q = q.eq("assigned_manager_id", user.id);
+          }
+          return q;
+        },
+        (from, to) => {
+          let q = adminSupabase.from("unified_customers").select("*").eq("project_id", activeProject.id);
+          if (isSalesFiltered) {
+            q = q.eq("assigned_manager_id", user.id);
+          }
+          return q.range(from, to);
         }
-        return q.range(from, to);
-      }),
-      fetchAllPaged((from, to) => {
-        return adminSupabase
-          .from("unified_orders")
-          .select("*")
-          .eq("project_id", activeProject.id)
-          .order("created_at", { ascending: false })
-          .range(from, to);
-      }),
-      fetchAllPaged((from, to) => {
-        return adminSupabase
-          .from("traffic_clicks")
-          .select("*")
-          .eq("project_id", activeProject.id)
-          .order("created_at", { ascending: false })
-          .range(from, to);
-      }),
+      ),
+      fetchAllParallel(
+        () => adminSupabase.from("unified_orders").select("*", { count: "exact", head: true }).eq("project_id", activeProject.id),
+        (from, to) => {
+          return adminSupabase
+            .from("unified_orders")
+            .select("*")
+            .eq("project_id", activeProject.id)
+            .order("created_at", { ascending: false })
+            .range(from, to);
+        }
+      ),
+      fetchAllParallel(
+        () => adminSupabase.from("traffic_clicks").select("*", { count: "exact", head: true }).eq("project_id", activeProject.id),
+        (from, to) => {
+          return adminSupabase
+            .from("traffic_clicks")
+            .select("*")
+            .eq("project_id", activeProject.id)
+            .order("created_at", { ascending: false })
+            .range(from, to);
+        }
+      ),
       adminSupabase
         .from("daily_traffic_and_costs")
         .select("*")
@@ -789,7 +817,7 @@ export async function getUnifiedCRMData(
       groupLeads.forEach((lead) => {
         const meta = lead.metadata || {};
         const raw = meta.raw_row || {};
-        
+
         const quizFields = [
           { key: "що турбує", label: "Що турбує" },
           { key: "Чи колола ботокс, або подібне", label: "Ботокс" },
@@ -885,18 +913,18 @@ export async function getUnifiedCRMData(
       const s = lead.status;
       if (!s) return "Новий лід";
       const normalized = statusMapper.normalize(s);
-      
+
       const originalSheet = String(lead.metadata?.original_sheet || lead.metadata?.lead?.original_sheet || "").trim();
       const targetSheet = String(lead.metadata?.target_sheet || lead.metadata?.lead?.target_sheet || "").trim();
       const courseName = String(lead.metadata?.leadData?.course || lead.metadata?.lead?.leadData?.course || "").trim();
       const orderProj = allowedProjects.find((p: any) => p.id === lead.project_id);
       const orderSlug = orderProj?.slug || "";
 
-      const isTripwire = 
+      const isTripwire =
         ["Практикум", "Practicum_Leads", "Заявки на практикум", "Miні-курс"].includes(originalSheet) ||
         ["Практикум", "Practicum_Leads", "Заявки на практикум", "Miні-курс"].includes(targetSheet) ||
-        courseName.includes("Mini-Course") || 
-        courseName.includes("Practicum") || 
+        courseName.includes("Mini-Course") ||
+        courseName.includes("Practicum") ||
         courseName.includes("Практикум") ||
         courseName.includes("Міні-курс") ||
         orderSlug === "sofia" ||
@@ -904,8 +932,8 @@ export async function getUnifiedCRMData(
         activeProject?.slug === "sofia" ||
         activeProject?.slug === "valeria";
 
-      const isProjectAlwaysTripwire = 
-        ["sofia", "valeria"].includes(orderSlug) || 
+      const isProjectAlwaysTripwire =
+        ["sofia", "valeria"].includes(orderSlug) ||
         ["sofia", "valeria"].includes(activeProject?.slug || "");
 
       if (normalized === "closed_won") {
@@ -985,14 +1013,14 @@ export async function getUnifiedCRMData(
         const orderId = item.order_id || item.id;
         const projectId = item.project_id;
         const orderKey = `${orderId}_${projectId}`;
-        
+
         const existing = uniqueOrders.get(orderKey);
         if (!existing) {
           uniqueOrders.set(orderKey, item);
         } else {
           const existingIsPaid = existing.status === "Купив курс" || existing.status === "Купив(-ла) Трипвайер";
           const itemIsPaid = item.status === "Купив курс" || item.status === "Купив(-ла) Трипвайер";
-          
+
           if (itemIsPaid && !existingIsPaid) {
             uniqueOrders.set(orderKey, item);
           } else if (!itemIsPaid && existingIsPaid) {
@@ -1016,24 +1044,24 @@ export async function getUnifiedCRMData(
         if (amt === 0) return;
 
         const metaCurrency = String(
-          item.metadata?.currency || 
-          item.metadata?.lead?.currency || 
+          item.metadata?.currency ||
+          item.metadata?.lead?.currency ||
           item.metadata?.raw_row?.currency ||
           item.metadata?.raw_row?.raw_payload?.currency ||
           ""
         ).trim().toLowerCase();
         const orderProj = allowedProjects.find((p: any) => p.id === item.project_id);
         const orderSlug = orderProj?.slug || "";
-        
-        const isEur = ["eur", "€"].includes(metaCurrency);
-        const isUsd = !isEur && (["usd", "$"].includes(metaCurrency) || 
-                      orderSlug === "sofia" || 
-                      orderSlug === "valeria" || 
-                      activeProject?.slug === "sofia" || 
-                      activeProject?.slug === "valeria");
 
-        const isProjectAlwaysTripwire = 
-          ["sofia", "valeria"].includes(orderSlug) || 
+        const isEur = ["eur", "€"].includes(metaCurrency);
+        const isUsd = !isEur && (["usd", "$"].includes(metaCurrency) ||
+          orderSlug === "sofia" ||
+          orderSlug === "valeria" ||
+          activeProject?.slug === "sofia" ||
+          activeProject?.slug === "valeria");
+
+        const isProjectAlwaysTripwire =
+          ["sofia", "valeria"].includes(orderSlug) ||
           ["sofia", "valeria"].includes(activeProject?.slug || "");
 
         if (item.status === "Купив курс" && !isProjectAlwaysTripwire) {
@@ -1218,8 +1246,8 @@ export async function getUnifiedCRMData(
     });
     const totalCostsSpend = filteredCosts.reduce((sum: number, c: any) => sum + Number(c.spend || 0), 0);
 
-    const totalApplications = filteredLeads.filter((l: any) => 
-      statusPriority(l.status) >= 3 || 
+    const totalApplications = filteredLeads.filter((l: any) =>
+      statusPriority(l.status) >= 3 ||
       l.history.some((h: any) => statusPriority(h.status) >= 3)
     ).length;
 
@@ -1424,8 +1452,8 @@ export async function getUnifiedCRMData(
         const amt = Number(touch.amount || 0);
         if (amt > 0) {
           const metaCurrency = String(
-            touch.metadata?.currency || 
-            touch.metadata?.lead?.currency || 
+            touch.metadata?.currency ||
+            touch.metadata?.lead?.currency ||
             touch.metadata?.raw_row?.currency ||
             ""
           ).trim().toLowerCase();
@@ -1477,10 +1505,10 @@ export async function getUnifiedCRMData(
 
     // Prepare dataHealth Check stats
     const checkLeadDateParseable = (lead: any): boolean => {
-      const rawDateStr = 
-        lead.metadata?.raw_row?.Дата || 
-        lead.metadata?.raw_row?.дата || 
-        lead.metadata?.raw_row?.Date || 
+      const rawDateStr =
+        lead.metadata?.raw_row?.Дата ||
+        lead.metadata?.raw_row?.дата ||
+        lead.metadata?.raw_row?.Date ||
         lead.metadata?.raw_row?.date ||
         lead.metadata?.created_at ||
         lead.metadata?.lead?.created_at;
@@ -1521,10 +1549,10 @@ export async function getUnifiedCRMData(
         ordersWithAmountAndClickStatusCount++;
       }
 
-      const hasMetadataDate = 
-        o.metadata?.raw_row?.Дата || 
-        o.metadata?.raw_row?.дата || 
-        o.metadata?.raw_row?.Date || 
+      const hasMetadataDate =
+        o.metadata?.raw_row?.Дата ||
+        o.metadata?.raw_row?.дата ||
+        o.metadata?.raw_row?.Date ||
         o.metadata?.raw_row?.date ||
         o.metadata?.created_at ||
         o.metadata?.lead?.created_at;
@@ -1612,7 +1640,7 @@ export async function updateUnifiedLeadStatusAction(orderId: string, newStatus: 
       .eq("id", orderId);
 
     if (error) throw error;
-    
+
     return { success: true };
   } catch (err: any) {
     return { error: err.message || "Failed to update lead status" };
@@ -1705,7 +1733,7 @@ export async function createUnifiedLeadAction(
 export async function getDashboardData() {
   const supabase = await createClient();
   const adminSupabase = createAdminClient();
-  
+
   // 1. Authenticate user
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
@@ -1880,7 +1908,7 @@ export async function updateCustomerCommentAction(customerId: string, comment: s
       .eq("id", customerId);
 
     if (updateError) throw updateError;
-    
+
     return { success: true, managerComment: updatedCommentStr };
   } catch (err: any) {
     return { error: err.message || "Failed to update comment" };
@@ -1911,9 +1939,9 @@ export async function assignLeadToManagerAction(customerId: string, managerId: s
         .select("role")
         .eq("id", managerId)
         .single();
-      
+
       const isSuperman = managerProfile?.role === "admin" || managerProfile?.role === "superman";
-      
+
       if (!isSuperman) {
         const { data: hasAccess } = await adminSupabase
           .from("profile_projects")
@@ -1934,7 +1962,7 @@ export async function assignLeadToManagerAction(customerId: string, managerId: s
       .eq("id", customerId);
 
     if (error) throw error;
-    
+
     return { success: true };
   } catch (err: any) {
     return { error: err.message || "Failed to assign manager" };
@@ -2010,7 +2038,7 @@ export async function updateFeedbackStatusAction(feedbackId: string, status: str
 
 // Server action to update currency of a transaction
 export async function updateOrderCurrencyAction(
-  orderId: string, 
+  orderId: string,
   currency: "usd" | "uah" | "eur",
   bulk?: { landingName: string; amount: number }
 ) {
@@ -2145,16 +2173,16 @@ export async function traceVisitorUuidAction(phoneOrUuid: string, projectId: str
           .from("unified_orders")
           .select("visitor_uuid, customer_id")
           .eq("project_id", projectId);
-        
+
         const { data: customers } = await adminSupabase
           .from("unified_customers")
           .select("id, phone")
           .eq("project_id", projectId);
-        
+
         const matchedCustomerIds = customers
           ?.filter(c => c.phone && c.phone.replace(/\D/g, "").includes(digits))
           .map(c => c.id) || [];
-        
+
         if (orders) {
           orders.forEach(o => {
             if (o.visitor_uuid && (matchedCustomerIds.includes(o.customer_id))) {
@@ -2192,7 +2220,7 @@ export async function traceVisitorUuidAction(phoneOrUuid: string, projectId: str
         .from("unified_customers")
         .select("id, phone")
         .eq("project_id", projectId);
-      
+
       const matchedCustomerIds = customerData
         ?.filter(c => c.phone && c.phone.replace(/\D/g, "").includes(phoneMatch))
         .map(c => c.id) || [];
@@ -2203,7 +2231,7 @@ export async function traceVisitorUuidAction(phoneOrUuid: string, projectId: str
           .select("*")
           .eq("project_id", projectId)
           .in("customer_id", matchedCustomerIds);
-        
+
         if (phoneOrders) {
           phoneOrders.forEach(o => {
             if (!orders.some(existing => existing.id === o.id)) {
