@@ -551,12 +551,15 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
   useEffect(() => {
     const saved = localStorage.getItem("crm_dev_mode");
-    if (saved === "true") {
+    if (saved === "true" && (role === "admin" || role === "superman")) {
       setIsDevMode(true);
+    } else {
+      setIsDevMode(false);
     }
-  }, []);
+  }, [role]);
 
   const toggleDevMode = () => {
+    if (role !== "admin" && role !== "superman") return;
     const newVal = !isDevMode;
     setIsDevMode(newVal);
     localStorage.setItem("crm_dev_mode", String(newVal));
@@ -1255,19 +1258,21 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           )}
 
           {/* Developer Mode Toggle */}
-          <button
-            onClick={toggleDevMode}
-            className={`px-4 py-3 rounded-xl border transition-all cursor-pointer flex items-center gap-2 text-xs font-black ${isDevMode
-                ? "bg-red-500/10 border-red-500/30 text-red-400"
-                : isLight
-                  ? "border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-500"
-                  : "border-white/10 bg-white/[0.02] hover:bg-white/[0.06] text-white/50"
-              }`}
-            title="Перемкнути режим розробника"
-          >
-            <AlertCircle className="w-4 h-4 animate-pulse" />
-            <span>{isDevMode ? "Dev Active" : "Dev Mode"}</span>
-          </button>
+          {(role === "admin" || role === "superman") && (
+            <button
+              onClick={toggleDevMode}
+              className={`px-4 py-3 rounded-xl border transition-all cursor-pointer flex items-center gap-2 text-xs font-black ${isDevMode
+                  ? "bg-red-500/10 border-red-500/30 text-red-400"
+                  : isLight
+                    ? "border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-500"
+                    : "border-white/10 bg-white/[0.02] hover:bg-white/[0.06] text-white/50"
+                }`}
+              title="Перемкнути режим розробника"
+            >
+              <AlertCircle className="w-4 h-4 animate-pulse" />
+              <span>{isDevMode ? "Dev Active" : "Dev Mode"}</span>
+            </button>
+          )}
 
           {/* Theme Toggle */}
           <button
