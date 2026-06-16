@@ -138,11 +138,8 @@ const PROJECT_LANDINGS: Record<string, Array<{ label: string; url: string; badge
     { label: "Основний", url: "https://bnw-prod.vercel.app/", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "free" }
   ],
   victoria: [
-    { label: "Майстер-клас", url: "https://victoria-mc.vercel.app/", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20", type: "free" },
-    { label: "VSL", url: "https://victoria-mc.vercel.app/free-lection/", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20", type: "free" },
-    { label: "VSL-форма", url: "https://victoria-mc.vercel.app/free-lection/vsl-form/", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "free" },
-    { label: "Броні", url: "https://victoria-mc.vercel.app/price", badgeColor: "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20", type: "paid" },
-    { label: "Практикум", url: "https://victoria-mc.vercel.app/practicum", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20", type: "paid" }
+    { label: "rozbir", url: "https://victoria-mc.vercel.app/rozbir", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20", type: "paid" },
+    { label: "VSL-форма", url: "https://victoria-mc.vercel.app/free-lection/vsl-form/", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "free" }
   ],
   sofia: [
     { label: "Основний", url: "https://sofifinsight.vercel.app/", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "free" },
@@ -225,6 +222,8 @@ const getTouchPageUrl = (l: any) => {
     l.metadata?.pageUrl ||
     l.metadata?.full_url ||
     l.metadata?.fullUrl ||
+    l.metadata?.raw_row?.page_url ||
+    l.metadata?.raw_row?.pageUrl ||
     l.page_url ||
     ""
   );
@@ -393,6 +392,10 @@ const isLeadMatchingLanding = (lead: any, landingUrl: string, activeSlug: string
     }
     if (targetNorm.includes("/free-lection/vsl-form")) {
       if (originalSheet === "VSL Форма") return true;
+    }
+    if (targetNorm.includes("/rozbir")) {
+      const touchPath = (touch.page_path || touch.metadata?.page_path || touch.metadata?.raw_row?.page_path || "").trim().toLowerCase();
+      if (originalSheet === "Ленд 3" || targetSheet === "Ленд 3" || touchPath.includes("rozbir") || touchUrl.includes("/rozbir")) return true;
     }
     if (targetNorm.includes("/price")) {
       if (originalSheet === "Бронювання" || originalSheet === "Заявки на практикум" || targetSheet === "Заявки на практикум") return true;
@@ -863,6 +866,17 @@ export async function getUnifiedCRMData(
 
     const getDiagnosticsComment = (groupLeads: any[]): string => {
       const answers: string[] = [];
+      const hasRozbir = groupLeads.some((lead) => {
+        const meta = lead.metadata || {};
+        const raw = meta.raw_row || {};
+        const path = lead.page_path || raw.page_path || "";
+        const url = lead.page_url || raw.page_url || "";
+        const origSheet = meta.original_sheet || raw.original_sheet || "";
+        return path === "/rozbir" || url.toLowerCase().includes("/rozbir") || origSheet === "Розбір (Old)" || origSheet === "Ленд 3";
+      });
+      if (hasRozbir) {
+        answers.push("Анкета: rozbir");
+      }
       groupLeads.forEach((lead) => {
         const meta = lead.metadata || {};
         const raw = meta.raw_row || {};

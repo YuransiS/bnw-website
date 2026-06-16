@@ -234,11 +234,8 @@ const PROJECT_LANDINGS: Record<string, Array<{ label: string; url: string; badge
     { label: "Основний", url: "https://bnw-prod.vercel.app/", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "free" }
   ],
   victoria: [
-    { label: "Майстер-клас", url: "https://victoria-mc.vercel.app/", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20", type: "free" },
-    { label: "VSL", url: "https://victoria-mc.vercel.app/free-lection/", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20", type: "free" },
-    { label: "VSL-форма", url: "https://victoria-mc.vercel.app/free-lection/vsl-form/", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "free" },
-    { label: "Броні", url: "https://victoria-mc.vercel.app/price", badgeColor: "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20", type: "paid" },
-    { label: "Практикум", url: "https://victoria-mc.vercel.app/practicum", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20", type: "paid" }
+    { label: "rozbir", url: "https://victoria-mc.vercel.app/rozbir", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20", type: "paid" },
+    { label: "VSL-форма", url: "https://victoria-mc.vercel.app/free-lection/vsl-form/", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "free" }
   ],
   sofia: [
     { label: "Основний", url: "https://sofifinsight.vercel.app/", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "free" },
@@ -321,6 +318,8 @@ const getTouchPageUrl = (l: any) => {
     l.metadata?.pageUrl ||
     l.metadata?.full_url ||
     l.metadata?.fullUrl ||
+    l.metadata?.raw_row?.page_url ||
+    l.metadata?.raw_row?.pageUrl ||
     l.page_url ||
     ""
   );
@@ -429,6 +428,10 @@ const isLeadMatchingLanding = (lead: any, landingUrl: string) => {
     }
     if (targetNorm.includes("/free-lection/vsl-form")) {
       if (originalSheet === "VSL Форма") return true;
+    }
+    if (targetNorm.includes("/rozbir")) {
+      const touchPath = (touch.page_path || touch.metadata?.page_path || touch.metadata?.raw_row?.page_path || "").trim().toLowerCase();
+      if (originalSheet === "Ленд 3" || targetSheet === "Ленд 3" || touchPath.includes("rozbir") || touchUrl.includes("/rozbir")) return true;
     }
     if (targetNorm.includes("/price")) {
       if (originalSheet === "Бронювання" || originalSheet === "Заявки на практикум" || targetSheet === "Заявки на практикум") return true;
@@ -3575,6 +3578,17 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                   {leadsWithQuizzes.map((lead: any) => {
                     const isSelected = activeQuizLeadId === lead.id;
                     const dateStr = getLeadDate(lead).toLocaleDateString("uk-UA");
+                    
+                    const landingLabel = (() => {
+                      const landings = PROJECT_LANDINGS[activeSlug] || [];
+                      for (const land of landings) {
+                        if (isLeadMatchingLanding(lead, land.url)) {
+                          return land.label;
+                        }
+                      }
+                      return null;
+                    })();
+
                     return (
                       <div
                         key={lead.id}
@@ -3588,9 +3602,16 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                               : "bg-[#0C0C0F] border-white/5 hover:border-white/10"
                           }`}
                       >
-                        <div className="flex justify-between items-start">
-                          <h4 className="font-extrabold text-sm truncate max-w-[150px]">{lead.name}</h4>
-                          <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${lead.status === "Купив курс"
+                        <div className="flex justify-between items-start gap-2">
+                          <div className="flex flex-col min-w-0">
+                            <h4 className="font-extrabold text-sm truncate max-w-[150px]">{lead.name}</h4>
+                            {landingLabel && (
+                              <span className="text-[9px] font-black uppercase text-left text-blue-450 mt-0.5">
+                                {landingLabel}
+                              </span>
+                            )}
+                          </div>
+                          <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded shrink-0 ${lead.status === "Купив курс"
                               ? "bg-emerald-500/10 text-emerald-400"
                               : "bg-white/5 text-white/40"
                             }`}>
@@ -3669,7 +3690,11 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                           <div>
                             <span className="block font-bold uppercase text-[9px] text-white/20">Сторінка реєстрації</span>
                             <span className="text-white/80 font-bold truncate block mt-1">
-                              {selectedLead.page_path || selectedLead.metadata?.page_path || "/"}
+                              {(() => {
+                                const path = selectedLead.page_path || selectedLead.metadata?.page_path || "/";
+                                if (path === "/rozbir") return "rozbir";
+                                return path;
+                              })()}
                             </span>
                           </div>
                           <div>
