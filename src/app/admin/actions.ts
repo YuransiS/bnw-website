@@ -881,10 +881,72 @@ export async function getUnifiedCRMData(
       if (hasRozbir) {
         answers.push("Анкета: rozbir");
       }
+
+      const QUESTION_LABELS: Record<string, string> = {
+        "purpose": "Мета",
+        "subscription_duration": "Як давно підписана",
+        "difficulties": "Складнощі з блогом",
+        "readiness": "Готовність до роботи",
+        "niche": "Ніша",
+        "instagram": "Instagram",
+        "social": "Telegram",
+        "telegram": "Telegram",
+        "phone": "Телефон",
+        "name": "Ім'я",
+        "що турбує": "Що турбує",
+        "Чи колола ботокс, або подібне": "Ботокс",
+        "Тип старіння": "Тип старіння",
+        "Рівень доходу": "Дохід",
+        "Дохід": "Дохід",
+        "Фінансова ціль": "Фінансова ціль",
+        "Ціль": "Ціль",
+        "Борги": "Борги",
+        "Чи є борги зараз": "Борги",
+        "За який термін вийти на 100 000$": "Термін 100k$",
+        "Відповідь 1 (скільки витрачаєш на косметику в міс.)": "Витрати на косметику",
+        "Коментар": "Коментар",
+        "request": "Запит",
+        "tariff": "Тариф"
+      };
+
+      const EXCLUDED_KEYS = new Set([
+        "visitor_id", "visitorid", "page_path", "full_url", "target_sheet",
+        "sheet_id", "entry_month", "vsl_sendpulse_stage", "api_key",
+        "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
+        "consent", "amount", "currency", "status", "action", "sp_contact_id",
+        "tg_msg_id", "customer_name", "customer_phone", "uavslab", "id", "created_at"
+      ]);
+
+      const addedKeys = new Set<string>();
+
       groupLeads.forEach((lead) => {
         const meta = lead.metadata || {};
         const raw = meta.raw_row || {};
+        
+        let payload = raw.raw_payload || meta.raw_payload || lead.raw_payload || {};
+        if (typeof payload === "string") {
+          try {
+            payload = JSON.parse(payload);
+          } catch (e) {}
+        }
 
+        // 1. Process fields in raw_payload
+        if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+          Object.entries(payload).forEach(([k, val]) => {
+            if (EXCLUDED_KEYS.has(k.toLowerCase().trim())) return;
+            if (val && String(val).trim()) {
+              const label = QUESTION_LABELS[k] || k;
+              const formattedVal = String(val).trim();
+              const uniqueKey = `${label.toLowerCase()}:${formattedVal.toLowerCase()}`;
+              if (!addedKeys.has(uniqueKey)) {
+                answers.push(`${label}: ${formattedVal}`);
+                addedKeys.add(uniqueKey);
+              }
+            }
+          });
+        }
+
+        // 2. Fallback to raw database columns if not already added
         const quizFields = [
           { key: "що турбує", label: "Що турбує" },
           { key: "Чи колола ботокс, або подібне", label: "Ботокс" },
@@ -906,37 +968,77 @@ export async function getUnifiedCRMData(
         quizFields.forEach((f) => {
           const val = raw[f.key] || meta[f.key];
           if (val && String(val).trim()) {
-            answers.push(`${f.label}: ${String(val).trim()}`);
-          }
-        });
-
-        Object.keys(raw).forEach((k) => {
-          if (k.toLowerCase().includes("питання") || k.toLowerCase().includes("відповідь")) {
-            const val = raw[k];
-            if (val && String(val).trim()) {
-              answers.push(`${k}: ${String(val).trim()}`);
+            const formattedVal = String(val).trim();
+            const uniqueKey = `${f.label.toLowerCase()}:${formattedVal.toLowerCase()}`;
+            if (!addedKeys.has(uniqueKey)) {
+              answers.push(`${f.label}: ${formattedVal}`);
+              addedKeys.add(uniqueKey);
             }
           }
         });
 
+        // 3. Fallback to dynamic keys in raw matching "питання" or "відповідь"
+        Object.keys(raw).forEach((k) => {
+          if (k.toLowerCase().includes("питання") || k.toLowerCase().includes("відповідь")) {
+            const val = raw[k];
+            if (val && String(val).trim()) {
+              const formattedVal = String(val).trim();
+              const uniqueKey = `${k.toLowerCase()}:${formattedVal.toLowerCase()}`;
+              if (!addedKeys.has(uniqueKey)) {
+                answers.push(`${k}: ${formattedVal}`);
+                addedKeys.add(uniqueKey);
+              }
+            }
+          }
+        });
+
+        // 4. Process quiz_result
         const quizResult = raw.quiz_result || meta.quiz_result;
         if (quizResult) {
           if (typeof quizResult === "object") {
             Object.entries(quizResult).forEach(([k, v]) => {
-              if (v) answers.push(`${k}: ${v}`);
+              if (v) {
+                const label = QUESTION_LABELS[k] || k;
+                const formattedVal = String(v).trim();
+                const uniqueKey = `${label.toLowerCase()}:${formattedVal.toLowerCase()}`;
+                if (!addedKeys.has(uniqueKey)) {
+                  answers.push(`${label}: ${formattedVal}`);
+                  addedKeys.add(uniqueKey);
+                }
+              }
             });
           } else {
-            answers.push(`Quiz: ${quizResult}`);
+            const formattedVal = String(quizResult).trim();
+            const uniqueKey = `quiz:${formattedVal.toLowerCase()}`;
+            if (!addedKeys.has(uniqueKey)) {
+              answers.push(`Quiz: ${formattedVal}`);
+              addedKeys.add(uniqueKey);
+            }
           }
         }
+
+        // 5. Process query
         const queryVal = raw.query || meta.query;
         if (queryVal) {
           if (typeof queryVal === "object") {
             Object.entries(queryVal).forEach(([k, v]) => {
-              if (v) answers.push(`${k}: ${v}`);
+              if (v) {
+                const label = QUESTION_LABELS[k] || k;
+                const formattedVal = String(v).trim();
+                const uniqueKey = `${label.toLowerCase()}:${formattedVal.toLowerCase()}`;
+                if (!addedKeys.has(uniqueKey)) {
+                  answers.push(`${label}: ${formattedVal}`);
+                  addedKeys.add(uniqueKey);
+                }
+              }
             });
           } else {
-            answers.push(`Запит: ${queryVal}`);
+            const formattedVal = String(queryVal).trim();
+            const uniqueKey = `запит:${formattedVal.toLowerCase()}`;
+            if (!addedKeys.has(uniqueKey)) {
+              answers.push(`Запит: ${formattedVal}`);
+              addedKeys.add(uniqueKey);
+            }
           }
         }
       });

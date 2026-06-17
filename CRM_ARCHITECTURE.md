@@ -385,6 +385,10 @@ const useProcessedLeads = (leads: Lead[], traffic: Traffic[], globalUsers: any[]
 };
 ```
 
+### 4.1.1 Questionnaire (Ankety) dynamic parsing
+Each lead's questionnaire answers (from `/anketa`, `/free-lection/vsl-form`, etc.) are stored in the `raw_payload` JSONB column. On the server side, `getDiagnosticsComment` dynamically pulls all fields from `raw_payload` (excluding technical UTM/tracking fields), maps keys to friendly Ukrainian labels (e.g., `purpose` -> `Мета`, `difficulties` -> `Складнощі з блогом`), and returns them as a multiline comment which the client splits and renders dynamically.
+
+
 ### 4.2 Financial Segment Analysis
 
 Inside the aggregator, each database lead's status is parsed to resolve their current marketing funnel weight, financial contribution, and local currency thresholds.
