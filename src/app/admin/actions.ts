@@ -309,6 +309,29 @@ const getLeadDate = (lead: any): Date => {
   return new Date(lead.created_at);
 };
 
+const parseClientDateRange = (dateStr: string, isEnd: boolean): Date => {
+  if (!dateStr) return new Date();
+  const parts = dateStr.split("-");
+  if (parts.length === 3) {
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+    if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+      const offset = getUkraineOffset(year, month, day);
+      const timeStr = isEnd ? "23:59:59.999" : "00:00:00.000";
+      return new Date(`${dateStr}T${timeStr}${offset}`);
+    }
+  }
+  const d = new Date(dateStr);
+  if (isEnd) {
+    d.setHours(23, 59, 59, 999);
+  } else {
+    d.setHours(0, 0, 0, 0);
+  }
+  return d;
+};
+
+
 const statusPriority = (s: string): number => {
   if (s === "Купив курс") return 10;
   if (s === "Вирішив подумати") return 8;
@@ -1282,8 +1305,49 @@ export async function getUnifiedCRMData(
       const page_path = normalizedGroupLeads.find((l) => l.page_path && l.page_path !== "/")?.page_path || primaryLead.page_path || "/";
       const page_url = prioritizedTouches.map(getTouchPageUrl).find((url) => url !== "") || getTouchPageUrl(primaryLead);
 
+      const latestTouch = normalizedGroupLeads.reduce((latest, curr) => {
+        return getLeadDate(curr).getTime() > getLeadDate(latest).getTime() ? curr : latest;
+      }, normalizedGroupLeads[0]);
+
+      const updatedMetadata = {
+        ...primaryLead.metadata,
+        raw_row: primaryLead.metadata?.raw_row ? {
+          ...primaryLead.metadata.raw_row,
+          "Дата": undefined,
+          "дата": undefined,
+          "Date": undefined,
+          "date": undefined,
+        } : undefined,
+        created_at: undefined,
+        lead: primaryLead.metadata?.lead ? {
+          ...primaryLead.metadata.lead,
+          created_at: undefined
+        } : undefined
+      };
+
+      if (latestTouch.metadata?.raw_row?.Дата) {
+        if (!updatedMetadata.raw_row) updatedMetadata.raw_row = {};
+        updatedMetadata.raw_row["Дата"] = latestTouch.metadata.raw_row["Дата"];
+      } else if (latestTouch.metadata?.raw_row?.дата) {
+        if (!updatedMetadata.raw_row) updatedMetadata.raw_row = {};
+        updatedMetadata.raw_row["дата"] = latestTouch.metadata.raw_row["дата"];
+      } else if (latestTouch.metadata?.raw_row?.Date) {
+        if (!updatedMetadata.raw_row) updatedMetadata.raw_row = {};
+        updatedMetadata.raw_row["Date"] = latestTouch.metadata.raw_row["Date"];
+      } else if (latestTouch.metadata?.raw_row?.date) {
+        if (!updatedMetadata.raw_row) updatedMetadata.raw_row = {};
+        updatedMetadata.raw_row["date"] = latestTouch.metadata.raw_row["date"];
+      } else if (latestTouch.metadata?.created_at) {
+        updatedMetadata.created_at = latestTouch.metadata.created_at;
+      } else if (latestTouch.metadata?.lead?.created_at) {
+        if (!updatedMetadata.lead) updatedMetadata.lead = {};
+        updatedMetadata.lead.created_at = latestTouch.metadata.lead.created_at;
+      }
+
       return {
         ...primaryLead,
+        created_at: latestTouch.created_at,
+        metadata: updatedMetadata,
         name: primaryLead.name || "Невідомий",
         phone: primaryLead.phone || "",
         telegram: primaryLead.telegram || "",
@@ -1323,6 +1387,7 @@ export async function getUnifiedCRMData(
         diagnosticsComment: getDiagnosticsComment(normalizedGroupLeads),
         managerComment: primaryLead.managerComment || "",
       };
+
     });
     const jsClusteringEnd = performance.now();
     const jsClusteringMs = jsClusteringEnd - jsClusteringStart;
@@ -1389,15 +1454,15 @@ export async function getUnifiedCRMData(
         if (hasPayment || !hasCheckout) return false;
       }
 
-      // 6. Dates
+      // 6. Dates (Kyiv Timezone Aligned)
       if (startDate) {
         const leadDate = getLeadDate(lead);
-        if (leadDate < new Date(startDate)) return false;
+        const start = parseClientDateRange(startDate, false);
+        if (leadDate < start) return false;
       }
       if (endDate) {
         const leadDate = getLeadDate(lead);
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
+        const end = parseClientDateRange(endDate, true);
         if (leadDate > end) return false;
       }
 
@@ -1410,15 +1475,16 @@ export async function getUnifiedCRMData(
     // --- Statistics Calculations on server ---
     const totalLeads = filteredLeads.length;
 
-    // Filter costs
+    // Filter costs (Kyiv Timezone Aligned)
     const filteredCosts = costs.filter((c: any) => {
       if (startDate) {
-        const cDate = new Date(c.date);
-        if (cDate < new Date(startDate)) return false;
+        const cDate = parseClientDateRange(c.date, false);
+        const start = parseClientDateRange(startDate, false);
+        if (cDate < start) return false;
       }
       if (endDate) {
-        const cDate = new Date(c.date);
-        const end = new Date(endDate);
+        const cDate = parseClientDateRange(c.date, true);
+        const end = parseClientDateRange(endDate, true);
         if (cDate > end) return false;
       }
       return true;
@@ -1457,15 +1523,16 @@ export async function getUnifiedCRMData(
     const aovUah = uahSalesCount > 0 ? (uahCourseRevenue + uahTripwireRevenue) / uahSalesCount : 0;
     const aovEur = eurSalesCount > 0 ? (eurCourseRevenue + eurTripwireRevenue) / eurSalesCount : 0;
 
-    // Filter traffic
+    // Filter traffic (Kyiv Timezone Aligned)
     const filteredTraffic = allTraffic.filter((t: any) => {
       if (startDate) {
         const tDate = new Date(t.created_at);
-        if (tDate < new Date(startDate)) return false;
+        const start = parseClientDateRange(startDate, false);
+        if (tDate < start) return false;
       }
       if (endDate) {
         const tDate = new Date(t.created_at);
-        const end = new Date(endDate);
+        const end = parseClientDateRange(endDate, true);
         if (tDate > end) return false;
       }
       return true;
@@ -1509,8 +1576,8 @@ export async function getUnifiedCRMData(
     let splineTrendData = [];
     let dbRpcMs = 0;
     if (!filters?.skipTraffic) {
-      const startRpcDate = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      const endRpcDate = endDate ? new Date(endDate) : new Date();
+      const startRpcDate = startDate ? parseClientDateRange(startDate, false) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const endRpcDate = endDate ? parseClientDateRange(endDate, true) : new Date();
       const dbRpcStart = performance.now();
       const { data } = await adminSupabase.rpc("get_project_daily_stats", {
         p_project_id: activeProject.id,

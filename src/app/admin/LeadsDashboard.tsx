@@ -495,24 +495,48 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     devLogger.info("CRM Client", "LeadsDashboard component mounted");
   }, []);
 
+  // Track previous project slug to detect project switching
+  const prevSlugRef = React.useRef(initialData.activeSlug || "");
+
   // Sync state when props change (like when switching projects and router.refresh() runs)
   useEffect(() => {
+    const currentSlug = initialData.activeSlug || "";
+    const isProjectSwitched = currentSlug !== prevSlugRef.current;
+
+    // Reset all filter states to default values if project is switched
+    if (isProjectSwitched) {
+      prevSlugRef.current = currentSlug;
+      setStartDate("");
+      setEndDate("");
+      setStatusFilter("all");
+      setTouchCountFilter("all");
+      setSourceFilter("all");
+      setUnpaidIntentOnly(false);
+      setCurrentPage(1);
+      setSelectedLanding("all");
+      setSearchQuery("");
+      setKanbanSearchQuery("");
+      setKanbanTouchFilter("all");
+      setKanbanSourceFilter("all");
+      setDateRangePreset("all");
+    }
+
     setDashboardData(initialData);
 
     // Sync the parameter reference with the new server-provided initialData
     const isKan = activeTab === "kanban";
     lastFetchedParamsRef.current = JSON.stringify({
-      activeSlug: initialData.activeSlug || "",
-      page: isKan ? 1 : currentPage,
+      activeSlug: currentSlug,
+      page: isKan ? 1 : (isProjectSwitched ? 1 : currentPage),
       pageSize: isKan ? 500 : pageSize,
-      searchQuery: isKan ? debouncedKanbanSearchQuery : debouncedSearchQuery,
-      statusFilter: isKan ? "all" : statusFilter,
-      touchCountFilter: isKan ? kanbanTouchFilter : touchCountFilter,
-      sourceFilter: isKan ? kanbanSourceFilter : sourceFilter,
-      unpaidIntentOnly: isKan ? false : unpaidIntentOnly,
-      startDate: startDate,
-      endDate: endDate,
-      selectedLanding: selectedLanding
+      searchQuery: isKan ? (isProjectSwitched ? "" : debouncedKanbanSearchQuery) : (isProjectSwitched ? "" : debouncedSearchQuery),
+      statusFilter: isKan ? "all" : (isProjectSwitched ? "all" : statusFilter),
+      touchCountFilter: isKan ? (isProjectSwitched ? "all" : kanbanTouchFilter) : (isProjectSwitched ? "all" : touchCountFilter),
+      sourceFilter: isKan ? (isProjectSwitched ? "all" : kanbanSourceFilter) : (isProjectSwitched ? "all" : sourceFilter),
+      unpaidIntentOnly: isKan ? false : (isProjectSwitched ? false : unpaidIntentOnly),
+      startDate: isProjectSwitched ? "" : startDate,
+      endDate: isProjectSwitched ? "" : endDate,
+      selectedLanding: isProjectSwitched ? "all" : selectedLanding
     });
   }, [initialData]);
 
