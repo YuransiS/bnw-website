@@ -89,11 +89,12 @@ export async function createLeadAction(input: LeadInput) {
     // Dashboard polling preparation call (synchronous execution is fine here)
     await NotificationService.sendToDashboard(leadData);
 
-    // Telegram Bot dispatch is run in the background (asynchronous and non-blocking)
-    // We catch errors in it separately to ensure the client response is not delayed
-    NotificationService.sendToTelegram(leadData).catch((tgErr) => {
-      console.error("[createLeadAction] Asynchronous Telegram trigger caught error:", tgErr);
-    });
+    // Telegram Bot dispatch is awaited to prevent serverless function termination on Vercel before the request completes
+    try {
+      await NotificationService.sendToTelegram(leadData);
+    } catch (tgErr) {
+      console.error("[createLeadAction] Telegram trigger caught error:", tgErr);
+    }
 
     return { success: true, lead: leadData };
   } catch (err: any) {
