@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { devLogger } from "@/utils/logger";
+import { rebuildProjectCache } from "@/lib/crmCache";
 
 export async function signOutAction() {
   const supabase = await createClient();
@@ -132,125 +133,6 @@ export async function checkProjectAccess(projectId: string) {
   return true;
 }
 
-// PROJECT LANDINGS registry for server-side lookup
-const PROJECT_LANDINGS: Record<string, Array<{ label: string; url: string; badgeColor: string; type: "paid" | "free" }>> = {
-  bw_main: [
-    { label: "Основний", url: "https://bnw-prod.vercel.app/", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "free" }
-  ],
-  victoria: [
-    { label: "Майстер-клас", url: "https://victoria-mc.vercel.app/", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20", type: "free" },
-    { label: "VSL", url: "https://victoria-mc.vercel.app/free-lection/", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20", type: "free" },
-    { label: "VSL-форма", url: "https://victoria-mc.vercel.app/free-lection/vsl-form/", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "free" },
-    { label: "rozbir", url: "https://victoria-mc.vercel.app/rozbir", badgeColor: "bg-emerald-500/10 text-emerald-450 border border-emerald-500/20", type: "paid" },
-    { label: "Броні", url: "https://victoria-mc.vercel.app/price", badgeColor: "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20", type: "paid" },
-    { label: "Практикум", url: "https://victoria-mc.vercel.app/practicum", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20", type: "paid" }
-  ],
-  sofia: [
-    { label: "Основний", url: "https://sofifinsight.vercel.app/", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "free" },
-    { label: "Інтенсив", url: "https://sofifinsight.vercel.app/intensive", badgeColor: "bg-teal-500/10 text-teal-400 border border-teal-500/20", type: "free" },
-    { label: "Вебінар", url: "https://sofifinsight.vercel.app/web", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20", type: "free" },
-    { label: "Броні", url: "https://sofifinsight.vercel.app/price", badgeColor: "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20", type: "paid" },
-    { label: "VSL", url: "https://sofifinsight.vercel.app/sofia-invest", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20", type: "free" },
-    { label: "VSL-форма", url: "https://sofifinsight.vercel.app/sofia-invest/lesson", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "free" },
-    { label: "Міні-курс", url: "https://sofifinsight.vercel.app/minicourse", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20", type: "paid" }
-  ],
-  valeria: [
-    { label: "Основний", url: "https://pix-ai-ua.vercel.app/", badgeColor: "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20", type: "free" },
-    { label: "Офіс", url: "https://pix-ai-ua.vercel.app/office", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "paid" },
-    { label: "Мами", url: "https://pix-ai-ua.vercel.app/moms", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20", type: "paid" },
-    { label: "Б'юті", url: "https://pix-ai-ua.vercel.app/beauty", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "paid" },
-    { label: "Для тінейджерів", url: "https://pix-ai-ua.vercel.app/teen", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20", type: "paid" },
-    { label: "Для батьків", url: "https://pix-ai-ua.vercel.app/parents", badgeColor: "bg-orange-500/10 text-orange-400 border border-orange-500/20", type: "paid" }
-  ],
-  clean_klinom: [
-    { label: "Основний", url: "https://clean-klinom.vercel.app/", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20", type: "free" }
-  ],
-  svitlana: [
-    { label: "Основний", url: "https://svitlanatape.vercel.app/", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "free" },
-    { label: "Антиботокс", url: "https://antibotox.vercel.app/", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20", type: "paid" },
-    { label: "Заломи сну", url: "https://zalomu-sny.vercel.app/", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20", type: "paid" },
-    { label: "Тейпування тіла", url: "https://svitlanatape.vercel.app/body-taping", badgeColor: "bg-orange-500/10 text-orange-400 border border-orange-500/20", type: "paid" },
-    { label: "Типи старіння", url: "https://tipstarinnyaa.vercel.app/", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "free" },
-    { label: "3 веби", url: "https://svitlana3web.vercel.app/", badgeColor: "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20", type: "free" },
-    { label: "Світлана тейп", url: "https://svetlanatape.vercel.app/", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20", type: "free" },
-    { label: "Антиботокс клуб", url: "https://antibotox-club.vercel.app/", badgeColor: "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20", type: "paid" },
-    { label: "Face Detox", url: "https://facedetox.vercel.app/", badgeColor: "bg-teal-500/10 text-teal-400 border border-teal-500/20", type: "free" }
-  ],
-  vova_win: [
-    { label: "Марафон", url: "https://vova-win.club/marathon", badgeColor: "bg-orange-500/10 text-orange-400 border border-orange-500/20", type: "paid" }
-  ]
-};
-
-// DSU Helper class
-class DSU {
-  parent: number[];
-  constructor(size: number) {
-    this.parent = Array.from({ length: size }, (_, i) => i);
-  }
-  find(i: number): number {
-    let root = i;
-    while (this.parent[root] !== root) {
-      root = this.parent[root];
-    }
-    let curr = i;
-    while (curr !== root) {
-      const nxt = this.parent[curr];
-      this.parent[curr] = root;
-      curr = nxt;
-    }
-    return root;
-  }
-  union(i: number, j: number) {
-    const rootI = this.find(i);
-    const rootJ = this.find(j);
-    if (rootI !== rootJ) {
-      this.parent[rootI] = rootJ;
-    }
-  }
-}
-
-const normalizeUrlForMatching = (url: string) => {
-  if (!url) return "";
-  return url
-    .replace(/^https?:\/\//i, "")
-    .replace(/^www\./i, "")
-    .replace(/\/+$/, "")
-    .trim()
-    .toLowerCase();
-};
-
-const getTouchPageUrl = (l: any) => {
-  if (!l) return "";
-  return (
-    l.metadata?.page_url ||
-    l.metadata?.pageUrl ||
-    l.metadata?.full_url ||
-    l.metadata?.fullUrl ||
-    l.metadata?.raw_row?.page_url ||
-    l.metadata?.raw_row?.pageUrl ||
-    l.page_url ||
-    ""
-  );
-};
-
-const getTouchUtm = (l: any, key: 'source' | 'medium' | 'campaign' | 'content' | 'term'): string => {
-  if (!l) return "";
-  const colVal = l[`utm_${key}`];
-  if (colVal && colVal.trim()) return colVal.trim();
-  const utms =
-    l.metadata?.raw_row?.raw_payload?.utms ||
-    l.metadata?.raw_payload?.utms ||
-    l.metadata?.utms ||
-    null;
-  if (utms) {
-    const val = utms[key] || utms[key === 'campaign' ? 'utm_campaign' : key === 'source' ? 'utm_source' : key === 'medium' ? 'utm_medium' : key === 'content' ? 'utm_content' : key === 'term' ? 'utm_term' : ''];
-    if (val && String(val).trim()) return String(val).trim();
-  }
-  const metaVal = l.metadata?.[`utm_${key}`] || l.metadata?.[`utm${key.charAt(0).toUpperCase() + key.slice(1)}`] || l.metadata?.raw_row?.[`utm_${key}`];
-  if (metaVal && String(metaVal).trim()) return String(metaVal).trim();
-  return "";
-};
-
 const getUkraineOffset = (year: number, month: number, day: number): string => {
   if (month > 2 && month < 9) return "+03:00";
   if (month < 2 || month > 9) return "+02:00";
@@ -268,45 +150,6 @@ const getUkraineOffset = (year: number, month: number, day: number): string => {
     return day < lastSunday(9) ? "+03:00" : "+02:00";
   }
   return "+02:00";
-};
-
-const getLeadDate = (lead: any): Date => {
-  const rawDateStr =
-    lead.metadata?.raw_row?.Дата ||
-    lead.metadata?.raw_row?.дата ||
-    lead.metadata?.raw_row?.Date ||
-    lead.metadata?.raw_row?.date ||
-    lead.metadata?.created_at ||
-    lead.metadata?.lead?.created_at;
-
-  if (rawDateStr) {
-    const str = String(rawDateStr).trim();
-    const dotParts = str.split(" ")[0].split(".");
-    if (dotParts.length === 3) {
-      const day = parseInt(dotParts[0], 10);
-      const month = parseInt(dotParts[1], 10) - 1;
-      const year = parseInt(dotParts[2], 10);
-      if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
-        const timeStr = str.split(" ")[1];
-        const hour = timeStr ? (parseInt(timeStr.split(":")[0], 10) || 0) : 12;
-        const min = timeStr ? (parseInt(timeStr.split(":")[1], 10) || 0) : 0;
-        const sec = timeStr ? (parseInt(timeStr.split(":")[2], 10) || 0) : 0;
-        
-        const offset = getUkraineOffset(year, month, day);
-        const isoStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}${offset}`;
-        return new Date(isoStr);
-      }
-    }
-    let cleanStr = str;
-    if (str.includes("(")) {
-      cleanStr = str.split("(")[0].trim();
-    }
-    const parsed = Date.parse(cleanStr);
-    if (!isNaN(parsed)) {
-      return new Date(parsed);
-    }
-  }
-  return new Date(lead.created_at);
 };
 
 const parseClientDateRange = (dateStr: string, isEnd: boolean): Date => {
@@ -331,7 +174,6 @@ const parseClientDateRange = (dateStr: string, isEnd: boolean): Date => {
   return d;
 };
 
-
 const statusPriority = (s: string): number => {
   if (s === "Купив курс") return 10;
   if (s === "Вирішив подумати") return 8;
@@ -346,120 +188,6 @@ const statusPriority = (s: string): number => {
   return 0;
 };
 
-const isLeadMatchingLanding = (lead: any, landingUrl: string, activeSlug: string) => {
-  if (landingUrl === "all") return true;
-  const targetNorm = normalizeUrlForMatching(landingUrl);
-  const targetHasPath = targetNorm.includes("/");
-
-  return lead.history?.some((touch: any) => {
-    const touchUrl = normalizeUrlForMatching(getTouchPageUrl(touch));
-
-    const originalSheet = (
-      touch.metadata?.original_sheet ||
-      touch.metadata?.originalSheet ||
-      touch.metadata?.raw_row?.original_sheet ||
-      touch.metadata?.raw_row?.originalSheet ||
-      ""
-    ).trim();
-
-    const targetSheet = (
-      touch.metadata?.target_sheet ||
-      touch.metadata?.targetSheet ||
-      touch.metadata?.raw_row?.target_sheet ||
-      touch.metadata?.raw_row?.targetSheet ||
-      touch.metadata?.raw_row?.raw_payload?.sheet_name ||
-      ""
-    ).trim();
-    const tariff = (touch.metadata?.tariff || touch.metadata?.raw_row?.tariff || "").trim();
-
-    if (touchUrl) {
-      let urlMatch = false;
-      if (targetHasPath) {
-        urlMatch = touchUrl.includes(targetNorm);
-        if (!urlMatch && targetNorm.includes("body-taping")) {
-          urlMatch = touchUrl.includes("/body-taping");
-        }
-      } else {
-        const firstSlashIdx = touchUrl.indexOf("/");
-        if (firstSlashIdx === -1) {
-          urlMatch = touchUrl === targetNorm;
-        } else {
-          const domainPart = touchUrl.substring(0, firstSlashIdx);
-          const pathPart = touchUrl.substring(firstSlashIdx + 1).trim();
-          urlMatch = domainPart === targetNorm && pathPart === "";
-        }
-      }
-      if (urlMatch) return true;
-    }
-
-    if (targetNorm.includes("svitlana3web.vercel.app")) {
-      if (originalSheet === "ВЕБ (бот)" || originalSheet === "Заявки ленд Веб" || originalSheet === "новый веб") return true;
-    }
-    if (targetNorm.includes("facedetox.vercel.app")) {
-      if (originalSheet === "новый веб") return true;
-    }
-    if (targetNorm.includes("tipstarinnyaa.vercel.app")) {
-      if (originalSheet === "Квіз") return true;
-    }
-    if (targetNorm.includes("antibotox.vercel.app")) {
-      if (originalSheet === "Заявки ленд веб") return true;
-    }
-    if (targetNorm.includes("zalomu-sny.vercel.app")) {
-      if (originalSheet === "Заломи") return true;
-    }
-    if (targetNorm.includes("body-taping")) {
-      if (originalSheet === "Тейпування тіла" || tariff === "body_taping") return true;
-    }
-
-    if (targetNorm.includes("/practicum")) {
-      if (originalSheet === "Практикум" || originalSheet === "Practicum_Leads" || targetSheet === "Заявки на практикум") return true;
-    }
-    if (targetNorm.includes("/free-lection") && !targetNorm.includes("vsl-form")) {
-      if (originalSheet === "VSL 1 етап" || originalSheet === "VSL Трафик" || originalSheet === "VLS Урок") return true;
-    }
-    if (targetNorm.includes("/free-lection/vsl-form")) {
-      if (originalSheet === "VSL Форма") return true;
-    }
-    if (targetNorm.includes("/rozbir")) {
-      const touchPath = (touch.page_path || touch.metadata?.page_path || touch.metadata?.raw_row?.page_path || "").trim().toLowerCase();
-      if (originalSheet === "Ленд 3" || targetSheet === "Ленд 3" || touchPath.includes("rozbir") || touchUrl.includes("/rozbir")) return true;
-    }
-    if (targetNorm.includes("/price")) {
-      if (originalSheet === "Бронювання" || originalSheet === "Заявки на практикум" || targetSheet === "Заявки на практикум") return true;
-    }
-    if (targetNorm.includes("/intensive")) {
-      if (targetSheet === "Заявки на інтенсив") return true;
-    }
-    if (targetNorm.includes("/web")) {
-      if (originalSheet === "Лиды Вебинар" || originalSheet === "Webinars" || originalSheet === "Заявки ленд Веб" || originalSheet === "ВЕБ (бот)" || originalSheet === "новый веб") return true;
-    }
-    if (targetNorm.includes("/sofia-invest/lesson")) {
-      if (originalSheet === "Заявки на урок" || originalSheet === "Анкети після уроку") return true;
-    }
-    if (targetNorm.includes("/sofia-invest") && !targetNorm.includes("/lesson")) {
-      if (originalSheet === "VSL Трафик" || originalSheet === "VLS Урок") return true;
-    }
-    if (targetNorm.includes("/office")) {
-      if (originalSheet === "Practicum_Leads") return true;
-    }
-
-    if (!targetHasPath) {
-      if (activeSlug === "victoria" && targetNorm.includes("victoria-mc.vercel.app")) {
-        if (["Ленд 1", "Ленд 2", "Ленд 3", "МК 2.0", "Автовеб", "Webinars", "Ліди МК"].includes(originalSheet)) return true;
-      }
-      if ((activeSlug === "svitlana" || activeSlug === "svitlana") && (targetNorm.includes("svitlanatape.vercel.app") || targetNorm.includes("svetlanatape.vercel.app"))) {
-        if (["Діагностики", "Квіз", "Відповіді бот (19.05)"].includes(originalSheet)) return true;
-      }
-      if (activeSlug === "sofia" && targetNorm.includes("sofifinsight.vercel.app")) {
-        if (!originalSheet && !targetSheet) return true;
-      }
-    }
-
-    return false;
-  }) || false;
-};
-
-// Fetch unified CRM dashboard and analytics data
 export async function getUnifiedCRMData(
   selectedProjectSlug?: string,
   filters?: {
@@ -534,7 +262,7 @@ export async function getUnifiedCRMData(
       }
     }
 
-    // 1. Superman Global Hub mode
+    // 1. Superman Global Hub mode (direct fast RPC)
     if (isSuperman && activeSlug === "all") {
       const fetchAllOrdersForSummary = async () => {
         let results: any[] = [];
@@ -559,12 +287,10 @@ export async function getUnifiedCRMData(
         supabase.rpc("get_campaigns_summary"),
       ]);
 
-      // Fallback to JS queries if RPC does not exist in Supabase
       let summary = summaryRes.data || [];
       let campaigns = campaignRes.data || [];
 
       if (summaryRes.error || campaignRes.error) {
-        // Fallback manual JS logic with full paginated fetching
         const [allProjects, allOrders, allSpends] = await Promise.all([
           supabase.from("projects").select("*").then(r => r.data || []),
           fetchAllOrdersForSummary(),
@@ -579,7 +305,6 @@ export async function getUnifiedCRMData(
             return statusMapper.normalize(o.status) === "closed_won";
           });
 
-          // Filter out tripwires to match the SQL function get_projects_summary()
           const coursePaidOrders = paidOrders.filter((o) => {
             const originalSheet = String(o.metadata?.original_sheet || o.metadata?.lead?.original_sheet || "").trim();
             const targetSheet = String(o.metadata?.target_sheet || o.metadata?.lead?.target_sheet || "").trim();
@@ -655,7 +380,6 @@ export async function getUnifiedCRMData(
       const costs = allCostsRes.data || [];
 
       const leaderboard = producers.map((prod) => {
-        // Find assigned projects
         const assignedIds = mappings
           .filter((m) => m.profile_id === prod.id)
           .map((m) => m.project_id);
@@ -663,7 +387,6 @@ export async function getUnifiedCRMData(
         const assignedProjDetails = projects.filter((p) => assignedIds.includes(p.id));
         const projectNames = assignedProjDetails.map((p) => p.name).join(", ") || "—";
 
-        // Aggregate orders revenue and leads count
         const prodOrders = orders.filter((o) => assignedIds.includes(o.project_id));
         const prodPaidOrders = prodOrders.filter((o) => {
           return statusMapper.normalize(o.status) === "closed_won";
@@ -693,12 +416,11 @@ export async function getUnifiedCRMData(
         const uniqueProdCusts = new Set(prodOrders.map((o) => o.customer_id).filter(Boolean));
         const totalLeads = uniqueProdCusts.size;
 
-        // Aggregate spend
         const prodCosts = costs.filter((c) => assignedIds.includes(c.project_id));
         const totalSpend = prodCosts.reduce((sum, c) => sum + Number(c.spend || 0), 0);
 
         const blendedRevenue = usd_revenue + (uah_revenue / 41.0) + (eur_revenue * 1.08);
-        const netProfit = blendedRevenue - totalSpend;
+        const netProfitNet = blendedRevenue - totalSpend;
         const roi = totalSpend > 0 ? (blendedRevenue / totalSpend) * 100 : 0;
         const cpl = totalLeads > 0 ? totalSpend / totalLeads : 0;
 
@@ -715,16 +437,14 @@ export async function getUnifiedCRMData(
           uah_revenue,
           eur_revenue,
           blended_revenue: blendedRevenue,
-          profit: netProfit,
+          profit: netProfitNet,
           roi,
           isLeaderOfMonth: false,
         };
       });
 
-      // Sort by blended revenue descending
       leaderboard.sort((a, b) => b.blended_revenue - a.blended_revenue);
 
-      // Mark the top one as leader of the month if they have some revenue
       if (leaderboard.length > 0 && leaderboard[0].blended_revenue > 0) {
         leaderboard[0].isLeaderOfMonth = true;
       }
@@ -757,7 +477,6 @@ export async function getUnifiedCRMData(
 
     const activeProject = allowedProjects.find((p) => p.slug === activeSlug)!;
 
-    // Check if there is a Head of Sales (ROP) assigned to this project
     const { data: assignedProfilesData } = await adminSupabase
       .from("profile_projects")
       .select("profiles(role)")
@@ -769,643 +488,56 @@ export async function getUnifiedCRMData(
 
     const isSalesFiltered = profile.role === "sales" && hasRop;
 
-    // Fetch all paged records helper function in parallel
-    const fetchAllParallel = async (
-      countQuery: () => Promise<any> | any,
-      fetchPageFn: (from: number, to: number) => Promise<any> | any
-    ) => {
-      const { count, error: countErr } = await countQuery();
-      if (countErr) throw countErr;
-      const total = count || 0;
-      if (total === 0) return [];
+    // --- Caching Rebuild Trigger Check ---
+    const cacheCheckStart = performance.now();
+    const { data: dirtyQueue } = await adminSupabase
+      .from("crm_cache_dirty_queue")
+      .select("is_dirty, metadata")
+      .eq("project_id", activeProject.id)
+      .maybeSingle();
 
-      const limit = 1000;
-      const pagesCount = Math.ceil(total / limit);
-      const promises = [];
+    const { count: cachedCount } = await adminSupabase
+      .from("crm_leads_cache")
+      .select("*", { count: "exact", head: true })
+      .eq("project_id", activeProject.id);
 
-      for (let i = 0; i < pagesCount; i++) {
-        const from = i * limit;
-        const to = from + limit - 1;
-        promises.push(fetchPageFn(from, to));
-      }
+    const needsRebuild = !dirtyQueue || dirtyQueue.is_dirty || cachedCount === 0;
 
-      const results = await Promise.all(promises);
-      let combinedData: any[] = [];
-      for (const res of results) {
-        if (res.error) throw res.error;
-        combinedData = [...combinedData, ...(res.data || [])];
-      }
-      return combinedData;
-    };
+    if (needsRebuild) {
+      // Lazy cache rebuilding
+      await rebuildProjectCache(activeProject.id, activeProject.slug);
+    }
+    const cacheCheckEnd = performance.now();
+    const cacheCheckMs = cacheCheckEnd - cacheCheckStart;
 
-    // Parallel fetch using adminSupabase (bypassing RLS safely)
-    const dbFetchStart = performance.now();
-    const [allCustomers, allOrders, allTraffic, costsRes] = await Promise.all([
-      fetchAllParallel(
-        () => {
-          let q = adminSupabase.from("unified_customers").select("*", { count: "exact", head: true }).eq("project_id", activeProject.id);
-          if (isSalesFiltered) {
-            q = q.eq("assigned_manager_id", user.id);
-          }
-          return q;
-        },
-        (from, to) => {
-          let q = adminSupabase.from("unified_customers").select("*").eq("project_id", activeProject.id);
-          if (isSalesFiltered) {
-            q = q.eq("assigned_manager_id", user.id);
-          }
-          return q.range(from, to);
-        }
-      ),
-      fetchAllParallel(
-        () => adminSupabase.from("unified_orders").select("*", { count: "exact", head: true }).eq("project_id", activeProject.id),
-        (from, to) => {
-          return adminSupabase
-            .from("unified_orders")
-            .select("*")
-            .eq("project_id", activeProject.id)
-            .order("created_at", { ascending: false })
-            .range(from, to);
-        }
-      ),
-      filters?.skipTraffic
-        ? Promise.resolve([])
-        : fetchAllParallel(
-            () => adminSupabase.from("traffic_clicks").select("*", { count: "exact", head: true }).eq("project_id", activeProject.id),
-            (from, to) => {
-              return adminSupabase
-                .from("traffic_clicks")
-                .select("*")
-                .eq("project_id", activeProject.id)
-                .order("created_at", { ascending: false })
-                .range(from, to);
-            }
-          ),
-      adminSupabase
-        .from("daily_traffic_and_costs")
-        .select("*")
-        .eq("project_id", activeProject.id)
-        .order("date", { ascending: false })
-    ]);
-    const dbFetchEnd = performance.now();
-    const dbFetchMs = dbFetchEnd - dbFetchStart;
+    // Get diagnostics issues and data health from pre-calculated cache queue metadata
+    const { data: refreshedQueue } = await adminSupabase
+      .from("crm_cache_dirty_queue")
+      .select("metadata")
+      .eq("project_id", activeProject.id)
+      .maybeSingle();
+    
+    const cachedMetadata = refreshedQueue?.metadata || {};
+    const dataHealth = cachedMetadata.dataHealth || { leadsWithoutUuidCount: 0, ordersWithAmountAndClickStatusCount: 0, unparseableMetadataDatesCount: 0 };
+    const diagnosticsIssues = cachedMetadata.diagnosticsIssues || { nameless: [], unmatchedUrls: [], currencyErrors: [] };
 
-    const costs = costsRes.data || [];
+    // --- Query crm_leads_cache for paginated leads ---
+    let query = adminSupabase
+      .from("crm_leads_cache")
+      .select("*", { count: "exact" })
+      .eq("project_id", activeProject.id);
 
-    // Separate real leads from raw traffic click session logs
-    const leads = allOrders;
-    const traffic = allTraffic;
+    // Apply exact same filters to aggregated light rows query
+    let aggQuery = adminSupabase
+      .from("crm_leads_cache")
+      .select("usd_paid, uah_paid, eur_paid, usd_tripwire_paid, uah_tripwire_paid, eur_tripwire_paid, usd_course_count, uah_course_count, eur_course_count, usd_tripwire_count, uah_tripwire_count, eur_tripwire_count, status, utm_source, utm_medium, utm_campaign, utm_content, target_sheet, visited_landings, created_at, is_unpaid_intent, touch_count")
+      .eq("project_id", activeProject.id);
 
-    // Fetch all profiles to map sales manager names
-    const { data: allProfiles } = await adminSupabase
-      .from("profiles")
-      .select("id, email, full_name");
-    const profilesList = allProfiles || [];
-
-    // Format leads with customer fields
-    const formattedLeads = leads.map((lead) => {
-      const cust = allCustomers.find((c) => c.id === lead.customer_id) || {};
-      const manager = profilesList.find((p) => p.id === cust.assigned_manager_id);
-      const managerName = manager ? (manager.full_name || manager.email) : "";
-
-      return {
-        ...lead,
-        name: cust.name || lead.metadata?.name || lead.metadata?.lead?.name || "Невідомий",
-        phone: cust.phone || lead.metadata?.phone || lead.metadata?.lead?.phone || "",
-        telegram: cust.telegram || lead.metadata?.telegram || lead.metadata?.lead?.telegram || "",
-        email: cust.email || lead.metadata?.email || lead.metadata?.lead?.email || "",
-        managerComment: cust.manager_comment || "",
-        customerId: lead.customer_id || null,
-        assigned_manager_id: cust.assigned_manager_id || null,
-        assigned_manager_name: managerName,
-      };
-    });
-
-    // --- DSU Clustering / Deduplication engine on server ---
-    const jsClusteringStart = performance.now();
-    const size = formattedLeads.length;
-    const dsu = new DSU(size);
-
-    const phoneMap = new Map<string, number>();
-    const tgMap = new Map<string, number>();
-    const emailMap = new Map<string, number>();
-    const uuidMap = new Map<string, number>();
-
-    const getDiagnosticsComment = (groupLeads: any[]): string => {
-      const answers: string[] = [];
-      const hasRozbir = groupLeads.some((lead) => {
-        const meta = lead.metadata || {};
-        const raw = meta.raw_row || {};
-        const path = lead.page_path || raw.page_path || "";
-        const url = lead.page_url || raw.page_url || "";
-        const origSheet = meta.original_sheet || raw.original_sheet || "";
-        return path === "/rozbir" || url.toLowerCase().includes("/rozbir") || origSheet === "Розбір (Old)" || origSheet === "Ленд 3";
-      });
-      if (hasRozbir) {
-        answers.push("Анкета: rozbir");
-      }
-
-      const QUESTION_LABELS: Record<string, string> = {
-        "purpose": "Мета",
-        "subscription_duration": "Як давно підписана",
-        "difficulties": "Складнощі з блогом",
-        "readiness": "Готовність до роботи",
-        "niche": "Ніша",
-        "instagram": "Instagram",
-        "social": "Telegram",
-        "telegram": "Telegram",
-        "phone": "Телефон",
-        "name": "Ім'я",
-        "що турбує": "Що турбує",
-        "Чи колола ботокс, або подібне": "Ботокс",
-        "Тип старіння": "Тип старіння",
-        "Рівень доходу": "Дохід",
-        "Дохід": "Дохід",
-        "Фінансова ціль": "Фінансова ціль",
-        "Ціль": "Ціль",
-        "Борги": "Борги",
-        "Чи є борги зараз": "Борги",
-        "За який термін вийти на 100 000$": "Термін 100k$",
-        "Відповідь 1 (скільки витрачаєш на косметику в міс.)": "Витрати на косметику",
-        "Коментар": "Коментар",
-        "request": "Запит",
-        "tariff": "Тариф"
-      };
-
-      const EXCLUDED_KEYS = new Set([
-        "visitor_id", "visitorid", "page_path", "full_url", "target_sheet",
-        "sheet_id", "entry_month", "vsl_sendpulse_stage", "api_key",
-        "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
-        "consent", "amount", "currency", "status", "action", "sp_contact_id",
-        "tg_msg_id", "customer_name", "customer_phone", "uavslab", "id", "created_at"
-      ]);
-
-      const addedKeys = new Set<string>();
-
-      groupLeads.forEach((lead) => {
-        const meta = lead.metadata || {};
-        const raw = meta.raw_row || {};
-        
-        let payload = raw.raw_payload || meta.raw_payload || lead.raw_payload || {};
-        if (typeof payload === "string") {
-          try {
-            payload = JSON.parse(payload);
-          } catch (e) {}
-        }
-
-        // 1. Process fields in raw_payload
-        if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-          Object.entries(payload).forEach(([k, val]) => {
-            if (EXCLUDED_KEYS.has(k.toLowerCase().trim())) return;
-            if (val && String(val).trim()) {
-              const label = QUESTION_LABELS[k] || k;
-              const formattedVal = String(val).trim();
-              const uniqueKey = `${label.toLowerCase()}:${formattedVal.toLowerCase()}`;
-              if (!addedKeys.has(uniqueKey)) {
-                answers.push(`${label}: ${formattedVal}`);
-                addedKeys.add(uniqueKey);
-              }
-            }
-          });
-        }
-
-        // 2. Fallback to raw database columns if not already added
-        const quizFields = [
-          { key: "що турбує", label: "Що турбує" },
-          { key: "Чи колола ботокс, або подібне", label: "Ботокс" },
-          { key: "Тип старіння", label: "Тип старіння" },
-          { key: "Рівень доходу", label: "Дохід" },
-          { key: "Дохід", label: "Дохід" },
-          { key: "Фінансова ціль", label: "Фінансова ціль" },
-          { key: "Ціль", label: "Ціль" },
-          { key: "Борги", label: "Борги" },
-          { key: "Чи є борги зараз", label: "Борги" },
-          { key: "За який термін вийти на 100 000$", label: "Термін 100k$" },
-          { key: "Відповідь 1 (скільки витрачаєш на косметику в міс.)", label: "Витрати на косметику" },
-          { key: "niche", label: "Ніша" },
-          { key: "Коментар", label: "Коментар" },
-          { key: "request", label: "Запит" },
-          { key: "tariff", label: "Тариф" }
-        ];
-
-        quizFields.forEach((f) => {
-          const val = raw[f.key] || meta[f.key];
-          if (val && String(val).trim()) {
-            const formattedVal = String(val).trim();
-            const uniqueKey = `${f.label.toLowerCase()}:${formattedVal.toLowerCase()}`;
-            if (!addedKeys.has(uniqueKey)) {
-              answers.push(`${f.label}: ${formattedVal}`);
-              addedKeys.add(uniqueKey);
-            }
-          }
-        });
-
-        // 3. Fallback to dynamic keys in raw matching "питання" or "відповідь"
-        Object.keys(raw).forEach((k) => {
-          if (k.toLowerCase().includes("питання") || k.toLowerCase().includes("відповідь")) {
-            const val = raw[k];
-            if (val && String(val).trim()) {
-              const formattedVal = String(val).trim();
-              const uniqueKey = `${k.toLowerCase()}:${formattedVal.toLowerCase()}`;
-              if (!addedKeys.has(uniqueKey)) {
-                answers.push(`${k}: ${formattedVal}`);
-                addedKeys.add(uniqueKey);
-              }
-            }
-          }
-        });
-
-        // 4. Process quiz_result
-        const quizResult = raw.quiz_result || meta.quiz_result;
-        if (quizResult) {
-          if (typeof quizResult === "object") {
-            Object.entries(quizResult).forEach(([k, v]) => {
-              if (v) {
-                const label = QUESTION_LABELS[k] || k;
-                const formattedVal = String(v).trim();
-                const uniqueKey = `${label.toLowerCase()}:${formattedVal.toLowerCase()}`;
-                if (!addedKeys.has(uniqueKey)) {
-                  answers.push(`${label}: ${formattedVal}`);
-                  addedKeys.add(uniqueKey);
-                }
-              }
-            });
-          } else {
-            const formattedVal = String(quizResult).trim();
-            const uniqueKey = `quiz:${formattedVal.toLowerCase()}`;
-            if (!addedKeys.has(uniqueKey)) {
-              answers.push(`Quiz: ${formattedVal}`);
-              addedKeys.add(uniqueKey);
-            }
-          }
-        }
-
-        // 5. Process query
-        const queryVal = raw.query || meta.query;
-        if (queryVal) {
-          if (typeof queryVal === "object") {
-            Object.entries(queryVal).forEach(([k, v]) => {
-              if (v) {
-                const label = QUESTION_LABELS[k] || k;
-                const formattedVal = String(v).trim();
-                const uniqueKey = `${label.toLowerCase()}:${formattedVal.toLowerCase()}`;
-                if (!addedKeys.has(uniqueKey)) {
-                  answers.push(`${label}: ${formattedVal}`);
-                  addedKeys.add(uniqueKey);
-                }
-              }
-            });
-          } else {
-            const formattedVal = String(queryVal).trim();
-            const uniqueKey = `запит:${formattedVal.toLowerCase()}`;
-            if (!addedKeys.has(uniqueKey)) {
-              answers.push(`Запит: ${formattedVal}`);
-              addedKeys.add(uniqueKey);
-            }
-          }
-        }
-      });
-
-      return Array.from(new Set(answers)).join("\n");
-    };
-
-    // Cluster leads
-    formattedLeads.forEach((lead: any, i: number) => {
-      const phone = lead.phone?.replace(/\D/g, "") || "";
-      const tg = lead.telegram?.toLowerCase().replace("@", "").trim() || "";
-      const email = lead.email?.toLowerCase().trim() || "";
-      const uuid = lead.visitor_uuid || "";
-
-      if (phone.length >= 7) {
-        if (phoneMap.has(phone)) dsu.union(i, phoneMap.get(phone)!);
-        else phoneMap.set(phone, i);
-      }
-      if (tg) {
-        if (tgMap.has(tg)) dsu.union(i, tgMap.get(tg)!);
-        else tgMap.set(tg, i);
-      }
-      if (email) {
-        if (emailMap.has(email)) dsu.union(i, emailMap.get(email)!);
-        else emailMap.set(email, i);
-      }
-      if (uuid) {
-        if (uuidMap.has(uuid)) dsu.union(i, uuidMap.get(uuid)!);
-        else uuidMap.set(uuid, i);
-      }
-    });
-
-    const groups = new Map<number, number[]>();
-    for (let i = 0; i < size; i++) {
-      const root = dsu.find(i);
-      if (!groups.has(root)) groups.set(root, []);
-      groups.get(root)!.push(i);
+    if (isSalesFiltered) {
+      query = query.eq("assigned_manager_id", user.id);
+      aggQuery = aggQuery.eq("assigned_manager_id", user.id);
     }
 
-    const normalizeStatus = (lead: any): string => {
-      const s = lead.status;
-      if (!s) return "Новий лід";
-      const normalized = statusMapper.normalize(s);
-
-      const originalSheet = String(lead.metadata?.original_sheet || lead.metadata?.lead?.original_sheet || "").trim();
-      const targetSheet = String(lead.metadata?.target_sheet || lead.metadata?.lead?.target_sheet || "").trim();
-      const courseName = String(lead.metadata?.leadData?.course || lead.metadata?.lead?.leadData?.course || "").trim();
-      const orderProj = allowedProjects.find((p: any) => p.id === lead.project_id);
-      const orderSlug = orderProj?.slug || "";
-
-      const isTripwire =
-        ["Практикум", "Practicum_Leads", "Заявки на практикум", "Miні-курс"].includes(originalSheet) ||
-        ["Практикум", "Practicum_Leads", "Заявки на практикум", "Miні-курс"].includes(targetSheet) ||
-        courseName.includes("Mini-Course") ||
-        courseName.includes("Practicum") ||
-        courseName.includes("Практикум") ||
-        courseName.includes("Міні-курс") ||
-        orderSlug === "sofia" ||
-        orderSlug === "valeria" ||
-        activeProject?.slug === "sofia" ||
-        activeProject?.slug === "valeria";
-
-      const isProjectAlwaysTripwire =
-        ["sofia", "valeria"].includes(orderSlug) ||
-        ["sofia", "valeria"].includes(activeProject?.slug || "");
-
-      if (normalized === "closed_won") {
-        return (isTripwire || isProjectAlwaysTripwire) ? "Купив(-ла) Трипвайер" : "Купив курс";
-      }
-      if (normalized === "declined") {
-        return "Відмова";
-      }
-      const lower = s.toLowerCase().trim();
-      if (
-        lower === "new" ||
-        lower === "pending" ||
-        lower === "зареєстровано" ||
-        lower.includes("очікується") ||
-        lower === "новий лід" ||
-        lower === "новий" ||
-        lower === "передано у вп" ||
-        lower === "очікує оплати"
-      ) {
-        return "Новий лід";
-      }
-      if (lower === "діагностика" || lower === "диагностика" || lower === "заявка") {
-        return "Залишив заявку";
-      }
-      if (lower === "в роботі" || lower === "списались") {
-        return "Списались";
-      }
-      if (lower === "зустріч призначена" || lower === "назначено дзвінок" || lower === "діагн. запланована") {
-        return "Назначено Дзвінок";
-      }
-      if (lower === "зустріч проведена" || lower === "дзвінок проведено" || lower === "діагн. проведена") {
-        return "Дзвінок проведено";
-      }
-      if (lower === "вирішив подумати" || lower.includes("подумати")) {
-        return "Вирішив подумати";
-      }
-      if (lower === "купив трипвайєр" || lower === "купив трипвайер" || lower === "купив(-ла) трипвайер") {
-        return "Купив(-ла) Трипвайер";
-      }
-      if (lower === "купив курс" || lower === "купив_курс") {
-        return isProjectAlwaysTripwire ? "Купив(-ла) Трипвайер" : "Купив курс";
-      }
-      if (lower === "зацікавлений лід" || lower === "зацікавлений") {
-        return "Зацікавлений лід";
-      }
-      return "Новий лід";
-    };
-
-    const allClustered = Array.from(groups.values()).map((indices) => {
-      const groupLeads = indices.map((idx) => formattedLeads[idx]);
-
-      const normalizedGroupLeads = groupLeads.map((item) => {
-        return {
-          ...item,
-          status: normalizeStatus(item)
-        };
-      });
-
-      const primaryLead = normalizedGroupLeads.reduce((best, curr) => {
-        const bestScore = (best.name?.length || 0) + (best.phone ? 5 : 0) + (best.telegram ? 5 : 0);
-        const currScore = (curr.name?.length || 0) + (curr.phone ? 5 : 0) + (curr.telegram ? 5 : 0);
-        return currScore > bestScore ? curr : best;
-      }, normalizedGroupLeads[0]);
-
-      let usdCoursePaid = 0;
-      let uahCoursePaid = 0;
-      let eurCoursePaid = 0;
-      let usdTripwirePaid = 0;
-      let uahTripwirePaid = 0;
-      let eurTripwirePaid = 0;
-      let usdAttempted = 0;
-      let uahAttempted = 0;
-      let eurAttempted = 0;
-
-      const uniqueOrders = new Map<string, any>();
-      normalizedGroupLeads.forEach((item) => {
-        const orderId = item.order_id || item.id;
-        const projectId = item.project_id;
-        const orderKey = `${orderId}_${projectId}`;
-
-        const existing = uniqueOrders.get(orderKey);
-        if (!existing) {
-          uniqueOrders.set(orderKey, item);
-        } else {
-          const existingIsPaid = existing.status === "Купив курс" || existing.status === "Купив(-ла) Трипвайер";
-          const itemIsPaid = item.status === "Купив курс" || item.status === "Купив(-ла) Трипвайер";
-
-          if (itemIsPaid && !existingIsPaid) {
-            uniqueOrders.set(orderKey, item);
-          } else if (!itemIsPaid && existingIsPaid) {
-            // Keep existing
-          } else {
-            const existingTime = new Date(existing.created_at || 0).getTime();
-            const itemTime = new Date(item.created_at || 0).getTime();
-            if (itemTime > existingTime) {
-              uniqueOrders.set(orderKey, item);
-            } else if (itemTime === existingTime) {
-              if (Number(item.amount || 0) > Number(existing.amount || 0)) {
-                uniqueOrders.set(orderKey, item);
-              }
-            }
-          }
-        }
-      });
-
-      let usdCourseCount = 0;
-      let uahCourseCount = 0;
-      let eurCourseCount = 0;
-      let usdTripwireCount = 0;
-      let uahTripwireCount = 0;
-      let eurTripwireCount = 0;
-
-      uniqueOrders.forEach((item) => {
-        const amt = Number(item.amount || 0);
-        if (amt === 0) return;
-
-        const metaCurrency = String(
-          item.metadata?.currency ||
-          item.metadata?.lead?.currency ||
-          item.metadata?.raw_row?.currency ||
-          item.metadata?.raw_row?.raw_payload?.currency ||
-          ""
-        ).trim().toLowerCase();
-        const orderProj = allowedProjects.find((p: any) => p.id === item.project_id);
-        const orderSlug = orderProj?.slug || "";
-
-        const isEur = ["eur", "€"].includes(metaCurrency);
-        const isUsd = ["usd", "$"].includes(metaCurrency);
-        const isUah = ["uah", "₴"].includes(metaCurrency);
-
-        const isProjectAlwaysTripwire =
-          ["sofia", "valeria"].includes(orderSlug) ||
-          ["sofia", "valeria"].includes(activeProject?.slug || "");
-
-        if (item.status === "Купив курс" && !isProjectAlwaysTripwire) {
-          if (isUsd) { usdCoursePaid += amt; usdCourseCount++; }
-          else if (isEur) { eurCoursePaid += amt; eurCourseCount++; }
-          else if (isUah) { uahCoursePaid += amt; uahCourseCount++; }
-        } else if (item.status === "Купив(-ла) Трипвайер" || (item.status === "Купив курс" && isProjectAlwaysTripwire)) {
-          if (isUsd) { usdTripwirePaid += amt; usdTripwireCount++; }
-          else if (isEur) { eurTripwirePaid += amt; eurTripwireCount++; }
-          else if (isUah) { uahTripwirePaid += amt; uahTripwireCount++; }
-        } else {
-          if (isUsd) usdAttempted += amt;
-          else if (isEur) eurAttempted += amt;
-          else if (isUah) uahAttempted += amt;
-        }
-      });
-
-      const primaryStatus = normalizedGroupLeads.reduce((best, curr) => {
-        return statusPriority(curr.status) > statusPriority(best) ? curr.status : best;
-      }, "Новий лід");
-
-      let finalStatus = primaryStatus;
-      if (normalizedGroupLeads.length >= 2 && statusPriority(finalStatus) <= statusPriority("Зацікавлений лід")) {
-        finalStatus = "Зацікавлений лід";
-      }
-
-      const isMultiSource = new Set(normalizedGroupLeads.map((l) => getTouchUtm(l, "source")).filter(Boolean)).size > 1;
-
-      const actualOrdersDesc = normalizedGroupLeads
-        .filter((l) => l.status !== "Клик" && l.status !== "КликФормы")
-        .sort((a, b) => getLeadDate(b).getTime() - getLeadDate(a).getTime());
-
-      const coldClicksDesc = normalizedGroupLeads
-        .filter((l) => l.status === "Клик" || l.status === "КликФормы")
-        .sort((a, b) => getLeadDate(b).getTime() - getLeadDate(a).getTime());
-
-      const prioritizedTouches = [...actualOrdersDesc, ...coldClicksDesc];
-
-      const utm_source = prioritizedTouches.map((l) => getTouchUtm(l, "source")).find(Boolean) || "";
-      const utm_medium = prioritizedTouches.map((l) => getTouchUtm(l, "medium")).find(Boolean) || "";
-      const utm_campaign = prioritizedTouches.map((l) => getTouchUtm(l, "campaign")).find(Boolean) || "";
-      const utm_content = prioritizedTouches.map((l) => getTouchUtm(l, "content")).find(Boolean) || "";
-      const utm_term = prioritizedTouches.map((l) => getTouchUtm(l, "term")).find(Boolean) || "";
-
-      const page_path = normalizedGroupLeads.find((l) => l.page_path && l.page_path !== "/")?.page_path || primaryLead.page_path || "/";
-      const page_url = prioritizedTouches.map(getTouchPageUrl).find((url) => url !== "") || getTouchPageUrl(primaryLead);
-
-      const latestTouch = normalizedGroupLeads.reduce((latest, curr) => {
-        return getLeadDate(curr).getTime() > getLeadDate(latest).getTime() ? curr : latest;
-      }, normalizedGroupLeads[0]);
-
-      const updatedMetadata = {
-        ...primaryLead.metadata,
-        raw_row: primaryLead.metadata?.raw_row ? {
-          ...primaryLead.metadata.raw_row,
-          "Дата": undefined,
-          "дата": undefined,
-          "Date": undefined,
-          "date": undefined,
-        } : undefined,
-        created_at: undefined,
-        lead: primaryLead.metadata?.lead ? {
-          ...primaryLead.metadata.lead,
-          created_at: undefined
-        } : undefined
-      };
-
-      if (latestTouch.metadata?.raw_row?.Дата) {
-        if (!updatedMetadata.raw_row) updatedMetadata.raw_row = {};
-        updatedMetadata.raw_row["Дата"] = latestTouch.metadata.raw_row["Дата"];
-      } else if (latestTouch.metadata?.raw_row?.дата) {
-        if (!updatedMetadata.raw_row) updatedMetadata.raw_row = {};
-        updatedMetadata.raw_row["дата"] = latestTouch.metadata.raw_row["дата"];
-      } else if (latestTouch.metadata?.raw_row?.Date) {
-        if (!updatedMetadata.raw_row) updatedMetadata.raw_row = {};
-        updatedMetadata.raw_row["Date"] = latestTouch.metadata.raw_row["Date"];
-      } else if (latestTouch.metadata?.raw_row?.date) {
-        if (!updatedMetadata.raw_row) updatedMetadata.raw_row = {};
-        updatedMetadata.raw_row["date"] = latestTouch.metadata.raw_row["date"];
-      } else if (latestTouch.metadata?.created_at) {
-        updatedMetadata.created_at = latestTouch.metadata.created_at;
-      } else if (latestTouch.metadata?.lead?.created_at) {
-        if (!updatedMetadata.lead) updatedMetadata.lead = {};
-        updatedMetadata.lead.created_at = latestTouch.metadata.lead.created_at;
-      }
-
-      return {
-        ...primaryLead,
-        created_at: latestTouch.created_at,
-        metadata: updatedMetadata,
-        name: primaryLead.name || "Невідомий",
-        phone: primaryLead.phone || "",
-        telegram: primaryLead.telegram || "",
-        email: primaryLead.email || "",
-        page_path,
-        page_url,
-        status: finalStatus,
-        usdPaid: usdCoursePaid,
-        uahPaid: uahCoursePaid,
-        eurPaid: eurCoursePaid,
-        usdTripwirePaid,
-        uahTripwirePaid,
-        eurTripwirePaid,
-        usdAttempted,
-        uahAttempted,
-        eurAttempted,
-        amount: usdCoursePaid,
-        uahAmount: uahCoursePaid,
-        eurAmount: eurCoursePaid,
-        attemptedAmount: usdAttempted,
-        uahAttemptedAmount: uahAttempted,
-        eurAttemptedAmount: eurAttempted,
-        usdCourseCount,
-        uahCourseCount,
-        eurCourseCount,
-        usdTripwireCount,
-        uahTripwireCount,
-        eurTripwireCount,
-        utm_source: utm_source || getTouchUtm(primaryLead, "source"),
-        utm_medium: utm_medium || getTouchUtm(primaryLead, "medium"),
-        utm_campaign: utm_campaign || getTouchUtm(primaryLead, "campaign"),
-        utm_content: utm_content || getTouchUtm(primaryLead, "content"),
-        utm_term: utm_term || getTouchUtm(primaryLead, "term"),
-        history: [...normalizedGroupLeads].sort((a, b) => getLeadDate(a).getTime() - getLeadDate(b).getTime()),
-        isMultiSource,
-        touchCount: normalizedGroupLeads.length,
-        diagnosticsComment: getDiagnosticsComment(normalizedGroupLeads),
-        managerComment: primaryLead.managerComment || "",
-      };
-
-    });
-    const jsClusteringEnd = performance.now();
-    const jsClusteringMs = jsClusteringEnd - jsClusteringStart;
-
-    const clusteredFiltered = allClustered.filter((lead: any) => {
-      const nameVal = lead.name?.trim();
-      const hasRealName = nameVal && nameVal !== "" && nameVal !== "Невідомий";
-      const hasPhone = !!lead.phone?.trim();
-      const hasTelegram = !!lead.telegram?.trim();
-      const hasEmail = !!lead.email?.trim();
-      const hasContacts = hasRealName || hasPhone || hasTelegram || hasEmail;
-      const isPaid = lead.status === "Купив курс" || lead.status === "Купив(-ла) Трипвайер";
-      return hasContacts || isPaid;
-    });
-
-    // --- Apply CRM Filters on server ---
-    const page = filters?.page || 1;
-    const pageSize = filters?.pageSize || 50;
     const searchQuery = filters?.searchQuery || "";
     const statusFilter = filters?.statusFilter || "all";
     const touchCountFilter = filters?.touchCountFilter || "all";
@@ -1415,67 +547,99 @@ export async function getUnifiedCRMData(
     const endDate = filters?.endDate || "";
     const selectedLanding = filters?.selectedLanding || "all";
 
-    const filteredLeads = clusteredFiltered.filter((lead: any) => {
-      // 1. Search Query
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        const matchSearch =
-          lead.name?.toLowerCase().includes(query) ||
-          lead.phone?.toLowerCase().includes(query) ||
-          lead.telegram?.toLowerCase().includes(query) ||
-          lead.email?.toLowerCase().includes(query);
-        if (!matchSearch) return false;
+    // Build filter statements
+    if (searchQuery) {
+      const q = `%${searchQuery}%`;
+      query = query.or(`name.ilike.${q},phone.ilike.${q},telegram.ilike.${q},email.ilike.${q}`);
+      aggQuery = aggQuery.or(`name.ilike.${q},phone.ilike.${q},telegram.ilike.${q},email.ilike.${q}`);
+    }
+    if (statusFilter !== "all") {
+      query = query.eq("status", statusFilter);
+      aggQuery = aggQuery.eq("status", statusFilter);
+    }
+    if (touchCountFilter !== "all") {
+      if (touchCountFilter === "multi") {
+        query = query.gte("touch_count", 2);
+        aggQuery = aggQuery.gte("touch_count", 2);
+      } else if (touchCountFilter === "single") {
+        query = query.eq("touch_count", 1);
+        aggQuery = aggQuery.eq("touch_count", 1);
       }
+    }
+    if (sourceFilter !== "all") {
+      query = query.eq("target_sheet", sourceFilter);
+      aggQuery = aggQuery.eq("target_sheet", sourceFilter);
+    }
+    if (unpaidIntentOnly) {
+      query = query.eq("is_unpaid_intent", true);
+      aggQuery = aggQuery.eq("is_unpaid_intent", true);
+    }
+    if (startDate) {
+      const startStr = parseClientDateRange(startDate, false).toISOString();
+      query = query.gte("created_at", startStr);
+      aggQuery = aggQuery.gte("created_at", startStr);
+    }
+    if (endDate) {
+      const endStr = parseClientDateRange(endDate, true).toISOString();
+      query = query.lte("created_at", endStr);
+      aggQuery = aggQuery.lte("created_at", endStr);
+    }
+    if (selectedLanding !== "all") {
+      query = query.contains("visited_landings", [selectedLanding]);
+      aggQuery = aggQuery.contains("visited_landings", [selectedLanding]);
+    }
 
-      // 2. Status
-      if (statusFilter !== "all" && lead.status !== statusFilter) return false;
+    const page = filters?.page || 1;
+    const pageSize = filters?.pageSize || 50;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
 
-      // 3. Touch Count
-      if (touchCountFilter !== "all") {
-        if (touchCountFilter === "multi") {
-          if (lead.touchCount < 2) return false;
-        } else if (touchCountFilter === "single") {
-          if (lead.touchCount !== 1) return false;
-        }
-      }
+    const dbQueryStart = performance.now();
+    const [leadsRes, aggRes, allTrafficRes, costsRes, allProfilesRes] = await Promise.all([
+      query.order("created_at", { ascending: false }).range(from, to),
+      aggQuery,
+      filters?.skipTraffic
+        ? Promise.resolve({ data: [] })
+        : adminSupabase.from("traffic_clicks").select("*").eq("project_id", activeProject.id).order("created_at", { ascending: false }),
+      adminSupabase.from("daily_traffic_and_costs").select("*").eq("project_id", activeProject.id).order("date", { ascending: false }),
+      adminSupabase.from("profiles").select("id, email, full_name")
+    ]);
+    const dbQueryEnd = performance.now();
+    const dbQueryMs = dbQueryEnd - dbQueryStart;
 
-      // 4. Source
-      if (sourceFilter !== "all") {
-        const source = lead.metadata?.target_sheet || lead.metadata?.lead?.target_sheet || lead.utm_source || "";
-        if (source.toLowerCase() !== sourceFilter.toLowerCase()) return false;
-      }
+    if (leadsRes.error) throw leadsRes.error;
+    if (aggRes.error) throw aggRes.error;
 
-      // 5. Unpaid intent
-      if (unpaidIntentOnly) {
-        const hasPayment = lead.history.some((o: any) => o.status === "Купив курс" || o.status === "Купив(-ла) Трипвайер" || o.amount > 0);
-        const hasCheckout = lead.history.some(
-          (o: any) => o.status === "⏳ Очікується оплата" || (o.order_id && !o.order_id.startsWith("ELT_ORD_")) || o.metadata?.payment_intent
-        );
-        if (hasPayment || !hasCheckout) return false;
-      }
+    const paginatedLeads = leadsRes.data || [];
+    const totalCount = leadsRes.count || 0;
+    const filteredRows = aggRes.data || [];
+    const allTraffic = allTrafficRes.data || [];
+    const costs = costsRes.data || [];
+    const profilesList = allProfilesRes.data || [];
 
-      // 6. Dates (Kyiv Timezone Aligned)
-      if (startDate) {
-        const leadDate = getLeadDate(lead);
-        const start = parseClientDateRange(startDate, false);
-        if (leadDate < start) return false;
-      }
-      if (endDate) {
-        const leadDate = getLeadDate(lead);
-        const end = parseClientDateRange(endDate, true);
-        if (leadDate > end) return false;
-      }
-
-      // 7. Landing
-      if (!isLeadMatchingLanding(lead, selectedLanding, activeSlug)) return false;
-
-      return true;
+    // Map manager names for paginated leads
+    const leads = paginatedLeads.map((lead: any) => {
+      const manager = profilesList.find((p) => p.id === lead.assigned_manager_id);
+      return {
+        ...lead,
+        assigned_manager_name: manager ? (manager.full_name || manager.email) : "",
+      };
     });
 
-    // --- Statistics Calculations on server ---
-    const totalLeads = filteredLeads.length;
+    // Run diagnostics check nameless leads in cache directly (very fast count)
+    const { data: namelessRows } = await adminSupabase
+      .from("crm_leads_cache")
+      .select("id, name, phone, telegram")
+      .eq("project_id", activeProject.id)
+      .eq("name", "Невідомий")
+      .not("phone", "is", null)
+      .limit(100);
+    diagnosticsIssues.nameless = namelessRows || [];
 
-    // Filter costs (Kyiv Timezone Aligned)
+    // Calculate aggregated stats on filtered rows
+    const totalLeads = filteredRows.length;
+
+    // Filter costs
     const filteredCosts = costs.filter((c: any) => {
       if (startDate) {
         const cDate = parseClientDateRange(c.date, false);
@@ -1491,17 +655,14 @@ export async function getUnifiedCRMData(
     });
     const totalCostsSpend = filteredCosts.reduce((sum: number, c: any) => sum + Number(c.spend || 0), 0);
 
-    const totalApplications = filteredLeads.filter((l: any) =>
-      statusPriority(l.status) >= 3 ||
-      l.history.some((h: any) => statusPriority(h.status) >= 3)
-    ).length;
+    const totalApplications = filteredRows.filter((l: any) => statusPriority(l.status) >= 3).length;
 
-    const usdCourseRevenue = filteredLeads.reduce((sum, l) => sum + Number(l.usdPaid || 0), 0);
-    const uahCourseRevenue = filteredLeads.reduce((sum, l) => sum + Number(l.uahPaid || 0), 0);
-    const eurCourseRevenue = filteredLeads.reduce((sum, l) => sum + Number(l.eurPaid || 0), 0);
-    const usdTripwireRevenue = filteredLeads.reduce((sum, l) => sum + Number(l.usdTripwirePaid || 0), 0);
-    const uahTripwireRevenue = filteredLeads.reduce((sum, l) => sum + Number(l.uahTripwirePaid || 0), 0);
-    const eurTripwireRevenue = filteredLeads.reduce((sum, l) => sum + Number(l.eurTripwirePaid || 0), 0);
+    const usdCourseRevenue = filteredRows.reduce((sum, l) => sum + Number(l.usd_paid || 0), 0);
+    const uahCourseRevenue = filteredRows.reduce((sum, l) => sum + Number(l.uah_paid || 0), 0);
+    const eurCourseRevenue = filteredRows.reduce((sum, l) => sum + Number(l.eur_paid || 0), 0);
+    const usdTripwireRevenue = filteredRows.reduce((sum, l) => sum + Number(l.usd_tripwire_paid || 0), 0);
+    const uahTripwireRevenue = filteredRows.reduce((sum, l) => sum + Number(l.uah_tripwire_paid || 0), 0);
+    const eurTripwireRevenue = filteredRows.reduce((sum, l) => sum + Number(l.eur_tripwire_paid || 0), 0);
 
     const totalUsdRevenue = usdCourseRevenue + usdTripwireRevenue;
     const totalUahRevenue = uahCourseRevenue + uahTripwireRevenue;
@@ -1511,13 +672,13 @@ export async function getUnifiedCRMData(
     const blendedRevenue = totalUsdRevenue + (totalUahRevenue / 41.0) + (totalEurRevenue * 1.08);
     const roi = totalCostsSpend > 0 ? (blendedRevenue / totalCostsSpend) * 100 : 0;
 
-    const paidLeadsCount = filteredLeads.reduce((sum, l) => sum + (l.usdCourseCount || 0) + (l.uahCourseCount || 0) + (l.eurCourseCount || 0), 0);
-    const paidTripwiresCount = filteredLeads.reduce((sum, l) => sum + (l.usdTripwireCount || 0) + (l.uahTripwireCount || 0) + (l.eurTripwireCount || 0), 0);
+    const paidLeadsCount = filteredRows.reduce((sum, l) => sum + (l.usd_course_count || 0) + (l.uah_course_count || 0) + (l.eur_course_count || 0), 0);
+    const paidTripwiresCount = filteredRows.reduce((sum, l) => sum + (l.usd_tripwire_count || 0) + (l.uah_tripwire_count || 0) + (l.eur_tripwire_count || 0), 0);
     const totalSales = paidLeadsCount + paidTripwiresCount;
 
-    const usdSalesCount = filteredLeads.reduce((sum, l) => sum + (l.usdCourseCount || 0) + (l.usdTripwireCount || 0), 0);
-    const uahSalesCount = filteredLeads.reduce((sum, l) => sum + (l.uahCourseCount || 0) + (l.uahTripwireCount || 0), 0);
-    const eurSalesCount = filteredLeads.reduce((sum, l) => sum + (l.eurCourseCount || 0) + (l.eurTripwireCount || 0), 0);
+    const usdSalesCount = filteredRows.reduce((sum, l) => sum + (l.usd_course_count || 0) + (l.usd_tripwire_count || 0), 0);
+    const uahSalesCount = filteredRows.reduce((sum, l) => sum + (l.uah_course_count || 0) + (l.uah_tripwire_count || 0), 0);
+    const eurSalesCount = filteredRows.reduce((sum, l) => sum + (l.eur_course_count || 0) + (l.eur_tripwire_count || 0), 0);
 
     const aovUsd = usdSalesCount > 0 ? (usdCourseRevenue + usdTripwireRevenue) / usdSalesCount : 0;
     const aovUah = uahSalesCount > 0 ? (uahCourseRevenue + uahTripwireRevenue) / uahSalesCount : 0;
@@ -1572,7 +733,7 @@ export async function getUnifiedCRMData(
       aovEur
     };
 
-    // --- Pre-aggregated Spline Trend Data via RPC ---
+    // Spline Trend Data via RPC
     let splineTrendData = [];
     let dbRpcMs = 0;
     if (!filters?.skipTraffic) {
@@ -1593,7 +754,7 @@ export async function getUnifiedCRMData(
       dbRpcMs = dbRpcEnd - dbRpcStart;
     }
 
-    // --- UTM Attribution Tree on server ---
+    // --- UTM Attribution Tree ---
     const utmTreeRoot: Record<string, any> = {};
     const getOrCreateUtmNode = (parent: any, name: string) => {
       if (!parent[name]) {
@@ -1610,7 +771,7 @@ export async function getUnifiedCRMData(
       return parent[name];
     };
 
-    filteredLeads.forEach((lead: any) => {
+    filteredRows.forEach((lead: any) => {
       const source = lead.utm_source || "direct";
       const medium = lead.utm_medium || "";
       const campaign = lead.utm_campaign || "";
@@ -1621,8 +782,8 @@ export async function getUnifiedCRMData(
       path.forEach((part) => {
         const node = getOrCreateUtmNode(curr, part);
         node.leads += 1;
-        const usdPaid = Number(lead.usdPaid || 0);
-        const uahPaid = Number(lead.uahPaid || 0);
+        const usdPaid = Number(lead.usd_paid || 0) + Number(lead.usd_tripwire_paid || 0);
+        const uahPaid = Number(lead.uah_paid || 0) + Number(lead.uah_tripwire_paid || 0);
         node.usd_revenue += usdPaid;
         node.uah_revenue += uahPaid;
         node.revenue += usdPaid + (uahPaid / 41.0);
@@ -1664,77 +825,9 @@ export async function getUnifiedCRMData(
     };
     const utmAttributionTree = finalizeUtmNodes(utmTreeRoot);
 
-    // --- Diagnostics Issues on server ---
-    const nameless: any[] = [];
-    const unmatchedUrls: Record<string, { count: number; rawUrl: string; originalSheet: string; sampleLead: string }> = {};
-    const currencyErrors: any[] = [];
+    const uniqueSources = Array.from(new Set(filteredRows.map((l: any) => l.target_sheet).filter(Boolean)));
 
-    clusteredFiltered.forEach((lead: any) => {
-      const nameVal = lead.name?.trim();
-      const hasContacts = lead.phone || lead.telegram || lead.email;
-      if ((!nameVal || nameVal === "Невідомий") && hasContacts) {
-        nameless.push(lead);
-      }
-
-      lead.history?.forEach((touch: any) => {
-        const url = getTouchPageUrl(touch);
-        if (url) {
-          const matched = PROJECT_LANDINGS[activeSlug]?.some((land) => {
-            const normLand = land.url.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").toLowerCase();
-            const normTouch = url.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").toLowerCase();
-            return normTouch.includes(normLand);
-          });
-          if (!matched) {
-            const cleanUrl = url.replace(/^https?:\/\//i, "").replace(/^www\./i, "").trim();
-            if (!unmatchedUrls[cleanUrl]) {
-              unmatchedUrls[cleanUrl] = {
-                count: 0,
-                rawUrl: url,
-                originalSheet: touch.metadata?.original_sheet || touch.metadata?.target_sheet || "direct",
-                sampleLead: lead.name
-              };
-            }
-            unmatchedUrls[cleanUrl].count++;
-          }
-        }
-
-        const amt = Number(touch.amount || 0);
-        if (amt > 0) {
-          const metaCurrency = String(
-            touch.metadata?.currency ||
-            touch.metadata?.lead?.currency ||
-            touch.metadata?.raw_row?.currency ||
-            ""
-          ).trim().toLowerCase();
-          if (!["usd", "$", "uah", "₴", "eur", "€"].includes(metaCurrency)) {
-            currencyErrors.push({
-              leadId: lead.id,
-              leadName: lead.name,
-              amount: amt,
-              currency: metaCurrency || "missing",
-              date: getLeadDate(touch)
-            });
-          }
-        }
-      });
-    });
-
-    const diagnosticsIssues = {
-      nameless,
-      unmatchedUrls: Object.values(unmatchedUrls).sort((a, b) => b.count - a.count),
-      currencyErrors
-    };
-
-    // --- Page Slice (Pagination) ---
-    const startIndex = (page - 1) * pageSize;
-    const paginatedLeads = filteredLeads.slice(startIndex, startIndex + pageSize);
-
-    // List of unique sources for filter dropdown
-    const uniqueSources = Array.from(new Set(clusteredFiltered.map((l: any) => {
-      return l.metadata?.target_sheet || l.metadata?.lead?.target_sheet || l.utm_source || "";
-    }).filter(Boolean)));
-
-    // Fetch sales managers for the active project
+    // Fetch sales managers for active project
     let salesManagers: { id: string; email: string; full_name: string }[] = [];
     if (activeProject && ["admin", "superman", "producer", "rop"].includes(profile.role)) {
       const { data: assignedSales } = await adminSupabase
@@ -1752,79 +845,14 @@ export async function getUnifiedCRMData(
         }));
     }
 
-    // Prepare dataHealth Check stats
-    const checkLeadDateParseable = (lead: any): boolean => {
-      const rawDateStr =
-        lead.metadata?.raw_row?.Дата ||
-        lead.metadata?.raw_row?.дата ||
-        lead.metadata?.raw_row?.Date ||
-        lead.metadata?.raw_row?.date ||
-        lead.metadata?.created_at ||
-        lead.metadata?.lead?.created_at;
-
-      if (!rawDateStr) return true;
-
-      const str = String(rawDateStr).trim();
-      const dotParts = str.split(" ")[0].split(".");
-      if (dotParts.length === 3) {
-        const day = parseInt(dotParts[0], 10);
-        const month = parseInt(dotParts[1], 10) - 1;
-        const year = parseInt(dotParts[2], 10);
-        if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
-          return true;
-        }
-      }
-      let cleanStr = str;
-      if (str.includes("(")) {
-        cleanStr = str.split("(")[0].trim();
-      }
-      const parsed = Date.parse(cleanStr);
-      return !isNaN(parsed);
-    };
-
-    let leadsWithoutUuidCount = 0;
-    let ordersWithAmountAndClickStatusCount = 0;
-    let unparseableMetadataDatesCount = 0;
-
-    allOrders.forEach((o: any) => {
-      const statusStr = String(o.status || "").toLowerCase().trim();
-      if (statusStr !== "клик" && statusStr !== "кликформы") {
-        if (!o.visitor_uuid) {
-          leadsWithoutUuidCount++;
-        }
-      }
-
-      if ((statusStr === "клик" || statusStr === "кликформы") && Number(o.amount || 0) > 0) {
-        ordersWithAmountAndClickStatusCount++;
-      }
-
-      const hasMetadataDate =
-        o.metadata?.raw_row?.Дата ||
-        o.metadata?.raw_row?.дата ||
-        o.metadata?.raw_row?.Date ||
-        o.metadata?.raw_row?.date ||
-        o.metadata?.created_at ||
-        o.metadata?.lead?.created_at;
-
-      if (hasMetadataDate && !checkLeadDateParseable(o)) {
-        unparseableMetadataDatesCount++;
-      }
-    });
-
-    const dataHealth = {
-      leadsWithoutUuidCount,
-      ordersWithAmountAndClickStatusCount,
-      unparseableMetadataDatesCount
-    };
-
     const finalResult = {
       viewType: "single",
       role: profile.role,
       allowedProjects,
       activeSlug,
       activeProject,
-      leads: paginatedLeads,
-      totalCount: filteredLeads.length,
+      leads,
+      totalCount,
       stats: singleProjectStats,
       splineTrendData: splineTrendData || [],
       utmAttributionTree,
@@ -1847,16 +875,15 @@ export async function getUnifiedCRMData(
       dataHealth
     };
 
-    // Calculate JSON weight in KB
     const stringified = JSON.stringify(finalResult);
     const payloadSizeKb = Math.round((stringified.length / 1024) * 10) / 10;
 
-    const totalDuration = dbFetchMs + dbRpcMs + jsClusteringMs;
-    devLogger.perf("getUnifiedCRMData", `Loaded CRM Data for slug: ${activeSlug}`, totalDuration, {
+    const totalDuration = cacheCheckMs + dbQueryMs + dbRpcMs;
+    devLogger.perf("getUnifiedCRMData (Cached)", `Loaded Cached CRM Data for slug: ${activeSlug}`, totalDuration, {
       activeSlug,
-      dbFetchMs,
+      cacheCheckMs,
+      dbQueryMs,
       dbRpcMs,
-      jsClusteringMs,
       payloadSizeKb,
       unresolvedOrdersCount: unresolvedOrders.length,
       leadsCount: finalResult.leads.length,
@@ -1866,9 +893,9 @@ export async function getUnifiedCRMData(
     return {
       ...finalResult,
       performance: {
-        dbFetchMs: Math.round(dbFetchMs),
+        dbFetchMs: Math.round(cacheCheckMs),
         dbRpcMs: Math.round(dbRpcMs),
-        jsClusteringMs: Math.round(jsClusteringMs),
+        jsClusteringMs: Math.round(dbQueryMs),
         payloadSizeKb
       }
     };
