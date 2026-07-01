@@ -756,7 +756,8 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
       history: [...normalizedGroupLeads].sort((a, b) => getLeadDate(a).getTime() - getLeadDate(b).getTime()),
       is_multi_source: isMultiSource,
       created_at: latestTouch.created_at || latestTouch.created_at_iso || new Date().toISOString(),
-      assigned_manager_id: primaryLead.assigned_manager_id || null
+      assigned_manager_id: primaryLead.assigned_manager_id || null,
+      visitor_uuid: primaryLead.visitor_uuid || null
     };
   }).filter((c) => {
     // Filter out anonymous users that didn't pay
@@ -909,13 +910,15 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
     }
   }
 
-  // Clear dirty flag in dirty queue & save computed metadata
-  await adminSupabase.from("crm_cache_dirty_queue").upsert({ 
-    project_id: projectId, 
-    is_dirty: false, 
-    metadata: metadata,
-    updated_at: new Date().toISOString() 
-  });
+  // Save computed metadata without setting is_dirty back to false (since we lock it at start)
+  const { error: updateErr } = await adminSupabase
+    .from("crm_cache_dirty_queue")
+    .update({ metadata })
+    .eq("project_id", projectId);
+  
+  if (updateErr) {
+    console.error("Failed to update metadata in crm_cache_dirty_queue:", updateErr);
+  }
   
   console.log(`🚀 Successfully rebuilt CRM Cache for project ${activeSlug}. Total groups cached: ${calculatedCache.length}`);
 }

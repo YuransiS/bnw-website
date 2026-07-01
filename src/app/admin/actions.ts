@@ -504,8 +504,30 @@ export async function getUnifiedCRMData(
     const needsRebuild = !dirtyQueue || dirtyQueue.is_dirty || cachedCount === 0;
 
     if (needsRebuild) {
-      // Lazy cache rebuilding
-      await rebuildProjectCache(activeProject.id, activeProject.slug);
+      // Set dirty to false immediately to lock and prevent concurrent rebuilds
+      await adminSupabase.from("crm_cache_dirty_queue").upsert({
+        project_id: activeProject.id,
+        is_dirty: false,
+        updated_at: new Date().toISOString()
+      });
+
+      if (cachedCount === 0) {
+        // Build synchronously on first load so user gets data
+        await rebuildProjectCache(activeProject.id, activeProject.slug);
+      } else {
+        // Build in the background asynchronously so page loads instantly
+        rebuildProjectCache(activeProject.id, activeProject.slug).catch((err) => {
+          console.error(`Background CRM cache rebuild failed for project ${activeProject.slug}:`, err);
+          // Re-mark as dirty so it tries again on next request
+          adminSupabase.from("crm_cache_dirty_queue").upsert({
+            project_id: activeProject.id,
+            is_dirty: true,
+            updated_at: new Date().toISOString()
+          }).then(({ error }) => {
+            if (error) console.error("Failed to re-mark cache as dirty:", error.message);
+          });
+        });
+      }
     }
     const cacheCheckEnd = performance.now();
     const cacheCheckMs = cacheCheckEnd - cacheCheckStart;
@@ -617,12 +639,46 @@ export async function getUnifiedCRMData(
     const costs = costsRes.data || [];
     const profilesList = allProfilesRes.data || [];
 
-    // Map manager names for paginated leads
+    // Map manager names and format keys for paginated leads to support camelCase in client components
     const leads = paginatedLeads.map((lead: any) => {
       const manager = profilesList.find((p) => p.id === lead.assigned_manager_id);
+      const managerName = manager ? (manager.full_name || manager.email) : "";
       return {
         ...lead,
-        assigned_manager_name: manager ? (manager.full_name || manager.email) : "",
+        primaryCustomerId: lead.primary_customer_id,
+        customerIds: lead.customer_ids,
+        orderIds: lead.order_ids,
+        touchCount: lead.touch_count,
+        usdPaid: Number(lead.usd_paid || 0),
+        uahPaid: Number(lead.uah_paid || 0),
+        eurPaid: Number(lead.eur_paid || 0),
+        usdTripwirePaid: Number(lead.usd_tripwire_paid || 0),
+        uahTripwirePaid: Number(lead.uah_tripwire_paid || 0),
+        eurTripwirePaid: Number(lead.eur_tripwire_paid || 0),
+        usdAttempted: Number(lead.usd_attempted || 0),
+        uahAttempted: Number(lead.uah_attempted || 0),
+        eurAttempted: Number(lead.eur_attempted || 0),
+        usdCourseCount: lead.usd_course_count || 0,
+        uahCourseCount: lead.uah_course_count || 0,
+        eurCourseCount: lead.eur_course_count || 0,
+        usdTripwireCount: lead.usd_tripwire_count || 0,
+        uahTripwireCount: lead.uah_tripwire_count || 0,
+        eurTripwireCount: lead.eur_tripwire_count || 0,
+        diagnosticsComment: lead.diagnostics_comment || "",
+        managerComment: lead.manager_comment || "",
+        assignedManagerId: lead.assigned_manager_id || null,
+        assigned_manager_name: managerName,
+        utmSource: lead.utm_source || "",
+        utmMedium: lead.utm_medium || "",
+        utmCampaign: lead.utm_campaign || "",
+        utmContent: lead.utm_content || "",
+        utmTerm: lead.utm_term || "",
+        targetSheet: lead.target_sheet || "",
+        isUnpaidIntent: lead.is_unpaid_intent || false,
+        visitedLandings: lead.visited_landings || [],
+        isMultiSource: lead.is_multi_source || false,
+        createdAt: lead.created_at,
+        visitor_uuid: lead.visitor_uuid
       };
     });
 
@@ -1627,19 +1683,30 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
     const { data: ordersData, error: ordersError } = await ordersQuery;
     if (ordersError) throw ordersError;
 
-    // Prefetch all unique order dates for exact historical exchange rate conversion
+    // Prefetch only unique order dates where UAH/EUR rates are missing in metadata
     const uniqueDates = Array.from(
       new Set(
-        (ordersData || []).map((o: any) => o.created_at ? o.created_at.split("T")[0] : null).filter(Boolean)
+        (ordersData || [])
+          .filter((o: any) => {
+            const currency = String(o.metadata?.currency || o.metadata?.lead?.currency || 'usd').toLowerCase().trim();
+            if (currency === 'usd' || currency === '$') return false;
+            // Only require rates if they are not already in metadata
+            const hasRate = Number(o.metadata?.usd_rate) > 0 && Number(o.metadata?.eur_to_usd) > 0;
+            return !hasRate;
+          })
+          .map((o: any) => o.created_at ? o.created_at.split("T")[0] : null)
+          .filter(Boolean)
       )
     ) as string[];
 
     const rateMap: Record<string, { usdRate: number, eurRate: number, eurToUsd: number }> = {};
-    await Promise.all(
-      uniqueDates.map(async (date) => {
-        rateMap[date] = await getExchangeRates(date);
-      })
-    );
+    if (uniqueDates.length > 0) {
+      await Promise.all(
+        uniqueDates.map(async (date) => {
+          rateMap[date] = await getExchangeRates(date);
+        })
+      );
+    }
 
     const closedWonStatuses = [
       'closed_won', 'approved', 'aprooved', 'оплачено', 'купив курс', 'купив_курс', 
