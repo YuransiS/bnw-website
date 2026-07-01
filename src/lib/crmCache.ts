@@ -755,7 +755,8 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
       visited_landings: visitedLandings,
       history: [...normalizedGroupLeads].sort((a, b) => getLeadDate(a).getTime() - getLeadDate(b).getTime()),
       is_multi_source: isMultiSource,
-      created_at: latestTouch.created_at || latestTouch.created_at_iso || new Date().toISOString()
+      created_at: latestTouch.created_at || latestTouch.created_at_iso || new Date().toISOString(),
+      assigned_manager_id: primaryLead.assigned_manager_id || null
     };
   }).filter((c) => {
     // Filter out anonymous users that didn't pay
