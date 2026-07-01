@@ -20,19 +20,19 @@ import {
 } from "lucide-react";
 import { getTrafficAnalyticsData } from "./actions";
 
-interface TrafficDashboardProps {
+interface PerformanceViewProps {
   activeSlug: string;
   isLight: boolean;
   startDate: string;
   endDate: string;
 }
 
-export default function TrafficDashboard({
+export default function PerformanceView({
   activeSlug,
   isLight,
   startDate,
   endDate
-}: TrafficDashboardProps) {
+}: PerformanceViewProps) {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -90,17 +90,28 @@ export default function TrafficDashboard({
 
   // Helper to calculate Monday of the week for a given date
   const getMonday = (dateStr: string) => {
-    const d = new Date(dateStr);
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    return new Date(d.setDate(diff)).toISOString().split("T")[0];
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return null;
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      return new Date(d.setDate(diff)).toISOString().split("T")[0];
+    } catch {
+      return null;
+    }
   };
 
   // Helper to calculate Sunday of the week
-  const getSunday = (mondayStr: string) => {
-    const mon = new Date(mondayStr);
-    mon.setDate(mon.getDate() + 6);
-    return mon.toISOString().split("T")[0];
+  const getSunday = (mondayStr: string | null) => {
+    if (!mondayStr) return null;
+    try {
+      const mon = new Date(mondayStr);
+      if (isNaN(mon.getTime())) return null;
+      mon.setDate(mon.getDate() + 6);
+      return mon.toISOString().split("T")[0];
+    } catch {
+      return null;
+    }
   };
 
   // Monthly summary calculations
@@ -135,8 +146,11 @@ export default function TrafficDashboard({
     data.daily.forEach((r: any) => {
       if (!r.date || r.date === "unknown") return;
       const mon = getMonday(r.date);
+      if (!mon) return;
+      const sun = getSunday(mon);
+      if (!sun) return;
       if (!groups[mon]) {
-        groups[mon] = { weekStart: mon, weekEnd: getSunday(mon), spend: 0, clicks: 0, leads_count: 0, sales: 0, usd_revenue: 0, impressions: 0, applications: 0, consultations: 0 };
+        groups[mon] = { weekStart: mon, weekEnd: sun, spend: 0, clicks: 0, leads_count: 0, sales: 0, usd_revenue: 0, impressions: 0, applications: 0, consultations: 0 };
       }
       groups[mon].spend += Number(r.spend || 0);
       groups[mon].clicks += Number(r.clicks || 0);

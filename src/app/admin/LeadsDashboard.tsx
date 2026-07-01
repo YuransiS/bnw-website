@@ -53,7 +53,7 @@ import { useTheme } from "./ThemeProvider";
 import { statusMapper } from "@/lib/statusMapper";
 import { devLogger } from "@/utils/logger";
 import DevLogConsole from "./DevLogConsole";
-import TrafficDashboard from "./TrafficDashboard";
+import PerformanceView from "./PerformanceView";
 
 // Safe locale number formatting to avoid server/client hydration mismatch
 const formatLocaleNumber = (num: number) => {
@@ -1805,7 +1805,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
       {/* PROJECT TRAFFIC TAB */}
       {activeTab === "traffic" && viewType === "single" && (
-        <TrafficDashboard
+        <PerformanceView
           activeSlug={activeSlug}
           isLight={isLight}
           startDate={startDate}
