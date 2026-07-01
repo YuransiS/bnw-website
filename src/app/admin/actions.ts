@@ -1751,10 +1751,13 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
       applications: number;
       consultations: number;
       usd_revenue: number;
+      min_date: string;
+      max_date: string;
     }> = {};
 
     (costsData || []).forEach(c => {
       const campId = c.campaign_id || "unknown";
+      const dateStr = c.date;
       if (!campaignMap[campId]) {
         campaignMap[campId] = {
           campaign_id: campId,
@@ -1766,8 +1769,13 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
           sales: 0,
           applications: 0,
           consultations: 0,
-          usd_revenue: 0
+          usd_revenue: 0,
+          min_date: dateStr || "",
+          max_date: dateStr || ""
         };
+      } else if (dateStr) {
+        if (!campaignMap[campId].min_date || dateStr < campaignMap[campId].min_date) campaignMap[campId].min_date = dateStr;
+        if (!campaignMap[campId].max_date || dateStr > campaignMap[campId].max_date) campaignMap[campId].max_date = dateStr;
       }
       campaignMap[campId].spend += Number(c.spend || 0);
       campaignMap[campId].clicks += Number(c.clicks || 0);
@@ -1785,6 +1793,8 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
         }
       }
 
+      const orderDate = o.created_at ? o.created_at.split('T')[0] : undefined;
+
       if (!campaignMap[campId]) {
         campaignMap[campId] = {
           campaign_id: campId,
@@ -1796,14 +1806,22 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
           sales: 0,
           applications: 0,
           consultations: 0,
-          usd_revenue: 0
+          usd_revenue: 0,
+          min_date: orderDate || "",
+          max_date: orderDate || ""
         };
+      } else if (orderDate) {
+        if (!campaignMap[campId].min_date || orderDate < campaignMap[campId].min_date) {
+          campaignMap[campId].min_date = orderDate;
+        }
+        if (!campaignMap[campId].max_date || orderDate > campaignMap[campId].max_date) {
+          campaignMap[campId].max_date = orderDate;
+        }
       }
 
       const orderStatus = String(o.status || '').toLowerCase();
       const isLead = !leadStatusesToExclude.includes(o.status);
       const isSale = closedWonStatuses.includes(orderStatus);
-      const orderDate = o.created_at ? o.created_at.split('T')[0] : undefined;
       const amountUsd = getAmountInUsd(Number(o.amount || 0), o.metadata, orderDate);
 
       if (isLead) campaignMap[campId].leads_count += 1;
@@ -1909,7 +1927,21 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
       };
     };
 
-    const campaigns = Object.values(campaignMap).map(computeCalculatedFields);
+    const campaigns = Object.values(campaignMap).map((item) => {
+      const computed = computeCalculatedFields(item);
+      const lastActiveDate = item.max_date ? new Date(item.max_date) : null;
+      const today = new Date();
+      const diffTime = lastActiveDate ? Math.abs(today.getTime() - lastActiveDate.getTime()) : Infinity;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      const is_active = diffDays <= 3; // Active if had spend/activity in last 3 days
+      
+      return {
+        ...computed,
+        is_active,
+        min_date: item.min_date || "",
+        max_date: item.max_date || ""
+      };
+    });
     const daily = Object.values(dailyMap).map(computeCalculatedFields);
 
     // Sort campaigns by spend descending, daily by date descending
