@@ -1579,3 +1579,309 @@ export async function traceVisitorUuidAction(phoneOrUuid: string, projectId: str
     return { error: err.message || "Failed to trace visitor" };
   }
 }
+
+export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: string, projectSlug: string) {
+  try {
+    const access = await getSessionAndAccess(projectSlug);
+    const activeProject = access.allowedProjects.find((p) => p.slug === projectSlug);
+    if (!activeProject) {
+      throw new Error(`Project with slug ${projectSlug} not found or access denied`);
+    }
+    const projectId = activeProject.id;
+
+    const supabase = await createClient();
+
+    // 1. Fetch exchange rate dynamically from NBU (today's rate and historical rates in parallel)
+    const { getExchangeRates } = await import("@/lib/exchange-rate");
+    const todayRates = await getExchangeRates();
+
+    // 2. Fetch daily spend records
+    let costsQuery = supabase
+      .from("daily_traffic_and_costs")
+      .select("*")
+      .eq("project_id", projectId);
+
+    if (startDateStr) {
+      costsQuery = costsQuery.gte("date", startDateStr);
+    }
+    if (endDateStr) {
+      costsQuery = costsQuery.lte("date", endDateStr);
+    }
+
+    const { data: costsData, error: costsError } = await costsQuery;
+    if (costsError) throw costsError;
+
+    // 3. Fetch orders
+    let ordersQuery = supabase
+      .from("unified_orders")
+      .select("id, amount, status, created_at, utm_campaign, utm_medium, utm_source, campaign_id, customer_id, metadata")
+      .eq("project_id", projectId);
+
+    if (startDateStr) {
+      ordersQuery = ordersQuery.gte("created_at", `${startDateStr}T00:00:00Z`);
+    }
+    if (endDateStr) {
+      ordersQuery = ordersQuery.lte("created_at", `${endDateStr}T23:59:59Z`);
+    }
+
+    const { data: ordersData, error: ordersError } = await ordersQuery;
+    if (ordersError) throw ordersError;
+
+    // Prefetch all unique order dates for exact historical exchange rate conversion
+    const uniqueDates = Array.from(
+      new Set(
+        (ordersData || []).map((o: any) => o.created_at ? o.created_at.split("T")[0] : null).filter(Boolean)
+      )
+    ) as string[];
+
+    const rateMap: Record<string, { usdRate: number, eurRate: number, eurToUsd: number }> = {};
+    await Promise.all(
+      uniqueDates.map(async (date) => {
+        rateMap[date] = await getExchangeRates(date);
+      })
+    );
+
+    const closedWonStatuses = [
+      'closed_won', 'approved', 'aprooved', 'оплачено', 'купив курс', 'купив_курс', 
+      'купив трипвайєр', 'купив трипвайер', 'купив(-ла) трипвайер', 'оплачено полностью'
+    ];
+
+    const leadStatusesToExclude = ['Клик', 'КликФормы'];
+
+    // Helper to convert amount to USD using historical rate map
+    const getAmountInUsd = (amount: number, metadata: any, dateStr?: string) => {
+      const currency = String(metadata?.currency || metadata?.lead?.currency || 'usd').toLowerCase();
+      
+      const metaUsdRate = Number(metadata?.usd_rate);
+      const metaEurToUsd = Number(metadata?.eur_to_usd);
+
+      const activeUsdRate = !isNaN(metaUsdRate) && metaUsdRate > 0 
+        ? metaUsdRate 
+        : (dateStr && rateMap[dateStr] ? rateMap[dateStr].usdRate : todayRates.usdRate);
+
+      const activeEurToUsd = !isNaN(metaEurToUsd) && metaEurToUsd > 0
+        ? metaEurToUsd
+        : (dateStr && rateMap[dateStr] ? rateMap[dateStr].eurToUsd : todayRates.eurToUsd);
+
+      if (currency === 'uah' || currency === '₴') {
+        return amount / activeUsdRate;
+      }
+      if (currency === 'eur' || currency === '€') {
+        return amount * activeEurToUsd;
+      }
+      return amount; // default to USD
+    };
+
+    // --- GROUP BY CAMPAIGN ---
+    const campaignMap: Record<string, {
+      campaign_id: string;
+      campaign_name: string;
+      spend: number;
+      clicks: number;
+      impressions: number;
+      leads_count: number;
+      sales: number;
+      applications: number;
+      consultations: number;
+      usd_revenue: number;
+    }> = {};
+
+    (costsData || []).forEach(c => {
+      const campId = c.campaign_id || "unknown";
+      if (!campaignMap[campId]) {
+        campaignMap[campId] = {
+          campaign_id: campId,
+          campaign_name: c.campaign_name || "Невідома кампанія",
+          spend: 0,
+          clicks: 0,
+          impressions: 0,
+          leads_count: 0,
+          sales: 0,
+          applications: 0,
+          consultations: 0,
+          usd_revenue: 0
+        };
+      }
+      campaignMap[campId].spend += Number(c.spend || 0);
+      campaignMap[campId].clicks += Number(c.clicks || 0);
+      campaignMap[campId].impressions += Number(c.impressions || 0);
+    });
+
+    (ordersData || []).forEach(o => {
+      let campId = "unknown";
+      if (o.campaign_id && campaignMap[o.campaign_id]) {
+        campId = o.campaign_id;
+      } else if (o.utm_campaign) {
+        const match = Object.values(campaignMap).find(c => c.campaign_name === o.utm_campaign);
+        if (match) {
+          campId = match.campaign_id;
+        }
+      }
+
+      if (!campaignMap[campId]) {
+        campaignMap[campId] = {
+          campaign_id: campId,
+          campaign_name: campId === "unknown" ? "Трафік без ID кампанії" : (o.utm_campaign || "Без назви"),
+          spend: 0,
+          clicks: 0,
+          impressions: 0,
+          leads_count: 0,
+          sales: 0,
+          applications: 0,
+          consultations: 0,
+          usd_revenue: 0
+        };
+      }
+
+      const orderStatus = String(o.status || '').toLowerCase();
+      const isLead = !leadStatusesToExclude.includes(o.status);
+      const isSale = closedWonStatuses.includes(orderStatus);
+      const orderDate = o.created_at ? o.created_at.split('T')[0] : undefined;
+      const amountUsd = getAmountInUsd(Number(o.amount || 0), o.metadata, orderDate);
+
+      if (isLead) campaignMap[campId].leads_count += 1;
+      if (isSale) {
+        campaignMap[campId].sales += 1;
+        campaignMap[campId].usd_revenue += amountUsd;
+      }
+      campaignMap[campId].applications += 1;
+      if (orderStatus.includes('consult') || orderStatus.includes('консульт')) {
+        campaignMap[campId].consultations += 1;
+      }
+    });
+
+    // --- GROUP BY DATE ---
+    const dailyMap: Record<string, {
+      date: string;
+      spend: number;
+      clicks: number;
+      impressions: number;
+      leads_count: number;
+      sales: number;
+      applications: number;
+      consultations: number;
+      usd_revenue: number;
+    }> = {};
+
+    (costsData || []).forEach(c => {
+      const dateStr = c.date || "unknown";
+      if (!dailyMap[dateStr]) {
+        dailyMap[dateStr] = {
+          date: dateStr,
+          spend: 0,
+          clicks: 0,
+          impressions: 0,
+          leads_count: 0,
+          sales: 0,
+          applications: 0,
+          consultations: 0,
+          usd_revenue: 0
+        };
+      }
+      dailyMap[dateStr].spend += Number(c.spend || 0);
+      dailyMap[dateStr].clicks += Number(c.clicks || 0);
+      dailyMap[dateStr].impressions += Number(c.impressions || 0);
+    });
+
+    (ordersData || []).forEach(o => {
+      const dateStr = o.created_at ? o.created_at.split('T')[0] : "unknown";
+      if (!dailyMap[dateStr]) {
+        dailyMap[dateStr] = {
+          date: dateStr,
+          spend: 0,
+          clicks: 0,
+          impressions: 0,
+          leads_count: 0,
+          sales: 0,
+          applications: 0,
+          consultations: 0,
+          usd_revenue: 0
+        };
+      }
+      const orderStatus = String(o.status || '').toLowerCase();
+      const isLead = !leadStatusesToExclude.includes(o.status);
+      const isSale = closedWonStatuses.includes(orderStatus);
+      const amountUsd = getAmountInUsd(Number(o.amount || 0), o.metadata, dateStr);
+
+      if (isLead) dailyMap[dateStr].leads_count += 1;
+      if (isSale) {
+        dailyMap[dateStr].sales += 1;
+        dailyMap[dateStr].usd_revenue += amountUsd;
+      }
+      dailyMap[dateStr].applications += 1;
+      if (orderStatus.includes('consult') || orderStatus.includes('консульт')) {
+        dailyMap[dateStr].consultations += 1;
+      }
+    });
+
+    // Helper to calculate ratios and metrics
+    const computeCalculatedFields = (item: any) => {
+      const ctr = item.impressions > 0 ? (item.clicks / item.impressions) * 100 : 0;
+      const cpm = item.impressions > 0 ? (item.spend / item.impressions) * 1000 : 0;
+      const cpc = item.clicks > 0 ? item.spend / item.clicks : 0;
+      const siteCr = item.clicks > 0 ? (item.leads_count / item.clicks) * 100 : 0;
+      const cpl = item.leads_count > 0 ? item.spend / item.leads_count : 0;
+      const appCr = item.leads_count > 0 ? (item.applications / item.leads_count) * 100 : 0;
+      const cpa = item.applications > 0 ? item.spend / item.applications : 0;
+      const aov = item.sales > 0 ? item.usd_revenue / item.sales : 0;
+      const roas = item.spend > 0 ? item.usd_revenue / item.spend : 0;
+      const profit = item.usd_revenue - item.spend;
+
+      return {
+        ...item,
+        ctr: Number(ctr.toFixed(2)),
+        cpm: Number(cpm.toFixed(2)),
+        cpc: Number(cpc.toFixed(2)),
+        siteCr: Number(siteCr.toFixed(2)),
+        cpl: Number(cpl.toFixed(2)),
+        appCr: Number(appCr.toFixed(2)),
+        cpa: Number(cpa.toFixed(2)),
+        aov: Number(aov.toFixed(2)),
+        roas: Number(roas.toFixed(2)),
+        profit: Number(profit.toFixed(2))
+      };
+    };
+
+    const campaigns = Object.values(campaignMap).map(computeCalculatedFields);
+    const daily = Object.values(dailyMap).map(computeCalculatedFields);
+
+    // Sort campaigns by spend descending, daily by date descending
+    campaigns.sort((a, b) => b.spend - a.spend);
+    daily.sort((a, b) => b.date.localeCompare(a.date));
+
+    // Compute totals
+    const grandTotals = {
+      spend: 0,
+      clicks: 0,
+      impressions: 0,
+      leads_count: 0,
+      sales: 0,
+      applications: 0,
+      consultations: 0,
+      usd_revenue: 0
+    };
+
+    campaigns.forEach(c => {
+      grandTotals.spend += c.spend;
+      grandTotals.clicks += c.clicks;
+      grandTotals.impressions += c.impressions;
+      grandTotals.leads_count += c.leads_count;
+      grandTotals.sales += c.sales;
+      grandTotals.applications += c.applications;
+      grandTotals.consultations += c.consultations;
+      grandTotals.usd_revenue += c.usd_revenue;
+    });
+
+    const totals = computeCalculatedFields(grandTotals);
+
+    return {
+      campaigns,
+      daily,
+      totals,
+      usdRate: todayRates.usdRate
+    };
+  } catch (err: any) {
+    return { error: err.message || "Failed to fetch traffic analytics data" };
+  }
+}
+

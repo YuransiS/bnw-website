@@ -53,6 +53,7 @@ import { useTheme } from "./ThemeProvider";
 import { statusMapper } from "@/lib/statusMapper";
 import { devLogger } from "@/utils/logger";
 import DevLogConsole from "./DevLogConsole";
+import TrafficDashboard from "./TrafficDashboard";
 
 // Safe locale number formatting to avoid server/client hydration mismatch
 const formatLocaleNumber = (num: number) => {
@@ -1366,6 +1367,24 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           </button>
         )}
 
+        {/* Project Traffic & Costs Tab - Superman, Admin & Producer */}
+        {viewType === "single" && (role === "admin" || role === "superman" || role === "producer") && (
+          <button
+            onClick={() => setActiveTab("traffic")}
+            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${activeTab === "traffic"
+              ? isLight
+                ? "bg-neutral-900 text-white shadow-sm"
+                : "bg-white text-black shadow-lg"
+              : isLight
+                ? "text-neutral-500 hover:text-neutral-900"
+                : "text-white/40 hover:text-white"
+              }`}
+          >
+            <Activity className="w-4 h-4 text-emerald-450" />
+            🚥 Трафік
+          </button>
+        )}
+
         {/* Quizzes Tab - All approved */}
         {viewType === "single" && (
           <button
@@ -1904,6 +1923,16 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* PROJECT TRAFFIC TAB */}
+      {activeTab === "traffic" && viewType === "single" && (
+        <TrafficDashboard
+          activeSlug={activeSlug}
+          isLight={isLight}
+          startDate={startDate}
+          endDate={endDate}
+        />
       )}
 
       {/* 2. PROJECT DETAILED ANALYTICS TAB */}
