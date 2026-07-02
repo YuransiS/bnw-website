@@ -537,7 +537,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       unpaidIntentOnly: isKan ? false : (isProjectSwitched ? false : unpaidIntentOnly),
       startDate: isProjectSwitched ? "" : startDate,
       endDate: isProjectSwitched ? "" : endDate,
-      selectedLanding: isProjectSwitched ? "all" : selectedLanding
+      selectedLanding: isProjectSwitched ? "all" : selectedLanding,
+      skipTraffic: activeTab !== "analytics"
     });
   }, [initialData]);
 
@@ -1477,7 +1478,16 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       {/* Landing Selectors Filter Row Removed */}
 
       {/* --- TAB VIEWPORTS --- */}
-      {(() => {
+      <div className="relative min-h-[300px]">
+        {isLoading && (
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] z-40 flex items-center justify-center rounded-2xl transition-all animate-in fade-in duration-200">
+            <div className={`flex flex-col items-center gap-3 p-6 rounded-2xl shadow-2xl border ${cardClass} ${borderClass}`}>
+              <RefreshCw className="w-8 h-8 animate-spin text-emerald-500" />
+              <span className="text-xs text-crm-text/60 font-bold uppercase tracking-widest">Оновлення даних...</span>
+            </div>
+          </div>
+        )}
+        {(() => {
         if (activeTab !== "hub" || viewType !== "all") return null;
         const totalSpend = summaryData.reduce((sum: number, p: any) => sum + Number(p.spend || 0), 0);
         const totalUsdRevenue = summaryData.reduce((sum: number, p: any) => sum + Number(p.usd_revenue || 0), 0);
@@ -3805,6 +3815,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           </div>
         </div>
       )}
+      </div>
 
       {/* --- FLOATING FLOATING FLOATING FLOATING FLOATING FLOATING FLOATING FLOATING --- */}
 

@@ -49,3 +49,8 @@ next-env.d.ts
 *.jpeg
 *_backup.js*
 /scratch/*
+
+# Agent skills
+/.agents/
+/agent/
+/skills-lock.json
