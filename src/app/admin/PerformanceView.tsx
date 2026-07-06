@@ -231,7 +231,7 @@ export default function PerformanceView({
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4">
         <RefreshCw className="w-8 h-8 animate-spin text-emerald-450" />
-        <p className="text-xs font-semibold text-white/40 uppercase tracking-widest">
+        <p className={`text-xs font-semibold uppercase tracking-widest \${isLight ? "text-neutral-400" : "text-white/40"}`}>
           Завантаження аналітики трафіку...
         </p>
       </div>
@@ -256,17 +256,17 @@ export default function PerformanceView({
     <div className="space-y-6 animate-in fade-in duration-300">
       
       {/* 1. Header Toolbar */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#0C0C0F]/45 border border-white/5 p-4 rounded-2xl shadow-xl backdrop-blur-md">
+      <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${cardClass} p-4 rounded-2xl`}>
         <div className="space-y-1">
-          <h3 className="text-sm font-black uppercase tracking-widest text-white">Аналітика Трафіку та Витрат</h3>
-          <p className="text-[11px] text-white/30 font-semibold">
+          <h3 className={`text-sm font-black uppercase tracking-widest ${textClass}`}>Аналітика Трафіку та Витрат</h3>
+          <p className={`text-[11px] ${textMutedClass} font-semibold`}>
             Детальні звіти по окупності реклами Meta Ads. Курс НБУ: <span className="text-emerald-450">{data?.usdRate || 41.0} ₴/$</span>
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
           {/* Simple / Advanced View Switcher */}
-          <div className="flex items-center gap-1 bg-[#050507] border border-white/5 p-1 rounded-xl">
+          <div className={switcherContainerClass}>
             <button
               onClick={() => setViewMode("simple")}
               className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
@@ -290,7 +290,7 @@ export default function PerformanceView({
           </div>
 
           {/* Grouping switcher */}
-          <div className="flex items-center gap-1 bg-[#050507] border border-white/5 p-1 rounded-xl">
+          <div className={switcherContainerClass}>
             <button
               onClick={() => setGroupBy("campaign")}
               className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
@@ -317,7 +317,7 @@ export default function PerformanceView({
           <button
             onClick={handleExportCSV}
             disabled={!activeRows.length}
-            className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-white border border-white/5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer disabled:opacity-40"
+            className={exportBtnClass}
           >
             <FileDown className="w-4 h-4 text-emerald-450" />
             Экспорт
@@ -328,46 +328,46 @@ export default function PerformanceView({
       {/* 2. Top-level KPI Cards */}
       {totals && (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          <div className="bg-[#0C0C0F]/45 border border-white/5 p-4 rounded-2xl backdrop-blur-md space-y-1">
-            <div className="flex justify-between items-center text-white/40">
+          <div className={`${cardClass} p-4 rounded-2xl space-y-1`}>
+            <div className="flex justify-between items-center text-neutral-400">
               <span className="text-[10px] font-black uppercase tracking-wider">Бюджет (Spend)</span>
               <Coins className="w-4 h-4 text-emerald-450" />
             </div>
-            <p className="text-lg font-black text-white">{formatUSD(totals.spend)}</p>
+            <p className={`text-lg font-black ${textClass}`}>{formatUSD(totals.spend)}</p>
           </div>
 
-          <div className="bg-[#0C0C0F]/45 border border-white/5 p-4 rounded-2xl backdrop-blur-md space-y-1">
-            <div className="flex justify-between items-center text-white/40">
+          <div className={`${cardClass} p-4 rounded-2xl space-y-1`}>
+            <div className="flex justify-between items-center text-neutral-400">
               <span className="text-[10px] font-black uppercase tracking-wider">Кліки</span>
               <MousePointerClick className="w-4 h-4 text-sky-400" />
             </div>
-            <p className="text-lg font-black text-white">{totals.clicks.toLocaleString()}</p>
+            <p className={`text-lg font-black ${textClass}`}>{totals.clicks.toLocaleString()}</p>
           </div>
 
-          <div className="bg-[#0C0C0F]/45 border border-white/5 p-4 rounded-2xl backdrop-blur-md space-y-1">
-            <div className="flex justify-between items-center text-white/40">
+          <div className={`${cardClass} p-4 rounded-2xl space-y-1`}>
+            <div className="flex justify-between items-center text-neutral-400">
               <span className="text-[10px] font-black uppercase tracking-wider">Реєстрації (Ліди)</span>
               <Eye className="w-4 h-4 text-violet-400" />
             </div>
-            <p className="text-lg font-black text-white">{totals.leads_count.toLocaleString()}</p>
-            <p className="text-[9px] font-extrabold text-white/30 uppercase">CPL: {formatUSD(totals.cpl)}</p>
+            <p className={`text-lg font-black ${textClass}`}>{totals.leads_count.toLocaleString()}</p>
+            <p className={`text-[9px] font-extrabold ${textMutedClass} uppercase`}>CPL: {formatUSD(totals.cpl)}</p>
           </div>
 
-          <div className="bg-[#0C0C0F]/45 border border-white/5 p-4 rounded-2xl backdrop-blur-md space-y-1">
-            <div className="flex justify-between items-center text-white/40">
+          <div className={`${cardClass} p-4 rounded-2xl space-y-1`}>
+            <div className="flex justify-between items-center text-neutral-400">
               <span className="text-[10px] font-black uppercase tracking-wider">Продажі</span>
               <CheckCircle className="w-4 h-4 text-emerald-400" />
             </div>
-            <p className="text-lg font-black text-white">{totals.sales.toLocaleString()}</p>
-            <p className="text-[9px] font-extrabold text-white/30 uppercase">Конв: {totals.appCr}%</p>
+            <p className={`text-lg font-black ${textClass}`}>{totals.sales.toLocaleString()}</p>
+            <p className={`text-[9px] font-extrabold ${textMutedClass} uppercase`}>Конв: {totals.appCr}%</p>
           </div>
 
-          <div className="bg-[#0C0C0F]/45 border border-white/5 p-4 rounded-2xl backdrop-blur-md col-span-2 lg:col-span-1 space-y-1">
-            <div className="flex justify-between items-center text-white/40">
+          <div className={`${cardClass} p-4 rounded-2xl col-span-2 lg:col-span-1 space-y-1`}>
+            <div className="flex justify-between items-center text-neutral-400">
               <span className="text-[10px] font-black uppercase tracking-wider">Выручка (ROAS)</span>
               <TrendingUp className="w-4 h-4 text-yellow-400" />
             </div>
-            <p className="text-lg font-black text-white">{formatUSD(totals.usd_revenue)}</p>
+            <p className={`text-lg font-black ${textClass}`}>{formatUSD(totals.usd_revenue)}</p>
             <p className="text-[9px] font-extrabold text-yellow-400/80 uppercase">ROAS: {totals.roas}x</p>
           </div>
         </div>
@@ -377,20 +377,20 @@ export default function PerformanceView({
       {groupBy === "campaign" && (
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
           <div className="relative sm:col-span-3">
-            <Search className="absolute left-4 top-3.5 w-4 h-4 text-white/20" />
+            <Search className={`absolute left-4 top-3.5 w-4 h-4 ${isLight ? "text-neutral-450" : "text-white/20"}`} />
             <input
               type="text"
               placeholder="Шукати кампанію..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-11 pr-4 py-3 bg-[#050507] border border-white/5 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 text-white placeholder:text-white/25"
+              className={`w-full pl-11 pr-4 py-3 ${inputClass} rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500`}
             />
           </div>
           <div className="relative">
             <select
               value={statusFilter}
               onChange={(e: any) => setStatusFilter(e.target.value)}
-              className="w-full appearance-none pl-4 pr-10 py-3 bg-[#050507] border border-white/5 rounded-xl text-xs font-bold text-white cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className={`w-full appearance-none pl-4 pr-10 py-3 ${inputClass} rounded-xl text-xs font-bold cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-500`}
             >
               <option value="all">🎯 Всі статуси</option>
               <option value="active">🟢 Активні</option>
@@ -402,10 +402,10 @@ export default function PerformanceView({
 
       {/* 4. Table Grid / Dates Dashboard */}
       {groupBy === "campaign" ? (
-        <div className="bg-[#0C0C0F]/45 border border-white/5 rounded-2xl overflow-hidden shadow-xl backdrop-blur-md">
+        <div className={`${cardClass} rounded-2xl overflow-hidden`}>
           <div className="overflow-x-auto max-w-full">
-            <table className="w-full text-left border-collapse text-[11px] font-semibold text-white/70">
-              <thead className="bg-[#050507]/60 border-b border-white/5 text-[9px] font-black uppercase tracking-wider text-white/50">
+            <table className={`w-full text-left border-collapse text-[11px] font-semibold ${isLight ? "text-neutral-700" : "text-white/70"}`}>
+              <thead className={thBgClass}>
                 {viewMode === "simple" ? (
                   <tr>
                     <th className="p-4">Кампанія</th>
@@ -418,7 +418,7 @@ export default function PerformanceView({
                   </tr>
                 ) : (
                   <tr>
-                    <th className="p-3 sticky left-0 bg-[#050507]">Кампанія</th>
+                    <th className={`p-3 sticky left-0 ${isLight ? "bg-neutral-100 text-neutral-500" : "bg-[#050507] text-white/50"}`}>Кампанія</th>
                     <th className="p-3 text-right">Бюджет</th>
                     <th className="p-3 text-right">Кліки</th>
                     <th className="p-3 text-right">Покази</th>
@@ -439,11 +439,11 @@ export default function PerformanceView({
                   </tr>
                 )}
               </thead>
-              <tbody className="divide-y divide-white/5">
+              <tbody className={`divide-y ${borderClass}`}>
                 {/* Grand Totals Header Row */}
                 {totals && (
-                  <tr className="bg-white/5 font-black text-white text-[11px] border-b border-white/10">
-                    <td className="p-4 sticky left-0 bg-[#121217]">ВСЬОГО (Разом)</td>
+                  <tr className={`${isLight ? "bg-neutral-100 text-neutral-900 border-b border-neutral-200" : "bg-white/5 text-white border-b border-white/10"} font-black text-[11px]`}>
+                    <td className={`p-4 sticky left-0 ${isLight ? "bg-neutral-100" : "bg-[#121217]"}`}>ВСЬОГО (Разом)</td>
                     <td className="p-4 text-right text-emerald-450">{formatUSD(totals.spend)}</td>
                     {viewMode === "simple" ? (
                       <>
@@ -481,11 +481,11 @@ export default function PerformanceView({
                   activeRows.map((row: any, idx: number) => (
                     <tr
                       key={row.campaign_id || idx}
-                      className="hover:bg-white/5 transition-all text-white/80"
+                      className={`${rowHoverClass} transition-all text-neutral-800`}
                     >
                       {viewMode === "simple" ? (
                         <>
-                          <td className="p-4 font-semibold text-white/95 max-w-[280px]">
+                          <td className={`p-4 font-semibold ${isLight ? "text-neutral-900" : "text-white/95"} max-w-[280px]`}>
                             <div className="flex flex-col gap-1">
                               <div className="flex items-center gap-2">
                                 <span className={`w-2 h-2 rounded-full shrink-0 ${row.is_active ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-neutral-500"}`} title={row.is_active ? "Активна" : "Завершена"} />
@@ -494,7 +494,7 @@ export default function PerformanceView({
                                 </span>
                               </div>
                               {row.min_date && (
-                                <span className="text-[9px] font-black text-white/30 uppercase">
+                                <span className={`text-[9px] font-black ${isLight ? "text-neutral-450" : "text-white/30"} uppercase`}>
                                   📅 {row.min_date} — {row.max_date}
                                 </span>
                               )}
@@ -502,14 +502,14 @@ export default function PerformanceView({
                           </td>
                           <td className="p-4 text-right">{formatUSD(row.spend)}</td>
                           <td className="p-4 text-right">{row.leads_count.toLocaleString()}</td>
-                          <td className="p-4 text-right text-white/40">{formatUSD(row.cpl)}</td>
+                          <td className={`p-4 text-right ${isLight ? "text-neutral-450" : "text-white/40"}`}>{formatUSD(row.cpl)}</td>
                           <td className="p-4 text-right text-emerald-400/90">{row.sales.toLocaleString()}</td>
-                          <td className="p-4 text-right font-bold text-white/90">{formatUSD(row.usd_revenue)}</td>
-                          <td className="p-4 text-right text-yellow-400/90 font-bold">{row.roas}x</td>
+                          <td className={`p-4 text-right font-bold ${isLight ? "text-neutral-900" : "text-white/90"}`}>{formatUSD(row.usd_revenue)}</td>
+                          <td className={`p-4 text-right text-yellow-500 font-bold`}>{row.roas}x</td>
                         </>
                       ) : (
                         <>
-                          <td className="p-3 sticky left-0 bg-[#0C0C0F] font-bold text-white max-w-[200px] border-r border-white/5">
+                          <td className={`p-3 sticky left-0 font-bold max-w-[200px] border-r ${borderClass} ${isLight ? "bg-white text-neutral-900" : "bg-[#0C0C0F] text-white"}`}>
                             <div className="flex flex-col gap-1">
                               <div className="flex items-center gap-2">
                                 <span className={`w-2 h-2 rounded-full shrink-0 ${row.is_active ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-neutral-500"}`} title={row.is_active ? "Активна" : "Завершена"} />
@@ -518,7 +518,7 @@ export default function PerformanceView({
                                 </span>
                               </div>
                               {row.min_date && (
-                                <span className="text-[9px] font-black text-white/30 uppercase">
+                                <span className={`text-[9px] font-black ${isLight ? "text-neutral-450" : "text-white/30"} uppercase`}>
                                   📅 {row.min_date} — {row.max_date}
                                 </span>
                               )}
@@ -527,20 +527,20 @@ export default function PerformanceView({
                           <td className="p-3 text-right">{formatUSD(row.spend)}</td>
                           <td className="p-3 text-right">{row.clicks.toLocaleString()}</td>
                           <td className="p-3 text-right">{row.impressions.toLocaleString()}</td>
-                          <td className="p-3 text-right text-white/60">{row.ctr}%</td>
-                          <td className="p-3 text-right text-white/60">{formatUSD(row.cpm)}</td>
-                          <td className="p-3 text-right text-white/60">{formatUSD(row.cpc)}</td>
-                          <td className="p-3 text-right text-violet-300">{row.leads_count.toLocaleString()}</td>
-                          <td className="p-3 text-right text-white/60">{row.siteCr}%</td>
-                          <td className="p-3 text-right text-white/40">{formatUSD(row.cpl)}</td>
-                          <td className="p-3 text-right text-sky-300">{row.applications.toLocaleString()}</td>
-                          <td className="p-3 text-right text-white/60">{row.appCr}%</td>
-                          <td className="p-3 text-right text-white/40">{formatUSD(row.cpa)}</td>
-                          <td className="p-3 text-right text-indigo-300">{row.consultations.toLocaleString()}</td>
-                          <td className="p-3 text-right text-emerald-450">{row.sales.toLocaleString()}</td>
-                          <td className="p-3 text-right text-white font-bold">{formatUSD(row.usd_revenue)}</td>
-                          <td className="p-3 text-right text-white/60">{formatUSD(row.aov)}</td>
-                          <td className="p-3 text-right text-yellow-400 font-bold">{row.roas}x</td>
+                          <td className={`p-3 text-right ${isLight ? "text-neutral-500" : "text-white/60"}`}>{row.ctr}%</td>
+                          <td className={`p-3 text-right ${isLight ? "text-neutral-500" : "text-white/60"}`}>{formatUSD(row.cpm)}</td>
+                          <td className={`p-3 text-right ${isLight ? "text-neutral-500" : "text-white/60"}`}>{formatUSD(row.cpc)}</td>
+                          <td className={`p-3 text-right ${isLight ? "text-violet-600" : "text-violet-300"}`}>{row.leads_count.toLocaleString()}</td>
+                          <td className={`p-3 text-right ${isLight ? "text-neutral-500" : "text-white/60"}`}>{row.siteCr}%</td>
+                          <td className={`p-3 text-right ${isLight ? "text-neutral-450" : "text-white/40"}`}>{formatUSD(row.cpl)}</td>
+                          <td className={`p-3 text-right ${isLight ? "text-sky-600" : "text-sky-300"}`}>{row.applications.toLocaleString()}</td>
+                          <td className={`p-3 text-right ${isLight ? "text-neutral-500" : "text-white/60"}`}>{row.appCr}%</td>
+                          <td className={`p-3 text-right ${isLight ? "text-neutral-450" : "text-white/40"}`}>{formatUSD(row.cpa)}</td>
+                          <td className={`p-3 text-right ${isLight ? "text-indigo-600" : "text-indigo-300"}`}>{row.consultations.toLocaleString()}</td>
+                          <td className={`p-3 text-right ${isLight ? "text-emerald-600" : "text-emerald-450"}`}>{row.sales.toLocaleString()}</td>
+                          <td className={`p-3 text-right font-bold ${isLight ? "text-neutral-900" : "text-white"}`}>{formatUSD(row.usd_revenue)}</td>
+                          <td className={`p-3 text-right ${isLight ? "text-neutral-500" : "text-white/60"}`}>{formatUSD(row.aov)}</td>
+                          <td className={`p-3 text-right font-bold ${isLight ? "text-yellow-600" : "text-yellow-400"}`}>{row.roas}x</td>
                         </>
                       )}
                     </tr>
@@ -562,14 +562,14 @@ export default function PerformanceView({
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           {/* Daily Table (Left Column, xl:col-span-2) */}
-          <div className="xl:col-span-2 bg-[#0C0C0F]/45 border border-white/5 rounded-2xl overflow-hidden shadow-xl backdrop-blur-md flex flex-col">
-            <div className="p-4 border-b border-white/5 bg-[#050507]/40 flex justify-between items-center">
-              <h4 className="text-[10px] font-black uppercase tracking-wider text-white">Детальна статистика по днях</h4>
+          <div className={`xl:col-span-2 ${cardClass} rounded-2xl overflow-hidden flex flex-col`}>
+            <div className={`p-4 border-b ${borderClass} ${isLight ? "bg-neutral-50" : "bg-[#050507]/40"} flex justify-between items-center`}>
+              <h4 className={`text-[10px] font-black uppercase tracking-wider ${textClass}`}>Детальна статистика по днях</h4>
             </div>
             
             <div className="overflow-x-auto max-w-full">
-              <table className="w-full text-left border-collapse text-[11px] font-semibold text-white/70">
-                <thead className="bg-[#050507]/60 border-b border-white/5 text-[9px] font-black uppercase tracking-wider text-white/50">
+              <table className={`w-full text-left border-collapse text-[11px] font-semibold ${isLight ? "text-neutral-700" : "text-white/70"}`}>
+                <thead className={thBgClass}>
                   {viewMode === "simple" ? (
                     <tr>
                       <th className="p-4">Дата</th>
@@ -582,7 +582,7 @@ export default function PerformanceView({
                     </tr>
                   ) : (
                     <tr>
-                      <th className="p-3 sticky left-0 bg-[#050507]">Дата</th>
+                      <th className={`p-3 sticky left-0 ${isLight ? "bg-neutral-100 text-neutral-500" : "bg-[#050507] text-white/50"}`}>Дата</th>
                       <th className="p-3 text-right">Бюджет</th>
                       <th className="p-3 text-right">Кліки</th>
                       <th className="p-3 text-right">Покази</th>
@@ -603,43 +603,43 @@ export default function PerformanceView({
                     </tr>
                   )}
                 </thead>
-                <tbody className="divide-y divide-white/5">
+                <tbody className={`divide-y ${borderClass}`}>
                   {activeRows.length > 0 ? (
                     activeRows.map((row: any, idx: number) => (
                       <tr
                         key={row.date || idx}
-                        className="hover:bg-white/5 transition-all text-white/80"
+                        className={`${rowHoverClass} transition-all text-neutral-800`}
                       >
                         {viewMode === "simple" ? (
                           <>
-                            <td className="p-4 font-bold text-white/95">{row.date}</td>
+                            <td className={`p-4 font-bold ${isLight ? "text-neutral-900" : "text-white/95"}`}>{row.date}</td>
                             <td className="p-4 text-right">{formatUSD(row.spend)}</td>
                             <td className="p-4 text-right">{row.leads_count.toLocaleString()}</td>
-                            <td className="p-4 text-right text-white/40">{formatUSD(row.cpl)}</td>
+                            <td className={`p-4 text-right ${isLight ? "text-neutral-450" : "text-white/40"}`}>{formatUSD(row.cpl)}</td>
                             <td className="p-4 text-right text-emerald-400/90">{row.sales.toLocaleString()}</td>
-                            <td className="p-4 text-right font-bold text-white/90">{formatUSD(row.usd_revenue)}</td>
-                            <td className="p-4 text-right text-yellow-400/90 font-bold">{row.roas}x</td>
+                            <td className={`p-4 text-right font-bold ${isLight ? "text-neutral-900" : "text-white/90"}`}>{formatUSD(row.usd_revenue)}</td>
+                            <td className={`p-4 text-right text-yellow-500 font-bold`}>{row.roas}x</td>
                           </>
                         ) : (
                           <>
-                            <td className="p-3 sticky left-0 bg-[#0C0C0F] font-bold text-white border-r border-white/5">{row.date}</td>
+                            <td className={`p-3 sticky left-0 font-bold border-r ${borderClass} ${isLight ? "bg-white text-neutral-900" : "bg-[#0C0C0F] text-white"}`}>{row.date}</td>
                             <td className="p-3 text-right">{formatUSD(row.spend)}</td>
                             <td className="p-3 text-right">{row.clicks.toLocaleString()}</td>
                             <td className="p-3 text-right">{row.impressions.toLocaleString()}</td>
-                            <td className="p-3 text-right text-white/60">{row.ctr}%</td>
-                            <td className="p-3 text-right text-white/60">{formatUSD(row.cpm)}</td>
-                            <td className="p-3 text-right text-white/60">{formatUSD(row.cpc)}</td>
-                            <td className="p-3 text-right text-violet-300">{row.leads_count.toLocaleString()}</td>
-                            <td className="p-3 text-right text-white/60">{row.siteCr}%</td>
-                            <td className="p-3 text-right text-white/40">{formatUSD(row.cpl)}</td>
-                            <td className="p-3 text-right text-sky-300">{row.applications.toLocaleString()}</td>
-                            <td className="p-3 text-right text-white/60">{row.appCr}%</td>
-                            <td className="p-3 text-right text-white/40">{formatUSD(row.cpa)}</td>
-                            <td className="p-3 text-right text-indigo-300">{row.consultations.toLocaleString()}</td>
-                            <td className="p-3 text-right text-emerald-450">{row.sales.toLocaleString()}</td>
-                            <td className="p-3 text-right text-white font-bold">{formatUSD(row.usd_revenue)}</td>
-                            <td className="p-3 text-right text-white/60">{formatUSD(row.aov)}</td>
-                            <td className="p-3 text-right text-yellow-400 font-bold">{row.roas}x</td>
+                            <td className={`p-3 text-right ${isLight ? "text-neutral-500" : "text-white/60"}`}>{row.ctr}%</td>
+                            <td className={`p-3 text-right ${isLight ? "text-neutral-500" : "text-white/60"}`}>{formatUSD(row.cpm)}</td>
+                            <td className={`p-3 text-right ${isLight ? "text-neutral-500" : "text-white/60"}`}>{formatUSD(row.cpc)}</td>
+                            <td className={`p-3 text-right ${isLight ? "text-violet-600" : "text-violet-300"}`}>{row.leads_count.toLocaleString()}</td>
+                            <td className={`p-3 text-right ${isLight ? "text-neutral-500" : "text-white/60"}`}>{row.siteCr}%</td>
+                            <td className={`p-3 text-right ${isLight ? "text-neutral-450" : "text-white/40"}`}>{formatUSD(row.cpl)}</td>
+                            <td className={`p-3 text-right ${isLight ? "text-sky-600" : "text-sky-300"}`}>{row.applications.toLocaleString()}</td>
+                            <td className={`p-3 text-right ${isLight ? "text-neutral-500" : "text-white/60"}`}>{row.appCr}%</td>
+                            <td className={`p-3 text-right ${isLight ? "text-neutral-450" : "text-white/40"}`}>{formatUSD(row.cpa)}</td>
+                            <td className={`p-3 text-right ${isLight ? "text-indigo-600" : "text-indigo-300"}`}>{row.consultations.toLocaleString()}</td>
+                            <td className={`p-3 text-right ${isLight ? "text-emerald-600" : "text-emerald-450"}`}>{row.sales.toLocaleString()}</td>
+                            <td className={`p-3 text-right font-bold ${isLight ? "text-neutral-900" : "text-white"}`}>{formatUSD(row.usd_revenue)}</td>
+                            <td className={`p-3 text-right ${isLight ? "text-neutral-500" : "text-white/60"}`}>{formatUSD(row.aov)}</td>
+                            <td className={`p-3 text-right font-bold ${isLight ? "text-yellow-600" : "text-yellow-400"}`}>{row.roas}x</td>
                           </>
                         )}
                       </tr>
@@ -662,13 +662,13 @@ export default function PerformanceView({
           {/* Right Column: Weekly & Monthly summaries */}
           <div className="space-y-6 flex flex-col">
             {/* Monthly Summary Table */}
-            <div className="bg-[#0C0C0F]/45 border border-white/5 rounded-2xl overflow-hidden shadow-xl backdrop-blur-md flex flex-col">
-              <div className="p-4 border-b border-white/5 bg-[#050507]/40">
-                <h4 className="text-[10px] font-black uppercase tracking-wider text-white">📅 Підсумок за місяцями</h4>
+            <div className={`${cardClass} rounded-2xl overflow-hidden flex flex-col`}>
+              <div className={`p-4 border-b ${borderClass} ${isLight ? "bg-neutral-50" : "bg-[#050507]/40"}`}>
+                <h4 className={`text-[10px] font-black uppercase tracking-wider ${textClass}`}>📅 Підсумок за місяцями</h4>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-[11px] font-semibold text-white/70">
-                  <thead className="bg-[#050507]/60 border-b border-white/5 text-[9px] font-black uppercase tracking-wider text-white/50">
+                <table className={`w-full text-left border-collapse text-[11px] font-semibold ${isLight ? "text-neutral-700" : "text-white/70"}`}>
+                  <thead className={thBgClass}>
                     <tr>
                       <th className="p-3">Місяць</th>
                       <th className="p-3 text-right">Витрати</th>
@@ -677,17 +677,17 @@ export default function PerformanceView({
                       <th className="p-3 text-right text-yellow-450">ROAS</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5">
+                  <tbody className={`divide-y ${borderClass}`}>
                     {monthlySummary.length > 0 ? (
                       monthlySummary.map((m: any) => (
-                        <tr key={m.month} className="hover:bg-white/5 transition-all text-white/80">
-                          <td className="p-3 font-bold text-white capitalize">
+                        <tr key={m.month} className={`${rowHoverClass} transition-all text-neutral-800`}>
+                          <td className={`p-3 font-bold ${isLight ? "text-neutral-900" : "text-white"} capitalize`}>
                             {new Date(m.month + "-02").toLocaleString("uk-UA", { month: "long", year: "numeric" })}
                           </td>
                           <td className="p-3 text-right">{formatUSD(m.spend)}</td>
                           <td className="p-3 text-right">{m.leads_count.toLocaleString()}</td>
                           <td className="p-3 text-right text-emerald-400 font-bold">{formatUSD(m.usd_revenue)}</td>
-                          <td className={`p-3 text-right font-bold ${m.roas >= 1 ? "text-yellow-450" : "text-white/40"}`}>{m.roas}x</td>
+                          <td className={`p-3 text-right font-bold ${m.roas >= 1 ? "text-yellow-500" : (isLight ? "text-neutral-450" : "text-white/40")}`}>{m.roas}x</td>
                         </tr>
                       ))
                     ) : (
@@ -701,13 +701,13 @@ export default function PerformanceView({
             </div>
 
             {/* Weekly Summary Table */}
-            <div className="bg-[#0C0C0F]/45 border border-white/5 rounded-2xl overflow-hidden shadow-xl backdrop-blur-md flex flex-col">
-              <div className="p-4 border-b border-white/5 bg-[#050507]/40">
-                <h4 className="text-[10px] font-black uppercase tracking-wider text-white">📅 Підсумок за тижнями</h4>
+            <div className={`${cardClass} rounded-2xl overflow-hidden flex flex-col`}>
+              <div className={`p-4 border-b ${borderClass} ${isLight ? "bg-neutral-50" : "bg-[#050507]/40"}`}>
+                <h4 className={`text-[10px] font-black uppercase tracking-wider ${textClass}`}>📅 Підсумок за тижнями</h4>
               </div>
               <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
-                <table className="w-full text-left border-collapse text-[11px] font-semibold text-white/70">
-                  <thead className="bg-[#050507]/60 border-b border-white/5 text-[9px] font-black uppercase tracking-wider text-white/50">
+                <table className={`w-full text-left border-collapse text-[11px] font-semibold ${isLight ? "text-neutral-700" : "text-white/70"}`}>
+                  <thead className={thBgClass}>
                     <tr>
                       <th className="p-3">Тиждень</th>
                       <th className="p-3 text-right">Витрати</th>
@@ -716,21 +716,21 @@ export default function PerformanceView({
                       <th className="p-3 text-right text-yellow-450">ROAS</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5">
+                  <tbody className={`divide-y ${borderClass}`}>
                     {weeklySummary.length > 0 ? (
                       weeklySummary.map((w: any) => {
                         // Format dates nicely, e.g. "22 Jun - 28 Jun"
                         const fStart = new Date(w.weekStart).toLocaleDateString("uk-UA", { day: "numeric", month: "short" });
                         const fEnd = new Date(w.weekEnd).toLocaleDateString("uk-UA", { day: "numeric", month: "short" });
                         return (
-                          <tr key={w.weekStart} className="hover:bg-white/5 transition-all text-white/80">
-                            <td className="p-3 font-bold text-white text-[10px]">
+                          <tr key={w.weekStart} className={`${rowHoverClass} transition-all text-neutral-800`}>
+                            <td className={`p-3 font-bold ${isLight ? "text-neutral-950" : "text-white"} text-[10px]`}>
                               {fStart} — {fEnd}
                             </td>
                             <td className="p-3 text-right">{formatUSD(w.spend)}</td>
                             <td className="p-3 text-right">{w.leads_count.toLocaleString()}</td>
                             <td className="p-3 text-right text-emerald-400 font-bold">{formatUSD(w.usd_revenue)}</td>
-                            <td className={`p-3 text-right font-bold ${w.roas >= 1 ? "text-yellow-450" : "text-white/40"}`}>{w.roas}x</td>
+                            <td className={`p-3 text-right font-bold ${w.roas >= 1 ? "text-yellow-500" : (isLight ? "text-neutral-450" : "text-white/40")}`}>{w.roas}x</td>
                           </tr>
                         );
                       })
