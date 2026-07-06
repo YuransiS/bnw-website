@@ -501,6 +501,7 @@ export async function getUnifiedCRMData(
       .select("*", { count: "exact", head: true })
       .eq("project_id", activeProject.id);
 
+    let cacheRebuildMs = 0;
     const needsRebuild = !dirtyQueue || dirtyQueue.is_dirty || cachedCount === 0;
 
     if (needsRebuild) {
@@ -513,7 +514,9 @@ export async function getUnifiedCRMData(
 
       if (cachedCount === 0) {
         // Build synchronously on first load so user gets data
+        const rebuildStart = performance.now();
         await rebuildProjectCache(activeProject.id, activeProject.slug);
+        cacheRebuildMs = performance.now() - rebuildStart;
       } else {
         // Build in the background asynchronously so page loads instantly
         rebuildProjectCache(activeProject.id, activeProject.slug).catch((err) => {
@@ -952,6 +955,7 @@ export async function getUnifiedCRMData(
         dbFetchMs: Math.round(cacheCheckMs),
         dbRpcMs: Math.round(dbRpcMs),
         jsClusteringMs: Math.round(dbQueryMs),
+        cacheRebuildMs: Math.round(cacheRebuildMs),
         payloadSizeKb
       }
     };

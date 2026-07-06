@@ -100,8 +100,8 @@ export async function GET(req: Request) {
           utm_source: "meta",
           campaign_id: ins.campaign_id,
           campaign_name: ins.campaign_name || "",
-          adset_id: ins.adset_id || null,
-          ad_id: ins.ad_id || null,
+          adset_id: ins.adset_id || "",
+          ad_id: ins.ad_id || "",
           clicks: Number(ins.clicks || 0),
           impressions: Number(ins.impressions || 0),
           spend: spend
@@ -118,7 +118,7 @@ export async function GET(req: Request) {
         const chunk = allRecords.slice(i, i + chunkSize);
         const { error: upsertErr } = await supabase
           .from("daily_traffic_and_costs")
-          .upsert(chunk);
+          .upsert(chunk, { onConflict: "project_id,date,utm_source,campaign_id,ad_id" });
         
         if (upsertErr) throw upsertErr;
       }

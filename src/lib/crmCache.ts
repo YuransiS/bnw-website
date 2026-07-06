@@ -304,6 +304,56 @@ const isLeadMatchingLanding = (lead: any, landingUrl: string, activeSlug: string
   }) || false;
 };
 
+const isBlacklistedPhone = (phone: string): boolean => {
+  const clean = phone.replace(/\D/g, "");
+  if (clean.length < 7) return true;
+  const allSame = /^(\d)\1+$/.test(clean);
+  if (allSame) return true;
+  const sequences = [
+    "1234567", "12345678", "123456789", "1234567890",
+    "9876543", "98765432", "987654321", "9876543210"
+  ];
+  if (sequences.some(seq => clean.includes(seq))) return true;
+  const dummies = [
+    "380000000000", "380500000000", "380660000000", "380990000000",
+    "380930000000", "380970000000", "380630000000", "380670000000",
+    "380680000000", "380980000000", "380950000000", "380501234567",
+    "380671234567", "380931234567", "380631234567"
+  ];
+  if (dummies.includes(clean)) return true;
+  return false;
+};
+
+const isBlacklistedTelegram = (tg: string): boolean => {
+  if (!tg) return true;
+  const clean = tg.toLowerCase().replace("@", "").trim();
+  if (clean.length < 3) return true;
+  const ignored = new Set([
+    "test", "tg", "none", "null", "unknown", "no", "empty", "telegram",
+    "невідомий", "неизвестно", "dummy", "qwerty", "asdfgh", "tbd", "na",
+    "user", "admin"
+  ]);
+  if (ignored.has(clean)) return true;
+  if (/^\d+$/.test(clean) && clean.length >= 7) return true;
+  return false;
+};
+
+const isBlacklistedEmail = (email: string): boolean => {
+  if (!email) return true;
+  const clean = email.toLowerCase().trim();
+  if (clean.length < 5) return true;
+  const patterns = [
+    "test@test.com", "test@gmail.com", "no@email.com", "none@gmail.com",
+    "unknown@gmail.com", "null@gmail.com", "test@mail.ru", "user@gmail.com",
+    "admin@gmail.com", "111@gmail.com", "a@a.com"
+  ];
+  if (patterns.includes(clean)) return true;
+  if (clean.startsWith("test@") || clean.startsWith("no-reply@") || clean.startsWith("noreply@")) {
+    return true;
+  }
+  return false;
+};
+
 // Rebuild project CRM DSU cache inside Supabase
 export async function rebuildProjectCache(projectId: string, activeSlug: string) {
   const adminSupabase = createAdminClient();
@@ -377,15 +427,15 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
     const email = lead.email?.toLowerCase().trim() || "";
     const uuid = lead.visitor_uuid || "";
 
-    if (phone.length >= 7) {
+    if (phone.length >= 7 && !isBlacklistedPhone(phone)) {
       if (phoneMap.has(phone)) dsu.union(i, phoneMap.get(phone)!);
       else phoneMap.set(phone, i);
     }
-    if (tg) {
+    if (tg && !isBlacklistedTelegram(tg)) {
       if (tgMap.has(tg)) dsu.union(i, tgMap.get(tg)!);
       else tgMap.set(tg, i);
     }
-    if (email) {
+    if (email && !isBlacklistedEmail(email)) {
       if (emailMap.has(email)) dsu.union(i, emailMap.get(email)!);
       else emailMap.set(email, i);
     }
@@ -604,8 +654,41 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
     const uniqueOrders = new Map<string, any>();
     normalizedGroupLeads.forEach((item) => {
       const orderId = item.order_id || item.id;
-      const orderKey = `${orderId}_${item.project_id}`;
+      const hasProperOrderId = item.order_id && item.order_id !== item.id;
 
+      if (!hasProperOrderId) {
+        let isDuplicate = false;
+        const itemTime = new Date(item.created_at || 0).getTime();
+
+        for (const existing of uniqueOrders.values()) {
+          if (
+            existing.project_id === item.project_id &&
+            Number(existing.amount) === Number(item.amount)
+          ) {
+            const existingTime = new Date(existing.created_at || 0).getTime();
+            const timeDiffMin = Math.abs(itemTime - existingTime) / (1000 * 60);
+            if (timeDiffMin <= 30) {
+              isDuplicate = true;
+
+              const existingIsPaid = existing.status === "Купив курс" || existing.status === "Купив(-ла) Трипвайер";
+              const itemIsPaid = item.status === "Купив курс" || item.status === "Купив(-ла) Трипвайер";
+              if (itemIsPaid && !existingIsPaid) {
+                const existingKey = `${existing.order_id || existing.id}_${existing.project_id}`;
+                uniqueOrders.delete(existingKey);
+                const newKey = `${orderId}_${item.project_id}`;
+                uniqueOrders.set(newKey, item);
+              }
+              break;
+            }
+          }
+        }
+
+        if (isDuplicate) {
+          return;
+        }
+      }
+
+      const orderKey = `${orderId}_${item.project_id}`;
       const existing = uniqueOrders.get(orderKey);
       if (!existing) {
         uniqueOrders.set(orderKey, item);

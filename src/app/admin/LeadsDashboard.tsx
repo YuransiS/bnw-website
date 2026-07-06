@@ -609,6 +609,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const [isTracing, setIsTracing] = useState(false);
   const [traceError, setTraceError] = useState("");
   const [isQaPanelExpanded, setIsQaPanelExpanded] = useState(false);
+  const [clientRequestMs, setClientRequestMs] = useState<number | null>(null);
 
   const handleTraceVisitor = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -770,14 +771,17 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     };
 
     devLogger.info("CRM Client", `Requesting getUnifiedCRMData for project: ${activeSlug}`, paramsPayload);
+    const requestStart = performance.now();
 
     getUnifiedCRMData(activeSlug, paramsPayload).then((res: any) => {
+      const requestDuration = performance.now() - requestStart;
       if (isMounted) {
         devLogger.info("CRM Client", "Successfully received CRM data", {
           performance: res.performance,
           leadsCount: res.leads?.length || 0,
           unresolvedCount: res.unresolvedOrders?.length || 0
         });
+        setClientRequestMs(Math.round(requestDuration));
         setDashboardData(res);
         setIsLoading(false);
       }
@@ -2496,6 +2500,16 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                       </h4>
 
                       <div className="p-4 rounded-xl bg-black/40 border border-white/5 font-mono text-xs text-white/70 space-y-2 max-w-2xl">
+                        <div className="flex justify-between border-b border-white/5 pb-2">
+                          <span className="text-white/45">Время запроса клиента (круг/сеть):</span>
+                          <span className="text-emerald-400 font-extrabold">{clientRequestMs ? `${clientRequestMs} ms` : "—"}</span>
+                        </div>
+                        {performanceInfo.cacheRebuildMs > 0 && (
+                          <div className="flex justify-between border-b border-white/5 pb-2">
+                            <span className="text-white/45">Генерация кэша CRM (синхронно):</span>
+                            <span className="text-amber-400 font-extrabold">{performanceInfo.cacheRebuildMs} ms</span>
+                          </div>
+                        )}
                         <div className="flex justify-between border-b border-white/5 pb-2">
                           <span className="text-white/45">БД время (RPC / Выборка):</span>
                           <span className="text-emerald-400 font-extrabold">{performanceInfo.dbRpcMs} ms / {performanceInfo.dbFetchMs} ms</span>
