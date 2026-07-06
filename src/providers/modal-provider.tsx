@@ -98,6 +98,7 @@ export function useModal() {
 }
 
 import { createLeadAction, getClientCountry } from "@/app/actions/leads";
+import { validatePhoneNumber } from "@/utils/phone";
 
 const COUNTRY_PREFIXES: Record<string, string> = {
   UA: "+380",
@@ -205,11 +206,10 @@ function LeadModal() {
       return;
     }
 
-    // Phone format validation
-    const cleanPhone = phone.trim().replace(/[\s\-\(\)]/g, "");
-    const phoneRegex = /^\+\d{9,15}$/;
-    if (!phoneRegex.test(cleanPhone)) {
-      setError("Некоректний формат номера телефону. Номер має починатися з '+' та містити від 9 до 15 цифр.");
+    // Phone format validation using libphonenumber-js
+    const cleanPhone = phone.trim();
+    if (!validatePhoneNumber(cleanPhone)) {
+      setError("Будь ласка, введіть коректний номер телефону з кодом країни (наприклад, +380...)");
       return;
     }
 
