@@ -502,7 +502,8 @@ export async function getUnifiedCRMData(
       .eq("project_id", activeProject.id);
 
     let cacheRebuildMs = 0;
-    const needsRebuild = !dirtyQueue || dirtyQueue.is_dirty || cachedCount === 0;
+    const needsRebuild = !dirtyQueue || dirtyQueue.is_dirty;
+    const needsSyncRebuild = !dirtyQueue;
 
     if (needsRebuild) {
       // Set dirty to false immediately to lock and prevent concurrent rebuilds
@@ -512,7 +513,7 @@ export async function getUnifiedCRMData(
         updated_at: new Date().toISOString()
       });
 
-      if (cachedCount === 0) {
+      if (needsSyncRebuild) {
         // Build synchronously on first load so user gets data
         const rebuildStart = performance.now();
         await rebuildProjectCache(activeProject.id, activeProject.slug);
@@ -623,10 +624,35 @@ export async function getUnifiedCRMData(
     const [leadsRes, aggRes, allTrafficRes, costsRes, allProfilesRes] = await Promise.all([
       query.order("created_at", { ascending: false }).range(from, to),
       aggQuery,
-      filters?.skipTraffic
-        ? Promise.resolve({ data: [] })
-        : adminSupabase.from("traffic_clicks").select("*").eq("project_id", activeProject.id).order("created_at", { ascending: false }),
-      adminSupabase.from("daily_traffic_and_costs").select("*").eq("project_id", activeProject.id).order("date", { ascending: false }),
+      (() => {
+        if (filters?.skipTraffic) return Promise.resolve({ data: [], error: null } as any);
+        let q = adminSupabase
+          .from("traffic_clicks")
+          .select("utm_source, utm_medium, utm_campaign, utm_content, created_at")
+          .eq("project_id", activeProject.id);
+        if (startDate) {
+          const startStr = parseClientDateRange(startDate, false).toISOString();
+          q = q.gte("created_at", startStr);
+        }
+        if (endDate) {
+          const endStr = parseClientDateRange(endDate, true).toISOString();
+          q = q.lte("created_at", endStr);
+        }
+        return q.order("created_at", { ascending: false });
+      })(),
+      (() => {
+        let q = adminSupabase
+          .from("daily_traffic_and_costs")
+          .select("date, spend")
+          .eq("project_id", activeProject.id);
+        if (startDate) {
+          q = q.gte("date", startDate);
+        }
+        if (endDate) {
+          q = q.lte("date", endDate);
+        }
+        return q.order("date", { ascending: false });
+      })(),
       adminSupabase.from("profiles").select("id, email, full_name")
     ]);
     const dbQueryEnd = performance.now();

@@ -489,6 +489,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
   // Reference to track last fetched parameters to prevent duplicate/redundant client-side fetches
   const lastFetchedParamsRef = React.useRef<string>("");
+  const clientCacheRef = React.useRef<Record<string, any>>({});
 
   const [hasMounted, setHasMounted] = useState(false);
   useEffect(() => {
@@ -503,6 +504,11 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   useEffect(() => {
     const currentSlug = initialData.activeSlug || "";
     const isProjectSwitched = currentSlug !== prevSlugRef.current;
+
+    if (!isProjectSwitched) {
+      // Current project had a mutation (e.g. status shift, comment add). Clear client cache so we don't display stale data.
+      clientCacheRef.current = {};
+    }
 
     // Reset all filter states to default values if project is switched
     if (isProjectSwitched) {
@@ -754,7 +760,17 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     }
 
     lastFetchedParamsRef.current = currentParamsKey;
-    setIsLoading(true);
+    
+    // Check if we have cached data for these parameters
+    const cachedData = clientCacheRef.current[currentParamsKey];
+    if (cachedData) {
+      // Serve cached data instantly (no full-screen blocker)
+      setDashboardData(cachedData);
+      setIsLoading(false);
+    } else {
+      // First load: show blocking loader
+      setIsLoading(true);
+    }
 
     const paramsPayload = {
       page: isKanban ? 1 : currentPage,
@@ -782,6 +798,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           unresolvedCount: res.unresolvedOrders?.length || 0
         });
         setClientRequestMs(Math.round(requestDuration));
+        
+        // Cache the result in client-side memory
+        clientCacheRef.current[currentParamsKey] = res;
+        
         setDashboardData(res);
         setIsLoading(false);
       }
