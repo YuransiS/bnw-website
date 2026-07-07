@@ -37,6 +37,26 @@ export default function PerformanceView({
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   
+  // Dynamic theme styling classes
+  const textClass = isLight ? "text-neutral-900" : "text-white";
+  const textMutedClass = isLight ? "text-neutral-500" : "text-white/40";
+  const cardClass = isLight ? "bg-white border border-neutral-200 text-neutral-900 shadow-sm" : "bg-[#0C0C0F] border border-white/5 text-white";
+  const borderClass = isLight ? "border-neutral-200" : "border-white/5";
+  const thBgClass = isLight ? "bg-neutral-100 text-neutral-500 border-b border-neutral-200" : "bg-white/[0.02] text-white/45 border-b border-white/5";
+  const rowHoverClass = isLight ? "hover:bg-neutral-50" : "hover:bg-white/[0.01]";
+  
+  const inputClass = isLight 
+    ? "bg-white border border-neutral-300 text-neutral-900 placeholder:text-neutral-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" 
+    : "bg-white/[0.03] border border-white/10 text-white placeholder:text-white/20 focus:border-emerald-500";
+  
+  const switcherContainerClass = isLight 
+    ? "flex items-center gap-1 bg-neutral-100 border border-neutral-200 p-1 rounded-xl w-full sm:w-auto" 
+    : "flex items-center gap-1 bg-[#050507] border border-white/5 p-1 rounded-xl w-full sm:w-auto";
+
+  const exportBtnClass = isLight
+    ? "flex items-center gap-2 px-4 py-2 border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-800 hover:text-neutral-900 text-xs font-black uppercase tracking-wider rounded-xl cursor-pointer transition-all disabled:opacity-50"
+    : "flex items-center gap-2 px-4 py-2 border border-white/10 bg-white/[0.02] hover:bg-white/[0.06] text-white/80 hover:text-white text-xs font-black uppercase tracking-wider rounded-xl cursor-pointer transition-all disabled:opacity-50";
+
   // Views: simple vs advanced
   const [viewMode, setViewMode] = useState<"simple" | "advanced">("simple");
   // Groupings: campaign vs date
@@ -231,7 +251,7 @@ export default function PerformanceView({
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4">
         <RefreshCw className="w-8 h-8 animate-spin text-emerald-450" />
-        <p className={`text-xs font-semibold uppercase tracking-widest \${isLight ? "text-neutral-400" : "text-white/40"}`}>
+        <p className={`text-xs font-semibold uppercase tracking-widest ${isLight ? "text-neutral-400" : "text-white/40"}`}>
           Завантаження аналітики трафіку...
         </p>
       </div>
@@ -271,8 +291,8 @@ export default function PerformanceView({
               onClick={() => setViewMode("simple")}
               className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
                 viewMode === "simple"
-                  ? "bg-white text-black shadow-lg"
-                  : "text-white/40 hover:text-white"
+                  ? isLight ? "bg-white text-neutral-900 shadow-sm border border-neutral-200/50" : "bg-white text-black shadow-lg"
+                  : isLight ? "text-neutral-500 hover:text-neutral-900" : "text-white/40 hover:text-white"
               }`}
             >
               Простий
@@ -281,8 +301,8 @@ export default function PerformanceView({
               onClick={() => setViewMode("advanced")}
               className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
                 viewMode === "advanced"
-                  ? "bg-white text-black shadow-lg"
-                  : "text-white/40 hover:text-white"
+                  ? isLight ? "bg-white text-neutral-900 shadow-sm border border-neutral-200/50" : "bg-white text-black shadow-lg"
+                  : isLight ? "text-neutral-500 hover:text-neutral-900" : "text-white/40 hover:text-white"
               }`}
             >
               Детальний
@@ -295,8 +315,8 @@ export default function PerformanceView({
               onClick={() => setGroupBy("campaign")}
               className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
                 groupBy === "campaign"
-                  ? "bg-white text-black shadow-lg"
-                  : "text-white/40 hover:text-white"
+                  ? isLight ? "bg-white text-neutral-900 shadow-sm border border-neutral-200/50" : "bg-white text-black shadow-lg"
+                  : isLight ? "text-neutral-500 hover:text-neutral-900" : "text-white/40 hover:text-white"
               }`}
             >
               Кампанії
@@ -305,8 +325,8 @@ export default function PerformanceView({
               onClick={() => setGroupBy("date")}
               className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
                 groupBy === "date"
-                  ? "bg-white text-black shadow-lg"
-                  : "text-white/40 hover:text-white"
+                  ? isLight ? "bg-white text-neutral-900 shadow-sm border border-neutral-200/50" : "bg-white text-black shadow-lg"
+                  : isLight ? "text-neutral-500 hover:text-neutral-900" : "text-white/40 hover:text-white"
               }`}
             >
               Дати
@@ -481,7 +501,7 @@ export default function PerformanceView({
                   activeRows.map((row: any, idx: number) => (
                     <tr
                       key={row.campaign_id || idx}
-                      className={`${rowHoverClass} transition-all text-neutral-800`}
+                      className={`${rowHoverClass} transition-all ${isLight ? "text-neutral-800" : "text-white/80"}`}
                     >
                       {viewMode === "simple" ? (
                         <>
@@ -608,7 +628,7 @@ export default function PerformanceView({
                     activeRows.map((row: any, idx: number) => (
                       <tr
                         key={row.date || idx}
-                        className={`${rowHoverClass} transition-all text-neutral-800`}
+                        className={`${rowHoverClass} transition-all ${isLight ? "text-neutral-800" : "text-white/80"}`}
                       >
                         {viewMode === "simple" ? (
                           <>
@@ -680,7 +700,7 @@ export default function PerformanceView({
                   <tbody className={`divide-y ${borderClass}`}>
                     {monthlySummary.length > 0 ? (
                       monthlySummary.map((m: any) => (
-                        <tr key={m.month} className={`${rowHoverClass} transition-all text-neutral-800`}>
+                        <tr key={m.month} className={`${rowHoverClass} transition-all ${isLight ? "text-neutral-800" : "text-white/80"}`}>
                           <td className={`p-3 font-bold ${isLight ? "text-neutral-900" : "text-white"} capitalize`}>
                             {new Date(m.month + "-02").toLocaleString("uk-UA", { month: "long", year: "numeric" })}
                           </td>
@@ -723,7 +743,7 @@ export default function PerformanceView({
                         const fStart = new Date(w.weekStart).toLocaleDateString("uk-UA", { day: "numeric", month: "short" });
                         const fEnd = new Date(w.weekEnd).toLocaleDateString("uk-UA", { day: "numeric", month: "short" });
                         return (
-                          <tr key={w.weekStart} className={`${rowHoverClass} transition-all text-neutral-800`}>
+                          <tr key={w.weekStart} className={`${rowHoverClass} transition-all ${isLight ? "text-neutral-800" : "text-white/80"}`}>
                             <td className={`p-3 font-bold ${isLight ? "text-neutral-950" : "text-white"} text-[10px]`}>
                               {fStart} — {fEnd}
                             </td>

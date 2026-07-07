@@ -1121,18 +1121,18 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             <span className={`truncate text-xs ${depth === 0
                 ? "font-extrabold text-white uppercase tracking-wider"
                 : depth === 1
-                  ? "font-bold text-indigo-400"
+                  ? `font-bold ${isLight ? "text-indigo-600" : "text-indigo-400"}`
                   : depth === 2
-                    ? "font-medium text-amber-400/90"
+                    ? `font-medium ${isLight ? "text-amber-600" : "text-amber-400/90"}`
                     : "font-normal text-white/60"
               }`}>
               {node.name}
             </span>
           </td>
-          <td className="p-4 text-center font-bold text-neutral-400">{node.clicks}</td>
+          <td className={`p-4 text-center font-bold ${isLight ? "text-neutral-600" : "text-neutral-400"}`}>{node.clicks}</td>
           <td className="p-4 text-center font-extrabold text-white">{node.leads}</td>
-          <td className="p-4 text-center font-bold text-blue-400">{node.cr.toFixed(1)}%</td>
-          <td className="p-4 text-center font-black text-emerald-400">
+          <td className={`p-4 text-center font-bold ${isLight ? "text-blue-600" : "text-blue-400"}`}>{node.cr.toFixed(1)}%</td>
+          <td className={`p-4 text-center font-black ${isLight ? "text-emerald-600" : "text-emerald-400"}`}>
             {formatDualCurrency(node.usd_revenue, node.uah_revenue)}
           </td>
         </tr>
@@ -1247,6 +1247,60 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         .theme-light select option {
           background-color: #ffffff !important;
           color: #171717 !important;
+        }
+
+        /* Preserve white text on dark/colored elements in light theme */
+        .theme-light .bg-neutral-900.text-white,
+        .theme-light .bg-neutral-900 .text-white,
+        .theme-light .bg-black.text-white,
+        .theme-light .bg-black .text-white,
+        .theme-light .bg-emerald-500.text-white,
+        .theme-light .bg-emerald-500 .text-white,
+        .theme-light .bg-emerald-600.text-white,
+        .theme-light .bg-emerald-600 .text-white,
+        .theme-light .bg-red-500.text-white,
+        .theme-light .bg-red-500 .text-white,
+        .theme-light .bg-blue-500.text-white,
+        .theme-light .bg-blue-500 .text-white,
+        .theme-light .bg-purple-500.text-white,
+        .theme-light .bg-purple-500 .text-white,
+        .theme-light .bg-teal-500.text-white,
+        .theme-light .bg-teal-500 .text-white,
+        .theme-light .bg-indigo-500.text-white,
+        .theme-light .bg-indigo-500 .text-white,
+        .theme-light .bg-orange-500.text-white,
+        .theme-light .bg-orange-500 .text-white,
+        .theme-light .bg-pink-500.text-white,
+        .theme-light .bg-pink-500 .text-white,
+        .theme-light .bg-sky-500.text-white,
+        .theme-light .bg-sky-500 .text-white,
+        .theme-light .bg-neutral-800.text-white,
+        .theme-light .bg-neutral-800 .text-white,
+        .theme-light .bg-emerald-950\\/20 .text-white,
+        .theme-light .bg-emerald-950\\/20 .text-white\\/80 {
+          color: #ffffff !important;
+        }
+
+        .theme-light .bg-neutral-900.text-white\\/90,
+        .theme-light .bg-neutral-900 .text-white\\/90,
+        .theme-light .bg-black.text-white\\/90,
+        .theme-light .bg-black .text-white\\/90,
+        .theme-light .bg-emerald-500.text-white\\/90,
+        .theme-light .bg-emerald-500 .text-white\\/90,
+        .theme-light .bg-emerald-600.text-white\\/90,
+        .theme-light .bg-emerald-600 .text-white\\/90 {
+          color: rgba(255, 255, 255, 0.9) !important;
+        }
+
+        .theme-light .bg-neutral-900.text-white\\/80,
+        .theme-light .bg-neutral-900 .text-white\\/80,
+        .theme-light .bg-black.text-white\\/80,
+        .theme-light .bg-black .text-white\\/80,
+        .theme-light .bg-emerald-500.text-white\\/80,
+        .theme-light .bg-emerald-500 .text-white\\/80,
+        .theme-light .bg-emerald-600.text-white\\/80,
+        .theme-light .bg-emerald-600 .text-white\\/80 {
+          color: rgba(255, 255, 255, 0.8) !important;
         }
       `}</style>
 
@@ -1831,7 +1885,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       {activeTab === "analytics" && viewType === "single" && (
         <div className="space-y-8 animate-in fade-in duration-300">
           {/* Detailed Analytics Premium Date Filter Preset Switcher */}
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-[#0C0C0F]/45 border border-white/5 p-4 rounded-2xl shadow-xl backdrop-blur-md">
+          <div className={`flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 p-4 rounded-2xl shadow-xl backdrop-blur-md ${isLight ? "bg-white border border-neutral-200" : "bg-[#0C0C0F]/45 border border-white/5"}`}>
             <div className="space-y-1">
               <h3 className="text-sm font-black uppercase tracking-widest text-white">Сквозна аналітика проекту</h3>
               <p className="text-[11px] text-white/30 font-semibold">Фільтрація та аналіз рекламного бюджету, конверсій та окупності</p>

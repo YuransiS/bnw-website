@@ -96,6 +96,60 @@
   color: #171717 !important;
 }
 
+/* Preserve white text on dark/colored elements in light theme */
+.theme-light .bg-neutral-900.text-white,
+.theme-light .bg-neutral-900 .text-white,
+.theme-light .bg-black.text-white,
+.theme-light .bg-black .text-white,
+.theme-light .bg-emerald-500.text-white,
+.theme-light .bg-emerald-500 .text-white,
+.theme-light .bg-emerald-600.text-white,
+.theme-light .bg-emerald-600 .text-white,
+.theme-light .bg-red-500.text-white,
+.theme-light .bg-red-500 .text-white,
+.theme-light .bg-blue-500.text-white,
+.theme-light .bg-blue-500 .text-white,
+.theme-light .bg-purple-500.text-white,
+.theme-light .bg-purple-500 .text-white,
+.theme-light .bg-teal-500.text-white,
+.theme-light .bg-teal-500 .text-white,
+.theme-light .bg-indigo-500.text-white,
+.theme-light .bg-indigo-500 .text-white,
+.theme-light .bg-orange-500.text-white,
+.theme-light .bg-orange-500 .text-white,
+.theme-light .bg-pink-500.text-white,
+.theme-light .bg-pink-500 .text-white,
+.theme-light .bg-sky-500.text-white,
+.theme-light .bg-sky-500 .text-white,
+.theme-light .bg-neutral-800.text-white,
+.theme-light .bg-neutral-800 .text-white,
+.theme-light .bg-emerald-950\/20 .text-white,
+.theme-light .bg-emerald-950\/20 .text-white\/80 {
+  color: #ffffff !important;
+}
+
+.theme-light .bg-neutral-900.text-white\/90,
+.theme-light .bg-neutral-900 .text-white\/90,
+.theme-light .bg-black.text-white\/90,
+.theme-light .bg-black .text-white\/90,
+.theme-light .bg-emerald-500.text-white\/90,
+.theme-light .bg-emerald-500 .text-white\/90,
+.theme-light .bg-emerald-600.text-white\/90,
+.theme-light .bg-emerald-600 .text-white\/90 {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.theme-light .bg-neutral-900.text-white\/80,
+.theme-light .bg-neutral-900 .text-white\/80,
+.theme-light .bg-black.text-white\/80,
+.theme-light .bg-black .text-white\/80,
+.theme-light .bg-emerald-500.text-white\/80,
+.theme-light .bg-emerald-500 .text-white\/80,
+.theme-light .bg-emerald-600.text-white\/80,
+.theme-light .bg-emerald-600 .text-white\/80 {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
 @layer base {
   body {
     color: var(--foreground);
