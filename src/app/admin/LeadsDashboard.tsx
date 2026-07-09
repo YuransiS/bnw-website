@@ -557,6 +557,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
     // Reset all filter states to default values if project is switched
     if (isProjectSwitched) {
+      if (currentSlug === "all") {
+        setActiveTab("hub");
+      } else if (prevSlugRef.current === "all") {
+        setActiveTab(initialData.role === "sales" ? "leads" : "analytics");
+      }
+
       prevSlugRef.current = currentSlug;
       setStartDate("");
       setEndDate("");
