@@ -1691,7 +1691,9 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
     let costsQuery = supabase
       .from("daily_traffic_and_costs")
       .select("*")
-      .eq("project_id", projectId);
+      .eq("project_id", projectId)
+      .order("date", { ascending: false })
+      .limit(5000);
 
     if (startDateStr) {
       costsQuery = costsQuery.gte("date", startDateStr);
@@ -1707,7 +1709,9 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
     let ordersQuery = supabase
       .from("unified_orders")
       .select("id, amount, status, created_at, utm_campaign, utm_medium, utm_source, campaign_id, customer_id, metadata")
-      .eq("project_id", projectId);
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: false })
+      .limit(5000);
 
     if (startDateStr) {
       ordersQuery = ordersQuery.gte("created_at", `${startDateStr}T00:00:00Z`);
