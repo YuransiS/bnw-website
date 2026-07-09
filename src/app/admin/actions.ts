@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { devLogger } from "@/utils/logger";
 import { rebuildProjectCache } from "@/lib/crmCache";
+import { parseClientDateRange, statusPriority } from "./utils";
 
 export async function signOutAction() {
   const supabase = await createClient();
@@ -132,61 +133,6 @@ export async function checkProjectAccess(projectId: string) {
   if (!data) throw new Error("Access Denied: You do not have access to this project.");
   return true;
 }
-
-const getUkraineOffset = (year: number, month: number, day: number): string => {
-  if (month > 2 && month < 9) return "+03:00";
-  if (month < 2 || month > 9) return "+02:00";
-  
-  const lastSunday = (m: number) => {
-    const d = new Date(year, m + 1, 0);
-    const dayOfWeek = d.getDay();
-    return d.getDate() - dayOfWeek;
-  };
-  
-  if (month === 2) {
-    return day >= lastSunday(2) ? "+03:00" : "+02:00";
-  }
-  if (month === 9) {
-    return day < lastSunday(9) ? "+03:00" : "+02:00";
-  }
-  return "+02:00";
-};
-
-export const parseClientDateRange = (dateStr: string, isEnd: boolean): Date => {
-  if (!dateStr) return new Date();
-  const parts = dateStr.split("-");
-  if (parts.length === 3) {
-    const year = parseInt(parts[0], 10);
-    const month = parseInt(parts[1], 10) - 1;
-    const day = parseInt(parts[2], 10);
-    if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
-      const offset = getUkraineOffset(year, month, day);
-      const timeStr = isEnd ? "23:59:59.999" : "00:00:00.000";
-      return new Date(`${dateStr}T${timeStr}${offset}`);
-    }
-  }
-  const d = new Date(dateStr);
-  if (isEnd) {
-    d.setHours(23, 59, 59, 999);
-  } else {
-    d.setHours(0, 0, 0, 0);
-  }
-  return d;
-};
-
-export const statusPriority = (s: string): number => {
-  if (s === "Купив курс") return 10;
-  if (s === "Вирішив подумати") return 8;
-  if (s === "Дзвінок проведено") return 7;
-  if (s === "Назначено Дзвінок") return 6;
-  if (s === "Купив(-ла) Трипвайер") return 5;
-  if (s === "Списались") return 4;
-  if (s === "Залишив заявку") return 3;
-  if (s === "Зацікавлений лід") return 2;
-  if (s === "Новий лід") return 1;
-  if (s === "Відмова") return -1;
-  return 0;
-};
 
 export async function getUnifiedCRMData(
   selectedProjectSlug?: string,

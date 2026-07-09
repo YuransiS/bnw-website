@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getSessionAndAccess, parseClientDateRange, statusPriority } from "@/app/admin/actions";
+import { getSessionAndAccess } from "@/app/admin/actions";
+import { parseClientDateRange, statusPriority } from "@/app/admin/utils";
 import { createAdminClient, createClient } from "@/utils/supabase/server";
 import { rebuildProjectCache } from "@/lib/crmCache";
 import { statusMapper } from "@/lib/statusMapper";
