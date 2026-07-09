@@ -4,7 +4,7 @@ import { createClient, createAdminClient } from "@/utils/supabase/server";
 import { statusMapper } from "@/lib/statusMapper";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { devLogger } from "@/utils/logger";
 import { rebuildProjectCache } from "@/lib/crmCache";
 
@@ -152,7 +152,7 @@ const getUkraineOffset = (year: number, month: number, day: number): string => {
   return "+02:00";
 };
 
-const parseClientDateRange = (dateStr: string, isEnd: boolean): Date => {
+export const parseClientDateRange = (dateStr: string, isEnd: boolean): Date => {
   if (!dateStr) return new Date();
   const parts = dateStr.split("-");
   if (parts.length === 3) {
@@ -174,7 +174,7 @@ const parseClientDateRange = (dateStr: string, isEnd: boolean): Date => {
   return d;
 };
 
-const statusPriority = (s: string): number => {
+export const statusPriority = (s: string): number => {
   if (s === "Купив курс") return 10;
   if (s === "Вирішив подумати") return 8;
   if (s === "Дзвінок проведено") return 7;
@@ -520,17 +520,54 @@ export async function getUnifiedCRMData(
         cacheRebuildMs = performance.now() - rebuildStart;
       } else {
         // Build in the background asynchronously so page loads instantly
-        rebuildProjectCache(activeProject.id, activeProject.slug).catch((err) => {
-          console.error(`Background CRM cache rebuild failed for project ${activeProject.slug}:`, err);
-          // Re-mark as dirty so it tries again on next request
-          adminSupabase.from("crm_cache_dirty_queue").upsert({
-            project_id: activeProject.id,
-            is_dirty: true,
-            updated_at: new Date().toISOString()
-          }).then(({ error }) => {
-            if (error) console.error("Failed to re-mark cache as dirty:", error.message);
+        const qstashToken = process.env.QSTASH_TOKEN;
+        if (qstashToken) {
+          try {
+            const headersList = await headers();
+            const host = headersList.get("host") || "localhost:3000";
+            const protocol = host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https";
+            const appUrl = `${protocol}://${host}`;
+            
+            console.log(`📡 Triggering background cache rebuild via Upstash QStash for project: ${activeProject.slug}`);
+            
+            fetch(`https://qstash.upstash.io/v2/publish/${appUrl}/api/crm/rebuild-cache`, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${qstashToken}`,
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({
+                projectId: activeProject.id,
+                activeSlug: activeProject.slug
+              })
+            }).catch(fetchErr => {
+              console.error("Failed to publish background rebuild job to QStash asynchronously:", fetchErr);
+            });
+          } catch (headerErr) {
+            console.error("Failed to get headers or publish job, falling back to local async:", headerErr);
+            rebuildProjectCache(activeProject.id, activeProject.slug).catch((err) => {
+              console.error(`Fallback Background CRM cache rebuild failed for project ${activeProject.slug}:`, err);
+              adminSupabase.from("crm_cache_dirty_queue").upsert({
+                project_id: activeProject.id,
+                is_dirty: true,
+                updated_at: new Date().toISOString()
+              });
+            });
+          }
+        } else {
+          console.warn("⚠️ QStash credentials are not configured in environment variables. Falling back to local asynchronous cache rebuild.");
+          rebuildProjectCache(activeProject.id, activeProject.slug).catch((err) => {
+            console.error(`Background CRM cache rebuild failed for project ${activeProject.slug}:`, err);
+            // Re-mark as dirty so it tries again on next request
+            adminSupabase.from("crm_cache_dirty_queue").upsert({
+              project_id: activeProject.id,
+              is_dirty: true,
+              updated_at: new Date().toISOString()
+            }).then(({ error }) => {
+              if (error) console.error("Failed to re-mark cache as dirty:", error.message);
+            });
           });
-        });
+        }
       }
     }
     const cacheCheckEnd = performance.now();
@@ -621,24 +658,27 @@ export async function getUnifiedCRMData(
     const to = from + pageSize - 1;
 
     const dbQueryStart = performance.now();
-    const [leadsRes, aggRes, allTrafficRes, costsRes, allProfilesRes] = await Promise.all([
+    const [leadsRes, metricsRes, trafficSummaryRes, costsRes, allProfilesRes, utmLeadsSummaryRes] = await Promise.all([
       query.order("created_at", { ascending: false }).range(from, to),
-      aggQuery,
+      adminSupabase.rpc("get_crm_metrics", {
+        p_project_id: activeProject.id,
+        p_search_query: searchQuery,
+        p_status_filter: statusFilter,
+        p_touch_count_filter: touchCountFilter,
+        p_source_filter: sourceFilter,
+        p_unpaid_intent_only: unpaidIntentOnly,
+        p_start_date: startDate ? parseClientDateRange(startDate, false).toISOString() : null,
+        p_end_date: endDate ? parseClientDateRange(endDate, true).toISOString() : null,
+        p_selected_landing: selectedLanding,
+        p_assigned_manager_id: isSalesFiltered ? user.id : null
+      }),
       (() => {
         if (filters?.skipTraffic) return Promise.resolve({ data: [], error: null } as any);
-        let q = adminSupabase
-          .from("traffic_clicks")
-          .select("utm_source, utm_medium, utm_campaign, utm_content, created_at")
-          .eq("project_id", activeProject.id);
-        if (startDate) {
-          const startStr = parseClientDateRange(startDate, false).toISOString();
-          q = q.gte("created_at", startStr);
-        }
-        if (endDate) {
-          const endStr = parseClientDateRange(endDate, true).toISOString();
-          q = q.lte("created_at", endStr);
-        }
-        return q.order("created_at", { ascending: false });
+        return adminSupabase.rpc("get_traffic_clicks_summary", {
+          p_project_id: activeProject.id,
+          p_start_date: startDate ? parseClientDateRange(startDate, false).toISOString() : null,
+          p_end_date: endDate ? parseClientDateRange(endDate, true).toISOString() : null
+        });
       })(),
       (() => {
         let q = adminSupabase
@@ -653,76 +693,80 @@ export async function getUnifiedCRMData(
         }
         return q.order("date", { ascending: false });
       })(),
-      adminSupabase.from("profiles").select("id, email, full_name")
+      adminSupabase.from("profiles").select("id, email, full_name"),
+      adminSupabase.rpc("get_utm_leads_summary", {
+        p_project_id: activeProject.id,
+        p_search_query: searchQuery,
+        p_status_filter: statusFilter,
+        p_touch_count_filter: touchCountFilter,
+        p_source_filter: sourceFilter,
+        p_unpaid_intent_only: unpaidIntentOnly,
+        p_start_date: startDate ? parseClientDateRange(startDate, false).toISOString() : null,
+        p_end_date: endDate ? parseClientDateRange(endDate, true).toISOString() : null,
+        p_selected_landing: selectedLanding,
+        p_assigned_manager_id: isSalesFiltered ? user.id : null
+      })
     ]);
     const dbQueryEnd = performance.now();
     const dbQueryMs = dbQueryEnd - dbQueryStart;
 
     if (leadsRes.error) throw leadsRes.error;
-    if (aggRes.error) throw aggRes.error;
+    if (metricsRes.error) throw metricsRes.error;
 
     const paginatedLeads = leadsRes.data || [];
     const totalCount = leadsRes.count || 0;
-    const filteredRows = aggRes.data || [];
-    const allTraffic = allTrafficRes.data || [];
     const costs = costsRes.data || [];
     const profilesList = allProfilesRes.data || [];
 
-    // Map manager names and format keys for paginated leads to support camelCase in client components
-    const leads = paginatedLeads.map((lead: any) => {
-      const manager = profilesList.find((p) => p.id === lead.assigned_manager_id);
-      const managerName = manager ? (manager.full_name || manager.email) : "";
-      return {
-        ...lead,
-        primaryCustomerId: lead.primary_customer_id,
-        customerIds: lead.customer_ids,
-        orderIds: lead.order_ids,
-        touchCount: lead.touch_count,
-        usdPaid: Number(lead.usd_paid || 0),
-        uahPaid: Number(lead.uah_paid || 0),
-        eurPaid: Number(lead.eur_paid || 0),
-        usdTripwirePaid: Number(lead.usd_tripwire_paid || 0),
-        uahTripwirePaid: Number(lead.uah_tripwire_paid || 0),
-        eurTripwirePaid: Number(lead.eur_tripwire_paid || 0),
-        usdAttempted: Number(lead.usd_attempted || 0),
-        uahAttempted: Number(lead.uah_attempted || 0),
-        eurAttempted: Number(lead.eur_attempted || 0),
-        usdCourseCount: lead.usd_course_count || 0,
-        uahCourseCount: lead.uah_course_count || 0,
-        eurCourseCount: lead.eur_course_count || 0,
-        usdTripwireCount: lead.usd_tripwire_count || 0,
-        uahTripwireCount: lead.uah_tripwire_count || 0,
-        eurTripwireCount: lead.eur_tripwire_count || 0,
-        diagnosticsComment: lead.diagnostics_comment || "",
-        managerComment: lead.manager_comment || "",
-        assignedManagerId: lead.assigned_manager_id || null,
-        assigned_manager_name: managerName,
-        utmSource: lead.utm_source || "",
-        utmMedium: lead.utm_medium || "",
-        utmCampaign: lead.utm_campaign || "",
-        utmContent: lead.utm_content || "",
-        utmTerm: lead.utm_term || "",
-        targetSheet: lead.target_sheet || "",
-        isUnpaidIntent: lead.is_unpaid_intent || false,
-        visitedLandings: lead.visited_landings || [],
-        isMultiSource: lead.is_multi_source || false,
-        createdAt: lead.created_at,
-        visitor_uuid: lead.visitor_uuid
-      };
-    });
+    // Extract metrics row
+    const metricsRow = metricsRes.data?.[0] || {
+      total_leads: 0,
+      total_applications: 0,
+      usd_course_revenue: 0,
+      uah_course_revenue: 0,
+      eur_course_revenue: 0,
+      usd_tripwire_revenue: 0,
+      uah_tripwire_revenue: 0,
+      eur_tripwire_revenue: 0,
+      usd_course_count: 0,
+      uah_course_count: 0,
+      eur_course_count: 0,
+      usd_tripwire_count: 0,
+      uah_tripwire_count: 0,
+      eur_tripwire_count: 0
+    };
 
-    // Run diagnostics check nameless leads in cache directly (very fast count)
-    const { data: namelessRows } = await adminSupabase
-      .from("crm_leads_cache")
-      .select("id, name, phone, telegram")
-      .eq("project_id", activeProject.id)
-      .eq("name", "Невідомий")
-      .not("phone", "is", null)
-      .limit(100);
-    diagnosticsIssues.nameless = namelessRows || [];
+    const totalLeads = Number(metricsRow.total_leads || 0);
+    const totalApplications = Number(metricsRow.total_applications || 0);
+    const usdCourseRevenue = Number(metricsRow.usd_course_revenue || 0);
+    const uahCourseRevenue = Number(metricsRow.uah_course_revenue || 0);
+    const eurCourseRevenue = Number(metricsRow.eur_course_revenue || 0);
+    const usdTripwireRevenue = Number(metricsRow.usd_tripwire_revenue || 0);
+    const uahTripwireRevenue = Number(metricsRow.uah_tripwire_revenue || 0);
+    const eurTripwireRevenue = Number(metricsRow.eur_tripwire_revenue || 0);
 
-    // Calculate aggregated stats on filtered rows
-    const totalLeads = filteredRows.length;
+    const usdCourseCount = Number(metricsRow.usd_course_count || 0);
+    const uahCourseCount = Number(metricsRow.uah_course_count || 0);
+    const eurCourseCount = Number(metricsRow.eur_course_count || 0);
+    const usdTripwireCount = Number(metricsRow.usd_tripwire_count || 0);
+    const uahTripwireCount = Number(metricsRow.uah_tripwire_count || 0);
+    const eurTripwireCount = Number(metricsRow.eur_tripwire_count || 0);
+
+    const paidLeadsCount = usdCourseCount + uahCourseCount + eurCourseCount;
+    const paidTripwiresCount = usdTripwireCount + uahTripwireCount + eurTripwireCount;
+    const totalSales = paidLeadsCount + paidTripwiresCount;
+
+    const totalUsdRevenue = usdCourseRevenue + usdTripwireRevenue;
+    const totalUahRevenue = uahCourseRevenue + uahTripwireRevenue;
+    const totalEurRevenue = eurCourseRevenue + eurTripwireRevenue;
+
+    const usdSalesCount = usdCourseCount + usdTripwireCount;
+    const uahSalesCount = uahCourseCount + uahTripwireCount;
+    const eurSalesCount = eurCourseCount + eurTripwireCount;
+
+    const aovUsd = usdSalesCount > 0 ? totalUsdRevenue / usdSalesCount : 0;
+    const aovUah = uahSalesCount > 0 ? totalUahRevenue / uahSalesCount : 0;
+    const aovEur = eurSalesCount > 0 ? totalEurRevenue / eurSalesCount : 0;
 
     // Filter costs
     const filteredCosts = costs.filter((c: any) => {
@@ -739,51 +783,14 @@ export async function getUnifiedCRMData(
       return true;
     });
     const totalCostsSpend = filteredCosts.reduce((sum: number, c: any) => sum + Number(c.spend || 0), 0);
-
-    const totalApplications = filteredRows.filter((l: any) => statusPriority(l.status) >= 3).length;
-
-    const usdCourseRevenue = filteredRows.reduce((sum, l) => sum + Number(l.usd_paid || 0), 0);
-    const uahCourseRevenue = filteredRows.reduce((sum, l) => sum + Number(l.uah_paid || 0), 0);
-    const eurCourseRevenue = filteredRows.reduce((sum, l) => sum + Number(l.eur_paid || 0), 0);
-    const usdTripwireRevenue = filteredRows.reduce((sum, l) => sum + Number(l.usd_tripwire_paid || 0), 0);
-    const uahTripwireRevenue = filteredRows.reduce((sum, l) => sum + Number(l.uah_tripwire_paid || 0), 0);
-    const eurTripwireRevenue = filteredRows.reduce((sum, l) => sum + Number(l.eur_tripwire_paid || 0), 0);
-
-    const totalUsdRevenue = usdCourseRevenue + usdTripwireRevenue;
-    const totalUahRevenue = uahCourseRevenue + uahTripwireRevenue;
-    const totalEurRevenue = eurCourseRevenue + eurTripwireRevenue;
-
     const netProfitUsd = totalUsdRevenue - totalCostsSpend;
     const blendedRevenue = totalUsdRevenue + (totalUahRevenue / 41.0) + (totalEurRevenue * 1.08);
     const roi = totalCostsSpend > 0 ? (blendedRevenue / totalCostsSpend) * 100 : 0;
 
-    const paidLeadsCount = filteredRows.reduce((sum, l) => sum + (l.usd_course_count || 0) + (l.uah_course_count || 0) + (l.eur_course_count || 0), 0);
-    const paidTripwiresCount = filteredRows.reduce((sum, l) => sum + (l.usd_tripwire_count || 0) + (l.uah_tripwire_count || 0) + (l.eur_tripwire_count || 0), 0);
-    const totalSales = paidLeadsCount + paidTripwiresCount;
+    // Clicks summary
+    const groupedTraffic = trafficSummaryRes.data || [];
+    const totalClicks = groupedTraffic.reduce((sum: number, t: any) => sum + Number(t.clicks_count || 0), 0);
 
-    const usdSalesCount = filteredRows.reduce((sum, l) => sum + (l.usd_course_count || 0) + (l.usd_tripwire_count || 0), 0);
-    const uahSalesCount = filteredRows.reduce((sum, l) => sum + (l.uah_course_count || 0) + (l.uah_tripwire_count || 0), 0);
-    const eurSalesCount = filteredRows.reduce((sum, l) => sum + (l.eur_course_count || 0) + (l.eur_tripwire_count || 0), 0);
-
-    const aovUsd = usdSalesCount > 0 ? (usdCourseRevenue + usdTripwireRevenue) / usdSalesCount : 0;
-    const aovUah = uahSalesCount > 0 ? (uahCourseRevenue + uahTripwireRevenue) / uahSalesCount : 0;
-    const aovEur = eurSalesCount > 0 ? (eurCourseRevenue + eurTripwireRevenue) / eurSalesCount : 0;
-
-    // Filter traffic (Kyiv Timezone Aligned)
-    const filteredTraffic = allTraffic.filter((t: any) => {
-      if (startDate) {
-        const tDate = new Date(t.created_at);
-        const start = parseClientDateRange(startDate, false);
-        if (tDate < start) return false;
-      }
-      if (endDate) {
-        const tDate = new Date(t.created_at);
-        const end = parseClientDateRange(endDate, true);
-        if (tDate > end) return false;
-      }
-      return true;
-    });
-    const totalClicks = filteredTraffic.length;
     const conversionRate = totalClicks > 0 ? (totalLeads / totalClicks) * 100 : 0;
     const cpl = totalLeads > 0 ? totalCostsSpend / totalLeads : 0;
     const leadToSaleConv = totalLeads > 0 ? (totalSales / totalLeads) * 100 : 0;
@@ -839,7 +846,60 @@ export async function getUnifiedCRMData(
       dbRpcMs = dbRpcEnd - dbRpcStart;
     }
 
-    // --- UTM Attribution Tree ---
+    // Map manager names and format keys for paginated leads to support camelCase in client components
+    const leads = paginatedLeads.map((lead: any) => {
+      const manager = profilesList.find((p) => p.id === lead.assigned_manager_id);
+      const managerName = manager ? (manager.full_name || manager.email) : "";
+      return {
+        ...lead,
+        primaryCustomerId: lead.primary_customer_id,
+        customerIds: lead.customer_ids,
+        orderIds: lead.order_ids,
+        touchCount: lead.touch_count,
+        usdPaid: Number(lead.usd_paid || 0),
+        uahPaid: Number(lead.uah_paid || 0),
+        eurPaid: Number(lead.eur_paid || 0),
+        usdTripwirePaid: Number(lead.usd_tripwire_paid || 0),
+        uahTripwirePaid: Number(lead.uah_tripwire_paid || 0),
+        eurTripwirePaid: Number(lead.eur_tripwire_paid || 0),
+        usdAttempted: Number(lead.usd_attempted || 0),
+        uahAttempted: Number(lead.uah_attempted || 0),
+        eurAttempted: Number(lead.eur_attempted || 0),
+        usdCourseCount: lead.usd_course_count || 0,
+        uahCourseCount: lead.uah_course_count || 0,
+        eurCourseCount: lead.eur_course_count || 0,
+        usdTripwireCount: lead.usd_tripwire_count || 0,
+        uahTripwireCount: lead.uah_tripwire_count || 0,
+        eurTripwireCount: lead.eur_tripwire_count || 0,
+        diagnosticsComment: lead.diagnostics_comment || "",
+        managerComment: lead.manager_comment || "",
+        assignedManagerId: lead.assigned_manager_id || null,
+        assigned_manager_name: managerName,
+        utmSource: lead.utm_source || "",
+        utmMedium: lead.utm_medium || "",
+        utmCampaign: lead.utm_campaign || "",
+        utmContent: lead.utm_content || "",
+        utmTerm: lead.utm_term || "",
+        targetSheet: lead.target_sheet || "",
+        isUnpaidIntent: lead.is_unpaid_intent || false,
+        visitedLandings: lead.visited_landings || [],
+        isMultiSource: lead.is_multi_source || false,
+        createdAt: lead.created_at,
+        visitor_uuid: lead.visitor_uuid
+      };
+    });
+
+    // Run diagnostics check nameless leads in cache directly (very fast count)
+    const { data: namelessRows } = await adminSupabase
+      .from("crm_leads_cache")
+      .select("id, name, phone, telegram")
+      .eq("project_id", activeProject.id)
+      .eq("name", "Невідомий")
+      .not("phone", "is", null)
+      .limit(100);
+    diagnosticsIssues.nameless = namelessRows || [];
+
+    // --- UTM Attribution Tree (Optimized) ---
     const utmTreeRoot: Record<string, any> = {};
     const getOrCreateUtmNode = (parent: any, name: string) => {
       if (!parent[name]) {
@@ -856,27 +916,28 @@ export async function getUnifiedCRMData(
       return parent[name];
     };
 
-    filteredRows.forEach((lead: any) => {
-      const source = lead.utm_source || "direct";
-      const medium = lead.utm_medium || "";
-      const campaign = lead.utm_campaign || "";
-      const content = lead.utm_content || "";
+    // Populate tree with leads summary
+    const utmLeadsSummary = utmLeadsSummaryRes.data || [];
+    utmLeadsSummary.forEach((row: any) => {
+      const source = row.utm_source || "direct";
+      const medium = row.utm_medium || "";
+      const campaign = row.utm_campaign || "";
+      const content = row.utm_content || "";
 
       const path = [source, medium, campaign, content].filter(Boolean);
       let curr = utmTreeRoot;
       path.forEach((part) => {
         const node = getOrCreateUtmNode(curr, part);
-        node.leads += 1;
-        const usdPaid = Number(lead.usd_paid || 0) + Number(lead.usd_tripwire_paid || 0);
-        const uahPaid = Number(lead.uah_paid || 0) + Number(lead.uah_tripwire_paid || 0);
-        node.usd_revenue += usdPaid;
-        node.uah_revenue += uahPaid;
-        node.revenue += usdPaid + (uahPaid / 41.0);
+        node.leads += Number(row.leads_count || 0);
+        node.usd_revenue += Number(row.usd_revenue || 0);
+        node.uah_revenue += Number(row.uah_revenue || 0);
+        node.revenue += Number(row.usd_revenue || 0) + (Number(row.uah_revenue || 0) / 41.0);
         curr = node.children;
       });
     });
 
-    filteredTraffic.forEach((t: any) => {
+    // Populate tree with clicks
+    groupedTraffic.forEach((t: any) => {
       const source = t.utm_source || "direct";
       const medium = t.utm_medium || "";
       const campaign = t.utm_campaign || "";
@@ -888,7 +949,7 @@ export async function getUnifiedCRMData(
       path.forEach((part) => {
         if (!possible) return;
         if (curr[part]) {
-          curr[part].clicks += 1;
+          curr[part].clicks += Number(t.clicks_count || 0);
           curr = curr[part].children;
         } else {
           possible = false;
@@ -909,8 +970,7 @@ export async function getUnifiedCRMData(
         .sort((a, b) => b.revenue - a.revenue || b.leads - a.leads);
     };
     const utmAttributionTree = finalizeUtmNodes(utmTreeRoot);
-
-    const uniqueSources = Array.from(new Set(filteredRows.map((l: any) => l.target_sheet).filter(Boolean)));
+    const uniqueSources = Array.from(new Set(utmLeadsSummary.map((l: any) => l.utm_source).filter(Boolean))) as string[];
 
     // Fetch sales managers for active project
     let salesManagers: { id: string; email: string; full_name: string }[] = [];

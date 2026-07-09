@@ -979,18 +979,29 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
     diagnosticsIssues
   };
 
-  // Re-write to crm_leads_cache inside a transaction
-  await adminSupabase.from("crm_leads_cache").delete().eq("project_id", projectId);
+  // Clear any existing stale rows for this project in the staging table
+  await adminSupabase.from("crm_leads_cache_staging").delete().eq("project_id", projectId);
 
-  // Bulk insert in chunks of 500 rows to prevent DB payloads limit errors
+  // Bulk insert to crm_leads_cache_staging in chunks of 500 rows
   const chunkSize = 500;
   for (let i = 0; i < calculatedCache.length; i += chunkSize) {
     const chunk = calculatedCache.slice(i, i + chunkSize);
-    const { error: insertErr } = await adminSupabase.from("crm_leads_cache").insert(chunk);
+    const { error: insertErr } = await adminSupabase.from("crm_leads_cache_staging").insert(chunk);
     if (insertErr) {
-      console.error("Bulk insert to crm_leads_cache failed:", insertErr);
+      console.error("Bulk insert to crm_leads_cache_staging failed:", insertErr);
+      // Clean up staging on failure
+      await adminSupabase.from("crm_leads_cache_staging").delete().eq("project_id", projectId);
       throw insertErr;
     }
+  }
+
+  // Atomically swap the staging cache into production
+  const { error: swapErr } = await adminSupabase.rpc("swap_crm_leads_cache", { p_project_id: projectId });
+  if (swapErr) {
+    console.error("Atomic swap transaction swap_crm_leads_cache failed:", swapErr);
+    // Clean up staging on failure
+    await adminSupabase.from("crm_leads_cache_staging").delete().eq("project_id", projectId);
+    throw swapErr;
   }
 
   // Save computed metadata without setting is_dirty back to false (since we lock it at start)
@@ -1003,5 +1014,5 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
     console.error("Failed to update metadata in crm_cache_dirty_queue:", updateErr);
   }
   
-  console.log(`🚀 Successfully rebuilt CRM Cache for project ${activeSlug}. Total groups cached: ${calculatedCache.length}`);
+  console.log(`🚀 Successfully rebuilt CRM Cache (Atomic Swap) for project ${activeSlug}. Total groups cached: ${calculatedCache.length}`);
 }

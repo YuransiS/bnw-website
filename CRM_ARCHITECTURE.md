@@ -24,18 +24,18 @@ sequenceDiagram
     %% Flow 2: Ingestion & Lead Stitching
     User->>Client: Submits Contact Form
     Client->>API: POST /api/lead (Lead payload + visitor_id)
-    Note over API: Stitches UUID: checks DB for matches on normalized phone/social
-    API->>DB: Search existing visitor_uuid by phone
+    Note over API: Stitches UUID: checks DB for matches on normalized phone/social (Telegram)
+    API->>DB: Search existing visitor_uuid by phone/social
     DB-->>API: Returns resolved visitor_uuid (if matched)
     API->>DB: Insert lead details (Status: "Зареєстровано")
 
     %% Flow 3: Admin UI Retrieval & Aggregation
-    Admin->>API: POST /api/admin/data
-    API->>DB: Query all raw leads & traffic logs
-    DB-->>API: Return rows
-    Note over Admin: DSU Cluster: Groups duplicate rows via matching phone/social/UUIDs
-    Note over Admin: Calculates conversions, segments UAH/USD revenues & filters views
+    Admin->>API: QUERY /api/admin/leads (with POST override fallback)
+    API->>DB: Query pre-built crm_leads_cache with filters
+    DB-->>API: Return pre-aggregated paginated groups
+    Note over Admin: Frontend is "dumb" - directly renders flat list & pre-calculated KPIs
     Admin->>User: Renders Kanban Board, Leads Grid & Recharts Analytics
+```,StartLine:24,TargetContent:
 ```
 
 ---
@@ -238,26 +238,34 @@ export async function POST(req: Request) {
 
     // --- LEAD STITCHING ALGORITHM ---
     const clientUuid = data.visitor_id || data.visitorId || null;
-    const phoneOrSocial = phone || social || '';
-    const isPhone = phoneOrSocial && !phoneOrSocial.startsWith('@') && phoneOrSocial.replace(/\D/g, '').length >= 7;
-    const normalizedPhone = isPhone ? cleanPhone(phoneOrSocial) : phoneOrSocial;
+    const cleanPhoneVal = phone ? cleanPhone(phone) : '';
+    const socialVal = social ? social.toLowerCase().replace("@", "").trim() : '';
 
     let resolvedUuid = clientUuid;
 
-    if (normalizedPhone) {
+    if (cleanPhoneVal || socialVal) {
       try {
-        // Query the database to see if we've seen this contact details before
-        const { data: existingLeads } = await supabaseAdmin
+        // Query the database to see if we've seen this contact details before (match on phone OR social/telegram)
+        let query = supabaseAdmin
           .from("victoria_leads")
           .select("visitor_uuid")
-          .eq("phone", normalizedPhone)
-          .not("visitor_uuid", "is", null)
+          .not("visitor_uuid", "is", null);
+
+        if (cleanPhoneVal && socialVal) {
+          query = query.or(`phone.eq.${cleanPhoneVal},social.eq.${socialVal}`);
+        } else if (cleanPhoneVal) {
+          query = query.eq("phone", cleanPhoneVal);
+        } else {
+          query = query.eq("social", socialVal);
+        }
+
+        const { data: existingLeads } = await query
           .order("created_at", { ascending: true })
           .limit(1);
 
         if (existingLeads && existingLeads.length > 0) {
           resolvedUuid = existingLeads[0].visitor_uuid;
-          console.log(`[Stitch] Re-mapped visitor ${clientUuid} -> ${resolvedUuid} via phone ${normalizedPhone}`);
+          console.log(`[Stitch] Re-mapped visitor ${clientUuid} -> ${resolvedUuid} via phone/social match`);
         }
       } catch (e: any) {
         console.error("[Stitch] Exception error:", e.message);
@@ -309,80 +317,23 @@ export async function POST(req: Request) {
 
 The client dashboard merges financial state logic, data de-duplication, advanced CRM filtering, interactive Kanban cards, and visual charts.
 
-### 4.1 Data Deduplication & DSU Clustering
+### 4.1 Offloading DSU Clustering to the Backend Cache
 
-A single customer might visit a landing page (generating traffic logs), register a free trial (creating a VSL row), submit a masterclass application (creating an MK row), and attempt checkout (creating a payment row). 
+Previously, the Admin Panel received raw leads and ran a client-side **Disjoint Set Union (DSU)** transitive clustering algorithm on mount (`useProcessedLeads` in `AdminDashboardClient.tsx`) to de-duplicate logs and group multi-step actions. 
 
-To prevent cluttering the admin visual board with duplicates, the dashboard implements a **Disjoint Set Union (DSU)** transitive clustering algorithm. It links separate rows sharing the same normalized phone, Telegram handles, order identifiers, or `visitor_id` values, merging them in real-time on mount.
+This client-side DSU logic has been completely **removed** to avoid memory exhaustion (OOM), freeze states, and hydration lag on the frontend. The dashboard client is now a "dumb" component: it directly consumes flat, pre-aggregated records and pre-calculated statistics fetched from the optimized `crm_leads_cache` table via the `QUERY` method.
 
+* **Backend Pre-Clustering:** The DSU graph traversal, phone/social/UUID blacklisting, and transaction window deduplication are executed asynchronously on the backend via Upstash QStash and stored in the database.
+* **Simplified Frontend API Consumption:**
 ```typescript
-// DSU helper class for transitive component clustering in CRM Grid
-class DSU {
-  parent: number[];
-  constructor(size: number) {
-    this.parent = Array.from({ length: size }, (_, i) => i);
-  }
-  find(i: number): number {
-    let root = i;
-    while (this.parent[root] !== root) {
-      root = this.parent[root];
-    }
-    let curr = i;
-    while (curr !== root) {
-      const nxt = this.parent[curr];
-      this.parent[curr] = root;
-      curr = nxt;
-    }
-    return root;
-  }
-  union(i: number, j: number) {
-    const rootI = this.find(i);
-    const rootJ = this.find(j);
-    if (rootI !== rootJ) {
-      this.parent[rootI] = rootJ;
-    }
-  }
-}
-
-// How rows are processed in the dashboard client
-const useProcessedLeads = (leads: Lead[], traffic: Traffic[], globalUsers: any[]) => {
-  return useMemo(() => {
-    const dsu = new DSU(leads.length);
-    const phoneMap = new Map<string, number>();
-    const tgMap = new Map<string, number>();
-    const uuidMap = new Map<string, number>();
-    const visitorMap = new Map<string, number>();
-
-    // Connect matching indices inside the DSU based on identifiers
-    leads.forEach((l, i) => {
-      const phone = l.phone?.replace(/\D/g, '') || '';
-      const tg = l.telegram?.toLowerCase().replace('@', '').trim() || '';
-      const cleanUUID = (l.UUID || '').toString().trim();
-      const cleanVisitor = (l.visitorId || '').toString().trim();
-
-      if (cleanUUID) {
-        if (uuidMap.has(cleanUUID)) dsu.union(i, uuidMap.get(cleanUUID)!);
-        else uuidMap.set(cleanUUID, i);
-      }
-      if (phone.length >= 7) {
-        if (phoneMap.has(phone)) dsu.union(i, phoneMap.get(phone)!);
-        else phoneMap.set(phone, i);
-      }
-      if (tg) {
-        if (tgMap.has(tg)) dsu.union(i, tgMap.get(tg)!);
-        else tgMap.set(tg, i);
-      }
-      if (cleanVisitor) {
-        if (visitorMap.has(cleanVisitor)) dsu.union(i, visitorMap.get(cleanVisitor)!);
-        else visitorMap.set(cleanVisitor, i);
-      }
-    });
-
-    // Group matching components and select primary record (highest weight/most paid)
-    // Merge comment fields, sum paid revenues, assign visual tags ("Multi-Source", "Booking", "Повтор")
-    // ... Returns aggregated leads array sorted by latest action timestamp.
-  }, [leads, traffic, globalUsers]);
-};
+// Fetching directly pre-aggregated and pre-filtered cohorts
+const response = await fetch('/api/crm/leads', {
+  method: 'QUERY', // or POST with X-HTTP-Method-Override header fallback
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ projectId, filters, pagination })
+});
+const { data, meta } = await response.json();
+// data is already flat, de-duplicated and ready to render
 ```
 
 ### 4.1.1 Questionnaire (Ankety) dynamic parsing

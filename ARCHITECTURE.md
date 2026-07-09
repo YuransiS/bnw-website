@@ -33,6 +33,8 @@
 * `src/app/admin/actions.ts` — Server Actions для выборки объединенной аналитики (`getUnifiedCRMData` с серверной фильтрацией, DSU-схлопыванием, UTM-деревом, пагинацией, замерами `performance.now()` и Data Health Check аномалиями), создания лидов вручную, обновления статусов в канбане, `updateOrderCurrencyAction` для фиксации валют транзакций в БД, а также `traceVisitorUuidAction` для сквозного хронологического поиска по visitor_uuid/телефону.
 * `src/app/admin/(dashboard)/settings/actions.ts` — Server Actions для создания, удаления сотрудников и управления связями в `profile_projects`.
 * `src/app/auth/callback/route.ts` — API роут для обмена временного OAuth-кода на сессию Supabase.
+* `src/app/api/crm/leads/route.ts` — HTTP QUERY-эндпоинт (RFC 10008) для фильтрации и поиска лидов с поддержкой резервного POST-туннелирования (`X-HTTP-Method-Override`). Выполняет SQL-агрегацию на стороне СУБД.
+* `src/app/api/crm/rebuild-cache/route.ts` — API роут-приемник Upstash QStash для гарантированного асинхронного ребилда кэша в облаке Vercel с проверкой подписей вебхуков.
 
 ---
 
@@ -70,6 +72,10 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
 ### Сводные RPC функции
 * `public.get_projects_summary()` — Возвращает таблицу агрегированных метрик по всем активным проектам холдинга (`is_active = true`), включая выручку (USD, UAH, EUR), расходы, лиды и CPL. Использует функцию `public.normalize_status` и применяет SQL-дедупликацию `DISTINCT ON (project_id, order_id)` для отсеивания дублей транзакций.
 * `public.get_campaigns_summary()` — Возвращает таблицу ROI и окупаемости по рекламным кампаниям активных проектов холдинга. Исключает трипвайер-листы из выручки и применяет SQL-дедупликацию транзакций.
+* `public.swap_crm_leads_cache(p_project_id)` — Функция атомарного свопа кэша из staging-таблицы в рабочую crm_leads_cache без zero-data downtime.
+* `public.get_crm_metrics(...)` — Функция бэкенд-агрегации сквозных финансовых показателей проектов на уровне БД с использованием static placeholders (EXECUTE ... USING).
+* `public.get_traffic_clicks_summary(...)` — Функция БД-свертки уникальных кликов по UTM-меткам.
+* `public.get_utm_leads_summary(...)` — Функция БД-свертки уникальных лидов по UTM-меткам для построения UTM-дерева без перегрузки RAM Node.js.
 
 ### Автоматическая очистка тестовых записей (pg_cron)
 * **Функция `public.clean_up_test_records()`**: Удаляет тестовые записи из таблиц `unified_orders`, `unified_customers`, а также из всех raw-таблиц проектов (`victoria_leads`, `valeria_leads`, `svitlana_leads`, `clean_klinom_leads`, `viktoria_chernysh_leads` и `sergiy_leads`) по расширенному набору масок (`test`, `tests`, `тест`, `qa`, `q&a`, `gemini`, `antigravity`, `user`, телефон `1234567`). В конце выполнения автоматически сбрасывает кэш проектов, выставляя `is_dirty = true` в `crm_cache_dirty_queue`.

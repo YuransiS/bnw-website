@@ -138,6 +138,51 @@ const parseComments = (rawComment: string | null): CommentItem[] => {
   }];
 };
 
+const fetchCRMLeads = async (slug: string, params: any) => {
+  try {
+    const res = await fetch("/api/crm/leads", {
+      method: "QUERY",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ slug, filters: params })
+    });
+    
+    if (res.ok) {
+      return await res.json();
+    }
+    
+    if (res.status === 405 || res.status === 403 || res.status === 400) {
+      console.warn("QUERY method rejected by server, retrying with POST tunnel override...");
+      return await fetchWithPostTunnel(slug, params);
+    }
+    
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error || `HTTP error! Status: ${res.status}`);
+  } catch (err: any) {
+    console.warn("QUERY request failed (network/browser boundary), retrying with POST tunnel override:", err);
+    return await fetchWithPostTunnel(slug, params);
+  }
+};
+
+const fetchWithPostTunnel = async (slug: string, params: any) => {
+  const res = await fetch("/api/crm/leads", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-HTTP-Method-Override": "QUERY"
+    },
+    body: JSON.stringify({ slug, filters: params })
+  });
+  
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error || `HTTP error! Status: ${res.status}`);
+  }
+  
+  return await res.json();
+};
+
 const getUkraineOffset = (year: number, month: number, day: number): string => {
   if (month > 2 && month < 9) return "+03:00";
   if (month < 2 || month > 9) return "+02:00";
@@ -789,7 +834,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     devLogger.info("CRM Client", `Requesting getUnifiedCRMData for project: ${activeSlug}`, paramsPayload);
     const requestStart = performance.now();
 
-    getUnifiedCRMData(activeSlug, paramsPayload).then((res: any) => {
+    fetchCRMLeads(activeSlug, paramsPayload).then((res: any) => {
       const requestDuration = performance.now() - requestStart;
       if (isMounted) {
         devLogger.info("CRM Client", "Successfully received CRM data", {

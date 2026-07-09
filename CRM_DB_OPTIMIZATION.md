@@ -111,15 +111,90 @@ ON public.traffic_clicks (project_id, created_at, utm_source, utm_campaign);
 
 ---
 
-## 4. Архитектура фонового кэширования (Vercel-Safe Async Rebuild)
+## 4. Архитектура фонового кэширования (Vercel-Safe Async Rebuild через Upstash QStash)
 
 ### Проблема (Как сейчас):
-Если кэш грязный, запускается асинхронный процесс обновления, который Vercel может убить после завершения HTTP-запроса.
+Если кэш помечен как «грязный» (`is_dirty === true`), Server Action запускает асинхронный ребилд кэша (`rebuildProjectCache`) без `await` в фоновом режиме. На Vercel Serverless это приводит к заморозке (freeze) лямбда-контейнера сразу после завершения HTTP-ответа клиенту. Фоновый процесс аварийно завершается, кэш остается неконсистентным, а флаг `is_dirty` уже сброшен в `false`.
 
-### Решение по уму (Database Hook & Supabase pg_cron):
-1. **Supabase Edge Functions / HTTP Trigger:**
-   Next.js вызывает фоновую функцию Supabase (Edge Function) с флагом `waitUntil`, либо делает вызов внешней очереди задач (например, Upstash / QStash).
-2. **PostgreSQL pg_net:**
-   Next.js шлет запрос, СУБД делает быстрый ответ. Если кэш требует пересчета, триггер в БД делает неблокирующий фоновый вызов через расширение `pg_net` или запускает `pg_cron` джобу.
-3. **Queue Pattern:**
-   Запись помечается как `is_dirty = true` в очереди. Внешний cron-скрипт (каждые 1-5 минут) проверяет очередь и пересчитывает кэш изолированно, исключая задержки для пользователя при открытии страницы.
+### Решение (Очередь задач QStash + Shadow Swap):
+1. **Триггер (Next.js Server Action):** При запросе данных, если `is_dirty === true`, Next.js отправляет легкий неблокирующий HTTP-запрос (публикацию сообщения) в брокер Upstash QStash. Клиент сразу же получает старый (но стабильный) кэш из таблицы `crm_leads_cache` за $<100\text{мс}$.
+2. **Гарантированная доставка (QStash):** QStash принимает задачу и сразу возвращает HTTP 202 (Accepted). Затем он асинхронно вызывает защищенный роут на Vercel (`POST /api/crm/rebuild-cache`) с лимитом времени выполнения до 5 минут (тариф Pro).
+3. **Бесшовное обновление (Shadow Swap):** 
+   * Роут `/api/crm/rebuild-cache` выполняет выгрузку скелета контактов, строит DSU-граф в памяти лямбда-функции Next.js.
+   * Все сгруппированные строки кэша записываются во временную таблицу `crm_leads_cache_staging`.
+   * В конце работы воркер вызывает RPC-функцию в PostgreSQL, которая внутри одной атомарной транзакции очищает боевой кэш проекта и переливает данные из staging-таблицы (время блокировки — микросекунды):
+     ```sql
+     BEGIN;
+       DELETE FROM public.crm_leads_cache WHERE project_id = p_project_id;
+       INSERT INTO public.crm_leads_cache SELECT * FROM public.crm_leads_cache_staging WHERE project_id = p_project_id;
+       DELETE FROM public.crm_leads_cache_staging WHERE project_id = p_project_id;
+     COMMIT;
+     ```
+
+---
+
+## 5. Интеграция метода QUERY (RFC 10008) для фильтрации и поиска
+
+### Проблема:
+При фильтрации лидов по множеству параметров (диапазоны дат, массивы UTM-меток, статусы, строки поиска) традиционный HTTP GET-запрос страдает от:
+1. Огромных, трудночитаемых URL-строк, которые неудобно парсить на бэкенде.
+2. Сложностей сериализации сложных объектов.
+3. Ограничений на размер GET-запроса у шлюзов.
+Использование `POST` решает проблему тела запроса, но нарушает стандарты REST (POST не является безопасным/идемпотентным по умолчанию и ломает стандартное кэширование на сетевых прокси-серверах).
+
+### Решение:
+Внедрение HTTP-метода `QUERY` на эндпоинте `/api/crm/leads`. 
+* **Безопасность/Идемпотентность:** Метод `QUERY` является безопасным (не модифицирует состояние сервера) и идемпотентным.
+* **Тело запроса (Body Payload):** Позволяет передавать структурированные JSON-параметры фильтрации в теле запроса.
+* **Кэширование на Edge-уровне:** Вся аналитика за прошедшие даты легко кэшируется на Edge-серверах (Vercel Data Cache) по хэшу тела запроса.
+
+#### Пример роутера Next.js (с поддержкой туннелирования):
+```typescript
+// src/app/api/crm/leads/route.ts
+import { NextResponse } from 'next/server';
+import { getSessionAndAccess } from '@/app/admin/actions';
+import { createAdminClient } from '@/utils/supabase/server';
+
+// Единая точка обработки бизнес-логики запроса
+async function handleQueryLogic(request: Request) {
+  try {
+    const body = await request.json();
+    const { projectId, filters, pagination } = body;
+
+    // 1. Проверка сессии и доступов к проекту через хелпер
+    // await checkProjectAccess(projectId);
+
+    const adminSupabase = createAdminClient();
+    
+    // 2. Построение SQL-запроса по кэш-таблице crm_leads_cache с учетом фильтров
+    // 3. Выборка агрегированных сумм (выручка, расходы, ROI) на уровне СУБД (без выгрузки сырых строк)
+    
+    return NextResponse.json({
+      data: leads,
+      meta: {
+        totalCount,
+        aggregations: totalMetrics
+      }
+    });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 400 });
+  }
+}
+
+// Стандартная обработка метода QUERY (RFC 10008)
+export async function QUERY(request: Request) {
+  return handleQueryLogic(request);
+}
+
+// Запасной вариант (Туннелирование через POST) для консервативных сетевых узлов / WAF
+export async function POST(request: Request) {
+  const isTunnelledQuery = request.headers.get('X-HTTP-Method-Override') === 'QUERY';
+  
+  if (isTunnelledQuery) {
+    return handleQueryLogic(request);
+  }
+  
+  // Здесь при необходимости может быть стандартная логика создания (POST) ресурса
+  return NextResponse.json({ error: 'Method Not Allowed' }, { status: 405 });
+}
+```
