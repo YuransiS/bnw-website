@@ -291,7 +291,7 @@ export async function getUnifiedCRMData(
             }
           });
 
-          const spend = projSpends.reduce((sum, s) => sum + Number(s.spend || 0), 0);
+          const spend = projSpends.reduce((sum, s) => sum + Number(s.spend_usd || s.spend || 0), 0);
           const uniqueCusts = new Set(projOrders.map((o) => o.customer_id).filter(Boolean));
           const leads_count = uniqueCusts.size;
           const cpl = leads_count > 0 ? Number((spend / leads_count).toFixed(2)) : 0;
@@ -316,7 +316,7 @@ export async function getUnifiedCRMData(
         adminSupabase.from("profile_projects").select("profile_id, project_id"),
         adminSupabase.from("projects").select("id, name, slug, is_active"),
         fetchAllOrdersForSummary(),
-        adminSupabase.from("daily_traffic_and_costs").select("project_id, spend"),
+        adminSupabase.from("daily_traffic_and_costs").select("project_id, spend_usd, spend"),
       ]);
 
       const producers = producersRes.data || [];
@@ -363,7 +363,7 @@ export async function getUnifiedCRMData(
         const totalLeads = uniqueProdCusts.size;
 
         const prodCosts = costs.filter((c) => assignedIds.includes(c.project_id));
-        const totalSpend = prodCosts.reduce((sum, c) => sum + Number(c.spend || 0), 0);
+        const totalSpend = prodCosts.reduce((sum, c) => sum + Number(c.spend_usd || c.spend || 0), 0);
 
         const blendedRevenue = usd_revenue + (uah_revenue / 41.0) + (eur_revenue * 1.08);
         const netProfitNet = blendedRevenue - totalSpend;
@@ -629,7 +629,7 @@ export async function getUnifiedCRMData(
       (() => {
         let q = adminSupabase
           .from("daily_traffic_and_costs")
-          .select("date, spend")
+          .select("date, spend_usd, spend")
           .eq("project_id", activeProject.id);
         if (startDate) {
           q = q.gte("date", startDate);
@@ -728,7 +728,7 @@ export async function getUnifiedCRMData(
       }
       return true;
     });
-    const totalCostsSpend = filteredCosts.reduce((sum: number, c: any) => sum + Number(c.spend || 0), 0);
+    const totalCostsSpend = filteredCosts.reduce((sum: number, c: any) => sum + Number(c.spend_usd || c.spend || 0), 0);
     const netProfitUsd = totalUsdRevenue - totalCostsSpend;
     const blendedRevenue = totalUsdRevenue + (totalUahRevenue / 41.0) + (totalEurRevenue * 1.08);
     const roi = totalCostsSpend > 0 ? (blendedRevenue / totalCostsSpend) * 100 : 0;
@@ -1813,7 +1813,7 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
         if (!campaignMap[campId].min_date || dateStr < campaignMap[campId].min_date) campaignMap[campId].min_date = dateStr;
         if (!campaignMap[campId].max_date || dateStr > campaignMap[campId].max_date) campaignMap[campId].max_date = dateStr;
       }
-      campaignMap[campId].spend += Number(c.spend || 0);
+      campaignMap[campId].spend += Number(c.spend_usd || c.spend || 0);
       campaignMap[campId].clicks += Number(c.clicks || 0);
       campaignMap[campId].impressions += Number(c.impressions || 0);
     });
@@ -1823,9 +1823,15 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
       if (o.campaign_id && campaignMap[o.campaign_id]) {
         campId = o.campaign_id;
       } else if (o.utm_campaign) {
-        const match = Object.values(campaignMap).find(c => c.campaign_name === o.utm_campaign);
-        if (match) {
-          campId = match.campaign_id;
+        // Try extracting campaign_id using regular expression (matches digits at the end of utm_campaign)
+        const matchId = String(o.utm_campaign).match(/(\d+)$/);
+        if (matchId && campaignMap[matchId[1]]) {
+          campId = matchId[1];
+        } else {
+          const match = Object.values(campaignMap).find(c => c.campaign_name === o.utm_campaign);
+          if (match) {
+            campId = match.campaign_id;
+          }
         }
       }
 
@@ -1899,7 +1905,7 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
           usd_revenue: 0
         };
       }
-      dailyMap[dateStr].spend += Number(c.spend || 0);
+      dailyMap[dateStr].spend += Number(c.spend_usd || c.spend || 0);
       dailyMap[dateStr].clicks += Number(c.clicks || 0);
       dailyMap[dateStr].impressions += Number(c.impressions || 0);
     });

@@ -1500,13 +1500,18 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         {/* Project Traffic & Costs Tab - Superman, Admin & Producer */}
         {viewType === "single" && (role === "admin" || role === "superman" || role === "producer") && (
           <button
-            disabled
-            className="px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all shrink-0 opacity-40 cursor-not-allowed text-white/30 border border-white/5 bg-white/[0.01]"
-            title="Тимчасово у розробці (ключі оновлюються)"
+            onClick={() => setActiveTab("traffic")}
+            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${activeTab === "traffic"
+              ? isLight
+                ? "bg-neutral-900 text-white shadow-sm"
+                : "bg-white text-black shadow-lg"
+              : isLight
+                ? "text-neutral-500 hover:text-neutral-900"
+                : "text-white/40 hover:text-white"
+              }`}
           >
-            <Activity className="w-4 h-4 text-emerald-450/40" />
+            <Activity className="w-4 h-4 text-emerald-450" />
             🚥 Трафік
-            <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-black tracking-wider uppercase ml-1 animate-pulse">у розробці</span>
           </button>
         )}
 
@@ -1939,13 +1944,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
       {/* PROJECT TRAFFIC TAB */}
       {activeTab === "traffic" && viewType === "single" && (
-        <div className={`p-8 text-center rounded-2xl border ${cardClass} ${borderClass} animate-in fade-in duration-300`}>
-          <div className="w-12 h-12 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center mx-auto mb-4">
-            <Activity className="w-6 h-6 animate-pulse" />
-          </div>
-          <h3 className="text-base font-black uppercase text-white tracking-wide mb-2">🚥 Трафік тимчасово недоступний</h3>
-          <p className="text-xs text-crm-muted max-w-sm mx-auto leading-relaxed">Розділ знаходиться у розробці (оновлення ключів доступу API). Скоро все запрацює!</p>
-        </div>
+        <PerformanceView
+          activeSlug={activeSlug}
+          isLight={isLight}
+          startDate={startDate}
+          endDate={endDate}
+        />
       )}
 
       {/* 2. PROJECT DETAILED ANALYTICS TAB */}
