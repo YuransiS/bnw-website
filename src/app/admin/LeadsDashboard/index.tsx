@@ -62,6 +62,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   // Reference to track last fetched parameters to prevent duplicate/redundant client-side fetches
   const lastFetchedParamsRef = React.useRef<string>("");
   const clientCacheRef = React.useRef<Record<string, any>>({});
+  const isResettingRef = React.useRef(false);
 
   const [hasMounted, setHasMounted] = useState(false);
   useEffect(() => {
@@ -84,6 +85,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
     // Reset all filter states to default values if project is switched
     if (isProjectSwitched) {
+      isResettingRef.current = true;
       if (currentSlug === "all") {
         setActiveTab("hub");
       } else if (prevSlugRef.current === "all") {
@@ -330,7 +332,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       skipTraffic
     });
 
-    // Skip redundant fetching if parameters haven't changed
+    // Skip redundant fetching if parameters haven't changed or if we are resetting states due to a project switch
+    if (isResettingRef.current) {
+      isResettingRef.current = false;
+      return;
+    }
+
     if (currentParamsKey === lastFetchedParamsRef.current) {
       return;
     }

@@ -16,7 +16,7 @@ export function subscribeToLogs(listener: LogListener) {
   listeners.add(listener);
   // Emit all current buffered entries to the subscriber initially
   logBuffer.forEach(entry => listener(entry));
-  
+
   return () => {
     listeners.delete(listener);
   };

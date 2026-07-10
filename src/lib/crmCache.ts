@@ -760,11 +760,11 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
 
       const isProjectAlwaysTripwire = ["sofia", "valeria"].includes(activeSlug);
 
-      if (item.status === "Купив курс" && !isProjectAlwaysTripwire) {
+      if ((item.status === "Купив курс" || statusMapper.normalize(item.status) === "closed_won") && !isProjectAlwaysTripwire) {
         if (isUsd) { usdCoursePaid += amt; usdCourseCount++; }
         else if (isEur) { eurCoursePaid += amt; eurCourseCount++; }
         else if (isUah) { uahCoursePaid += amt; uahCourseCount++; }
-      } else if (item.status === "Купив(-ла) Трипвайер" || (item.status === "Купив курс" && isProjectAlwaysTripwire)) {
+      } else if (item.status === "Купив(-ла) Трипвайер" || ((item.status === "Купив курс" || statusMapper.normalize(item.status) === "closed_won") && isProjectAlwaysTripwire)) {
         if (isUsd) { usdTripwirePaid += amt; usdTripwireCount++; }
         else if (isEur) { eurTripwirePaid += amt; eurTripwireCount++; }
         else if (isUah) { uahTripwirePaid += amt; uahTripwireCount++; }
@@ -871,7 +871,7 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
   }).filter((c) => {
     // Filter out anonymous users that didn't pay
     const hasContacts = c.name !== "Невідомий" || c.phone || c.telegram || c.email;
-    const isPaid = c.status === "Купив курс" || c.status === "Купив(-ла) Трипвайер";
+    const isPaid = c.status === "Купив курс" || c.status === "Купив(-ла) Трипвайер" || statusMapper.normalize(c.status) === "closed_won";
     return hasContacts || isPaid;
   });
 

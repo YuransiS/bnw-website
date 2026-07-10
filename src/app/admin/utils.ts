@@ -35,7 +35,7 @@ export const parseClientDateRange = (dateStr: string, isEnd: boolean): Date => {
 };
 
 export const statusPriority = (s: string): number => {
-  if (s === "Купив курс") return 10;
+  if (s === "Купив курс" || s === "closed_won" || s === "Approved" || s === "Approved (Test)") return 10;
   if (s === "Вирішив подумати") return 8;
   if (s === "Дзвінок проведено") return 7;
   if (s === "Назначено Дзвінок") return 6;
