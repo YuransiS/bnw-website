@@ -210,186 +210,31 @@ export async function getUnifiedCRMData(
 
     // 1. Superman Global Hub mode (direct fast RPC)
     if (isSuperman && activeSlug === "all") {
-      const fetchAllOrdersForSummary = async () => {
-        let results: any[] = [];
-        let from = 0;
-        const limit = 1000;
-        let hasMore = true;
-        while (hasMore) {
-          const { data, error } = await adminSupabase
-            .from("unified_orders")
-            .select("id, project_id, amount, status, metadata, campaign_id, utm_campaign")
-            .range(from, from + limit - 1);
-          if (error) throw error;
-          results = [...results, ...(data || [])];
-          if ((data || []).length < limit) hasMore = false;
-          else from += limit;
-        }
-        return results;
-      };
-
-      const [summaryRes, campaignRes] = await Promise.all([
-        supabase.rpc("get_projects_summary"),
+      const [summaryRes, campaignRes, leaderboardRes] = await Promise.all([
+        supabase.rpc("get_superman_summary"),
         supabase.rpc("get_campaigns_summary"),
+        adminSupabase.rpc("get_producers_leaderboard")
       ]);
 
       let summary = summaryRes.data || [];
       let campaigns = campaignRes.data || [];
-
-      if (summaryRes.error || campaignRes.error) {
-        const [allProjects, allOrders, allSpends] = await Promise.all([
-          supabase.from("projects").select("*").then(r => r.data || []),
-          fetchAllOrdersForSummary(),
-          supabase.from("daily_traffic_and_costs").select("*").then(r => r.data || []),
-        ]);
-
-        summary = (allProjects || []).map((proj) => {
-          const projOrders = (allOrders || []).filter((o) => o.project_id === proj.id && o.status !== "Клик" && o.status !== "КликФормы");
-          const projSpends = (allSpends || []).filter((s) => s.project_id === proj.id);
-
-          const paidOrders = projOrders.filter((o) => {
-            return statusMapper.normalize(o.status) === "closed_won";
-          });
-
-          const coursePaidOrders = paidOrders.filter((o) => {
-            const originalSheet = String(o.metadata?.original_sheet || o.metadata?.lead?.original_sheet || "").trim();
-            const targetSheet = String(o.metadata?.target_sheet || o.metadata?.lead?.target_sheet || "").trim();
-            const courseName = String(o.metadata?.leadData?.course || o.metadata?.lead?.leadData?.course || "").trim();
-            const orderSlug = proj.slug || "";
-
-            const isTripwire =
-              ["Практикум", "Practicum_Leads", "Заявки на практикум", "Miні-курс"].includes(originalSheet) ||
-              ["Практикум", "Practicum_Leads", "Заявки на практикум", "Miні-курс"].includes(targetSheet) ||
-              courseName.includes("Mini-Course") ||
-              courseName.includes("Practicum") ||
-              courseName.includes("Практикум") ||
-              courseName.includes("Міні-курс") ||
-              orderSlug === "sofia" ||
-              orderSlug === "valeria";
-
-            return !isTripwire;
-          });
-
-          let usd_revenue = 0;
-          let uah_revenue = 0;
-          let eur_revenue = 0;
-
-          coursePaidOrders.forEach((o) => {
-            const amt = Number(o.amount || 0);
-            const metaCurrency = String(o.metadata?.currency || o.metadata?.lead?.currency || "").trim().toLowerCase();
-
-            const isUsd = ["usd", "$"].includes(metaCurrency);
-            const isEur = ["eur", "€"].includes(metaCurrency);
-            const isUah = ["uah", "₴"].includes(metaCurrency);
-
-            if (isUsd) {
-              usd_revenue += amt;
-            } else if (isEur) {
-              eur_revenue += amt;
-            } else if (isUah) {
-              uah_revenue += amt;
-            }
-          });
-
-          const spend = projSpends.reduce((sum, s) => sum + Number(s.spend_usd || s.spend || 0), 0);
-          const uniqueCusts = new Set(projOrders.map((o) => o.customer_id).filter(Boolean));
-          const leads_count = uniqueCusts.size;
-          const cpl = leads_count > 0 ? Number((spend / leads_count).toFixed(2)) : 0;
-
-          return {
-            project_id: proj.id,
-            project_name: proj.name,
-            project_slug: proj.slug,
-            spend,
-            leads_count,
-            cpl,
-            usd_revenue,
-            uah_revenue,
-            eur_revenue,
-          };
-        }).sort((a, b) => b.usd_revenue - a.usd_revenue || b.uah_revenue - a.uah_revenue);
-      }
-
-      // Calculate OP Leaderboard
-      const [producersRes, profileProjectsRes, allProjRes, allOrdersForLeaderboard, allCostsRes] = await Promise.all([
-        adminSupabase.from("profiles").select("id, email, full_name, avatar_url").eq("role", "producer"),
-        adminSupabase.from("profile_projects").select("profile_id, project_id"),
-        adminSupabase.from("projects").select("id, name, slug, is_active"),
-        fetchAllOrdersForSummary(),
-        adminSupabase.from("daily_traffic_and_costs").select("project_id, spend_usd, spend"),
-      ]);
-
-      const producers = producersRes.data || [];
-      const mappings = profileProjectsRes.data || [];
-      const projects = (allProjRes.data || []).filter((p) => p.is_active !== false);
-      const orders = (allOrdersForLeaderboard || []).filter((o) => o.status !== "Клик" && o.status !== "КликФормы");
-      const costs = allCostsRes.data || [];
-
-      const leaderboard = producers.map((prod) => {
-        const assignedIds = mappings
-          .filter((m) => m.profile_id === prod.id)
-          .map((m) => m.project_id);
-
-        const assignedProjDetails = projects.filter((p) => assignedIds.includes(p.id));
-        const projectNames = assignedProjDetails.map((p) => p.name).join(", ") || "—";
-
-        const prodOrders = orders.filter((o) => assignedIds.includes(o.project_id));
-        const prodPaidOrders = prodOrders.filter((o) => {
-          return statusMapper.normalize(o.status) === "closed_won";
-        });
-
-        let usd_revenue = 0;
-        let uah_revenue = 0;
-        let eur_revenue = 0;
-
-        prodPaidOrders.forEach((o) => {
-          const amt = Number(o.amount || 0);
-          const metaCurrency = String(o.metadata?.currency || o.metadata?.lead?.currency || "").trim().toLowerCase();
-
-          const isUsd = ["usd", "$"].includes(metaCurrency);
-          const isEur = ["eur", "€"].includes(metaCurrency);
-          const isUah = ["uah", "₴"].includes(metaCurrency);
-
-          if (isUsd) {
-            usd_revenue += amt;
-          } else if (isEur) {
-            eur_revenue += amt;
-          } else if (isUah) {
-            uah_revenue += amt;
-          }
-        });
-
-        const uniqueProdCusts = new Set(prodOrders.map((o) => o.customer_id).filter(Boolean));
-        const totalLeads = uniqueProdCusts.size;
-
-        const prodCosts = costs.filter((c) => assignedIds.includes(c.project_id));
-        const totalSpend = prodCosts.reduce((sum, c) => sum + Number(c.spend_usd || c.spend || 0), 0);
-
-        const blendedRevenue = usd_revenue + (uah_revenue / 41.0) + (eur_revenue * 1.08);
-        const netProfitNet = blendedRevenue - totalSpend;
-        const roi = totalSpend > 0 ? (blendedRevenue / totalSpend) * 100 : 0;
-        const cpl = totalLeads > 0 ? totalSpend / totalLeads : 0;
-
-        return {
-          producerId: prod.id,
-          email: prod.email,
-          name: prod.full_name || prod.email,
-          avatar_url: prod.avatar_url || "",
-          projectNames,
-          spend: totalSpend,
-          leadsCount: totalLeads,
-          cpl,
-          usd_revenue,
-          uah_revenue,
-          eur_revenue,
-          blended_revenue: blendedRevenue,
-          profit: netProfitNet,
-          roi,
-          isLeaderOfMonth: false,
-        };
-      });
-
-      leaderboard.sort((a, b) => b.blended_revenue - a.blended_revenue);
+      let leaderboard = (leaderboardRes.data || []).map((l: any) => ({
+        producerId: l.producer_id,
+        email: l.email,
+        name: l.name,
+        avatar_url: l.avatar_url,
+        projectNames: l.project_names,
+        spend: Number(l.spend || 0),
+        leadsCount: Number(l.leads_count || 0),
+        cpl: Number(l.cpl || 0),
+        usd_revenue: Number(l.usd_revenue || 0),
+        uah_revenue: Number(l.uah_revenue || 0),
+        eur_revenue: Number(l.eur_revenue || 0),
+        blended_revenue: Number(l.blended_revenue || 0),
+        profit: Number(l.profit || 0),
+        roi: Number(l.roi || 0),
+        isLeaderOfMonth: false,
+      }));
 
       if (leaderboard.length > 0 && leaderboard[0].blended_revenue > 0) {
         leaderboard[0].isLeaderOfMonth = true;
@@ -1016,9 +861,11 @@ export async function updateUnifiedLeadStatusAction(orderId: string, newStatus: 
     await checkProjectAccess(order.project_id);
 
     const { error } = await adminSupabase
-      .from("unified_orders")
-      .update({ status: newStatus })
-      .eq("id", orderId);
+      .rpc("update_lead_status_atomic", {
+        p_order_id: orderId,
+        p_project_id: order.project_id,
+        p_new_status: newStatus
+      });
 
     if (error) throw error;
 

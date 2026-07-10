@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/sync-spend",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/trigger-all-rebuilds",
+      "schedule": "0 3 * * *"
     }
   ]
 }
