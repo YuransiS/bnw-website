@@ -358,9 +358,35 @@ const isBlacklistedEmail = (email: string): boolean => {
 export async function rebuildProjectCache(projectId: string, activeSlug: string) {
   const adminSupabase = createAdminClient();
 
+  const runWithConcurrencyLimit = async <T>(
+    tasks: (() => Promise<T>)[],
+    concurrencyLimit: number
+  ): Promise<T[]> => {
+    const results: T[] = [];
+    const executing = new Set<Promise<void>>();
+
+    for (let i = 0; i < tasks.length; i++) {
+      const taskIndex = i;
+      const p = Promise.resolve()
+        .then(() => tasks[taskIndex]())
+        .then((res) => {
+          results[taskIndex] = res;
+        });
+      executing.add(p);
+      const clean = () => executing.delete(p);
+      p.then(clean, clean);
+      if (executing.size >= concurrencyLimit) {
+        await Promise.race(executing);
+      }
+    }
+    await Promise.all(executing);
+    return results;
+  };
+
   const fetchAllParallel = async (
     countQuery: () => Promise<any> | any,
-    fetchPageFn: (from: number, to: number) => Promise<any> | any
+    fetchPageFn: (from: number, to: number) => Promise<any> | any,
+    concurrencyLimit = 5
   ) => {
     const { count, error: countErr } = await countQuery();
     if (countErr) throw countErr;
@@ -369,15 +395,15 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
 
     const limit = 1000;
     const pagesCount = Math.ceil(total / limit);
-    const promises = [];
+    const tasks: (() => Promise<any>)[] = [];
 
     for (let i = 0; i < pagesCount; i++) {
       const from = i * limit;
       const to = from + limit - 1;
-      promises.push(fetchPageFn(from, to));
+      tasks.push(async () => await fetchPageFn(from, to));
     }
 
-    const results = await Promise.all(promises);
+    const results = await runWithConcurrencyLimit(tasks, concurrencyLimit);
     let combinedData: any[] = [];
     for (const res of results) {
       if (res.error) throw res.error;
