@@ -83,6 +83,21 @@ export const LeadsTab = React.memo(function LeadsTab({
   setShowAddLead,
   isDevMode
 }: LeadsTabProps) {
+  const [localSearch, setLocalSearch] = React.useState(searchQuery);
+
+  React.useEffect(() => {
+    setLocalSearch(searchQuery);
+  }, [searchQuery]);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localSearch !== searchQuery) {
+        setSearchQuery(localSearch);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [localSearch, searchQuery, setSearchQuery]);
+
   const { theme } = useTheme();
   const isLight = theme === "light";
 
@@ -155,8 +170,8 @@ export const LeadsTab = React.memo(function LeadsTab({
             </span>
             <input
               type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={localSearch}
+              onChange={(e) => setLocalSearch(e.target.value)}
               placeholder="Пошук (ім'я, телефон, tg)..."
               className={`w-full pl-10 pr-4 py-3.5 rounded-xl focus:outline-none text-xs font-semibold ${inputClass}`}
             />

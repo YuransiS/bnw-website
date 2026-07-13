@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { KanbanSquare, Plus, Search, ChevronDown } from "lucide-react";
 import { useTheme } from "../../ThemeProvider";
 import { formatLocaleNumber, formatDualCurrency } from "@/app/admin/utils";
@@ -57,6 +57,21 @@ export const KanbanTab = React.memo(function KanbanTab({
   openLeadModal,
   setShowAddLead
 }: KanbanTabProps) {
+  const [localSearch, setLocalSearch] = useState(kanbanSearchQuery);
+
+  useEffect(() => {
+    setLocalSearch(kanbanSearchQuery);
+  }, [kanbanSearchQuery]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localSearch !== kanbanSearchQuery) {
+        setKanbanSearchQuery(localSearch);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [localSearch, kanbanSearchQuery, setKanbanSearchQuery]);
+
   const { theme } = useTheme();
   const isLight = theme === "light";
 
@@ -136,8 +151,8 @@ export const KanbanTab = React.memo(function KanbanTab({
           </span>
           <input
             type="text"
-            value={kanbanSearchQuery}
-            onChange={(e) => setKanbanSearchQuery(e.target.value)}
+            value={localSearch}
+            onChange={(e) => setLocalSearch(e.target.value)}
             placeholder="Швидкий пошук на дошці..."
             className="w-full pl-10 pr-4 py-2.5 bg-[#050507] border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-xs font-semibold text-white"
           />

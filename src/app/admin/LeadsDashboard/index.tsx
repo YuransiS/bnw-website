@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Layers,
@@ -48,10 +48,37 @@ import PaylinkTab from "./tabs/PaylinkTab";
 import QuizzesTab from "./tabs/QuizzesTab";
 import DiagnosticsTab from "./tabs/DiagnosticsTab";
 import LeadJourneyModal from "./components/LeadJourneyModal";
+import AddLeadModal from "./components/AddLeadModal";
+import UnresolvedOrdersModal from "./components/UnresolvedOrdersModal";
 
 interface LeadsDashboardProps {
   initialData: any;
 }
+
+const PIPELINE_COLUMNS = [
+  { key: "Новий лід", label: "Новий лід", dotColor: "bg-blue-500" },
+  { key: "Зацікавлений лід", label: "Зацікавлений лід", dotColor: "bg-purple-500" },
+  { key: "Залишив заявку", label: "Залишив заявку", dotColor: "bg-teal-500" },
+  { key: "Списались", label: "Списались", dotColor: "bg-yellow-500" },
+  { key: "Купив(-ла) Трипвайер", label: "Купив(-ла) Трипвайер", dotColor: "bg-indigo-500" },
+  { key: "Назначено Дзвінок", label: "Назначено Дзвінок", dotColor: "bg-orange-500" },
+  { key: "Дзвінок проведено", label: "Дзвінок проведено", dotColor: "bg-cyan-500" },
+  { key: "Вирішив подумати", label: "Вирішив подумати", dotColor: "bg-pink-500" },
+  { key: "Купив курс", label: "Купив курс", dotColor: "bg-emerald-500 font-extrabold" },
+  { key: "Відмова", label: "Відмова", dotColor: "bg-red-500" }
+];
+
+const DEFAULT_DIAGNOSTICS_ISSUES = {
+  nameless: [],
+  unmatchedUrls: [],
+  currencyErrors: []
+};
+
+const DEFAULT_DATA_HEALTH = {
+  leadsWithoutUuidCount: 0,
+  ordersWithAmountAndClickStatusCount: 0,
+  unparseableMetadataDatesCount: 0
+};
 
 export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const router = useRouter();
@@ -226,7 +253,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const [kanbanSourceFilter, setKanbanSourceFilter] = useState("all");
   const [activeKanbanCol, setActiveKanbanCol] = useState("Новий лід");
 
-  const applyPreset = (preset: "all" | "30d" | "7d" | "1d") => {
+  const applyPreset = useCallback((preset: "all" | "30d" | "7d" | "1d") => {
     setDateRangePreset(preset);
     if (preset === "all") {
       setStartDate("");
@@ -247,7 +274,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     }
     setStartDate(formatDate(start));
     setEndDate(end);
-  };
+  }, []);
   const pageSize = 100;
 
   // Dynamic theme support definitions
@@ -420,13 +447,6 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
   // New lead creation states
   const [showAddLead, setShowAddLead] = useState(false);
-  const [newLeadName, setNewLeadName] = useState("");
-  const [newLeadPhone, setNewLeadPhone] = useState("");
-  const [newLeadEmail, setNewLeadEmail] = useState("");
-  const [newLeadTelegram, setNewLeadTelegram] = useState("");
-  const [newLeadAmount, setNewLeadAmount] = useState("0");
-  const [newLeadStatus, setNewLeadStatus] = useState("Новий лід");
-  const [newLeadUtmSource, setNewLeadUtmSource] = useState("crm");
 
   // Interaction feedback states
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -434,16 +454,16 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const [selectedLeadHistory, setSelectedLeadHistory] = useState<any[] | null>(null);
   const [selectedLeadInfo, setSelectedLeadInfo] = useState<any | null>(null);
 
-  const handleCopyPhone = (phone: string, id: string) => {
+  const handleCopyPhone = useCallback((phone: string, id: string) => {
     navigator.clipboard.writeText(phone);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
-  };
+  }, []);
 
-  const openLeadModal = (lead: any) => {
+  const openLeadModal = useCallback((lead: any) => {
     setSelectedLeadHistory(lead.history || []);
     setSelectedLeadInfo(lead);
-  };
+  }, []);
 
   // Sync active tab based on viewType & role
   useEffect(() => {
@@ -474,30 +494,22 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const singleProjectStats = dashboardData.stats;
   const splineTrendData = dashboardData.splineTrendData || [];
   const utmAttributionTree = dashboardData.utmAttributionTree || [];
-  const diagnosticsIssues = dashboardData.diagnosticsIssues || {
-    nameless: [],
-    unmatchedUrls: [],
-    currencyErrors: []
-  };
-  const dataHealth = dashboardData.dataHealth || {
-    leadsWithoutUuidCount: 0,
-    ordersWithAmountAndClickStatusCount: 0,
-    unparseableMetadataDatesCount: 0
-  };
+  const diagnosticsIssues = dashboardData.diagnosticsIssues || DEFAULT_DIAGNOSTICS_ISSUES;
+  const dataHealth = dashboardData.dataHealth || DEFAULT_DATA_HEALTH;
   const performanceInfo = dashboardData.performance;
   const totalCount = dashboardData.totalCount || 0;
   const uniqueSources = dashboardData.uniqueSources || [];
 
   // --- Kanban Column logic & state manipulation ---
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-  };
+  }, []);
 
-  const handleDragStart = (e: React.DragEvent, orderId: string) => {
+  const handleDragStart = useCallback((e: React.DragEvent, orderId: string) => {
     e.dataTransfer.setData("text/plain", orderId);
-  };
+  }, []);
 
-  const handleDrop = async (e: React.DragEvent, targetColumn: string) => {
+  const handleDrop = useCallback(async (e: React.DragEvent, targetColumn: string) => {
     e.preventDefault();
     const orderId = e.dataTransfer.getData("text/plain");
     if (!orderId) return;
@@ -516,60 +528,24 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     } finally {
       setUpdatingId(null);
     }
-  };
+  }, [router]);
 
-  // Add a new lead server event submit hook
-  const handleCreateLeadSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newLeadName || !newLeadPhone) {
-      alert("Будь ласка, заповніть ім'я та телефон");
-      return;
-    }
+  const handleCreateLead = useCallback(async (payload: any) => {
+    if (!activeProject?.id) return { error: "No active project" };
+    return createUnifiedLeadAction(activeProject.id, payload);
+  }, [activeProject?.id]);
 
-    setIsLoading(true);
-    try {
-      const res = await createUnifiedLeadAction(activeProject.id, {
-        name: newLeadName,
-        phone: newLeadPhone,
-        email: newLeadEmail || undefined,
-        telegram: newLeadTelegram || undefined,
-        amount: Number(newLeadAmount) || 0.0,
-        status: newLeadStatus,
-        utm_source: newLeadUtmSource
-      });
+  const handleUpdateCurrency = useCallback(async (
+    orderId: string,
+    currency: "usd" | "uah" | "eur",
+    bulkParam?: { landingName: string; amount: number }
+  ) => {
+    return updateOrderCurrencyAction(orderId, currency, bulkParam);
+  }, []);
 
-      if (res.error) throw new Error(res.error);
-
-      // Reset Form fields
-      setNewLeadName("");
-      setNewLeadPhone("");
-      setNewLeadEmail("");
-      setNewLeadTelegram("");
-      setNewLeadAmount("0");
-      setNewLeadStatus("Новий лід");
-      setNewLeadUtmSource("crm");
-      setShowAddLead(false);
-
-      router.refresh();
-    } catch (err: any) {
-      alert("Помилка створення ліда: " + err.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const PIPELINE_COLUMNS = [
-    { key: "Новий лід", label: "Новий лід", dotColor: "bg-blue-500" },
-    { key: "Зацікавлений лід", label: "Зацікавлений лід", dotColor: "bg-purple-500" },
-    { key: "Залишив заявку", label: "Залишив заявку", dotColor: "bg-teal-500" },
-    { key: "Списались", label: "Списались", dotColor: "bg-yellow-500" },
-    { key: "Купив(-ла) Трипвайер", label: "Купив(-ла) Трипвайер", dotColor: "bg-indigo-500" },
-    { key: "Назначено Дзвінок", label: "Назначено Дзвінок", dotColor: "bg-orange-500" },
-    { key: "Дзвінок проведено", label: "Дзвінок проведено", dotColor: "bg-cyan-500" },
-    { key: "Вирішив подумати", label: "Вирішив подумати", dotColor: "bg-pink-500" },
-    { key: "Купив курс", label: "Купив курс", dotColor: "bg-emerald-500 font-extrabold" },
-    { key: "Відмова", label: "Відмова", dotColor: "bg-red-500" }
-  ];
+  const handleCloseAddLead = useCallback(() => setShowAddLead(false), []);
+  const handleCloseUnresolvedModal = useCallback(() => setShowUnresolvedModal(false), []);
+  const handleRefresh = useCallback(() => router.refresh(), [router]);
 
   if (!hasMounted) {
     return (
@@ -1139,122 +1115,16 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       </div>
 
       {/* Manual lead insertion modal overlay */}
-      {showAddLead && (
-        <div className="fixed inset-0 z-[999] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="relative w-full max-w-md bg-[#0C0C0F] border border-white/10 rounded-3xl p-6 shadow-2xl space-y-6 animate-in slide-in-from-bottom-4 duration-300">
-            <button
-              onClick={() => setShowAddLead(false)}
-              className="absolute top-4 right-4 p-2 rounded-xl text-white/40 hover:text-white hover:bg-white/5 cursor-pointer transition-all"
-            >
-              <XCircle className="w-5 h-5" />
-            </button>
-
-            <div>
-              <h3 className="text-lg font-black uppercase tracking-tight text-white flex items-center gap-2">
-                <Briefcase className="w-5 h-5 text-emerald-500" />
-                Додати нову картку ліда
-              </h3>
-              <p className="text-white/40 text-xs mt-1">Створення картки клієнта вручну для проекту: {activeProject?.name}</p>
-            </div>
-
-            <form onSubmit={handleCreateLeadSubmit} className="space-y-4">
-              <div>
-                <label className="block text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1.5">
-                  ПІБ Клієнта *
-                </label>
-                <input
-                  type="text"
-                  value={newLeadName}
-                  onChange={(e) => setNewLeadName(e.target.value)}
-                  placeholder="Олексій Коваленко"
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-xs font-semibold"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1.5">
-                  Телефон *
-                </label>
-                <input
-                  type="text"
-                  value={newLeadPhone}
-                  onChange={(e) => setNewLeadPhone(e.target.value)}
-                  placeholder="+380951234567"
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-xs font-semibold"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1.5">
-                    Telegram (@username)
-                  </label>
-                  <input
-                    type="text"
-                    value={newLeadTelegram}
-                    onChange={(e) => setNewLeadTelegram(e.target.value)}
-                    placeholder="@olexiy"
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-xs font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1.5">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={newLeadEmail}
-                    onChange={(e) => setNewLeadEmail(e.target.value)}
-                    placeholder="olexiy@gmail.com"
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-xs font-semibold"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1.5">
-                    Сума оплат
-                  </label>
-                  <input
-                    type="number"
-                    value={newLeadAmount}
-                    onChange={(e) => setNewLeadAmount(e.target.value)}
-                    placeholder="0"
-                    className={`w-full px-4 py-3 rounded-xl focus:outline-none text-xs font-semibold ${inputClass}`}
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1.5">
-                    Початковий статус
-                  </label>
-                  <select
-                    value={newLeadStatus}
-                    onChange={(e) => setNewLeadStatus(e.target.value)}
-                    className={`w-full pl-3 pr-8 py-3.5 rounded-xl focus:outline-none text-xs font-bold ${selectClass}`}
-                  >
-                    {PIPELINE_COLUMNS.map((col) => (
-                      <option key={col.key} value={col.key} className={optionClass}>
-                        {col.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full py-4 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black font-black transition-all hover:scale-[1.01] active:scale-95 duration-200 mt-4 text-xs disabled:opacity-50"
-              >
-                {isLoading ? "Збереження..." : "Додати ліда до бази"}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+      <AddLeadModal
+        isOpen={showAddLead}
+        onClose={handleCloseAddLead}
+        activeProject={activeProject}
+        onCreateLead={handleCreateLead}
+        pipelineColumns={PIPELINE_COLUMNS}
+        inputClass={inputClass}
+        selectClass={selectClass}
+        optionClass={optionClass}
+      />
 
       {/* Lead journey timeline modal overlay */}
       {selectedLeadHistory && selectedLeadInfo && (
@@ -1275,103 +1145,16 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       )}
 
       {/* Modal for Unresolved Orders */}
-      {showUnresolvedModal && (
-        <div className="fixed inset-0 z-[999] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
-          <div
-            className={`relative w-full max-w-2xl max-h-[80vh] ${modalBgClass} rounded-3xl p-6 shadow-2xl flex flex-col space-y-6 animate-in slide-in-from-bottom-4 duration-300`}
-          >
-            <button
-              onClick={() => setShowUnresolvedModal(false)}
-              className="absolute top-4 right-4 p-2 rounded-xl text-crm-muted hover:text-crm-text hover:bg-crm-card/50 cursor-pointer transition-all"
-            >
-              <XCircle className="w-5 h-5" />
-            </button>
-
-            <div>
-              <h3 className="text-lg font-black uppercase tracking-tight text-crm-text flex items-center gap-2">
-                <AlertCircle className="w-5 h-5 text-red-500 animate-pulse" />
-                Транзакції без вказаної валюти
-              </h3>
-              <p className="text-crm-muted text-xs mt-1">
-                Будь ласка, оберіть валюту для кожної транзакції, щоб вони правильно відображалися в аналітиці.
-              </p>
-            </div>
-
-            <div className="flex-grow overflow-y-auto custom-scrollbar space-y-3 pr-2">
-              {unresolvedOrders.length === 0 ? (
-                <p className="text-center text-xs text-crm-muted/60 py-8 italic">Усі транзакції мають вказану валюту!</p>
-              ) : (
-                unresolvedOrders.map((order: any) => (
-                  <div
-                    key={order.id}
-                    className="p-4 rounded-xl border border-crm-border bg-white/[0.01] hover:bg-white/[0.02] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-all"
-                  >
-                    <div className="space-y-1">
-                      <p className="text-xs font-bold text-crm-text">{order.customerName || "Невідомий клієнт"}</p>
-                      <p className="text-[10px] text-crm-muted">
-                        Проект: {order.projectName} | Дата: {new Date(order.created_at).toLocaleString("uk-UA")}
-                      </p>
-                      {order.customerPhone && <p className="text-[10px] text-crm-muted">Тел: {order.customerPhone}</p>}
-                    </div>
-
-                    <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
-                      <span className="text-sm font-black text-crm-text pr-2">{formatLocaleNumber(order.amount)}</span>
-                      <div className="flex gap-1.5 shrink-0">
-                        {[
-                          { code: "uah", symbol: "₴ UAH" },
-                          { code: "usd", symbol: "$ USD" },
-                          { code: "eur", symbol: "€ EUR" }
-                        ].map((curr) => (
-                          <button
-                            key={curr.code}
-                            disabled={updatingCurrencyId === order.id}
-                            onClick={async () => {
-                              setUpdatingCurrencyId(order.id);
-                              try {
-                                let updateAll = false;
-                                if (order.landingName) {
-                                  updateAll = window.confirm(
-                                    `Бажаєте встановити валюту ${
-                                      curr.symbol
-                                    } для всіх замовлень з лендингу "${order.landingName}" з ціною ${formatLocaleNumber(
-                                      order.amount
-                                    )}?`
-                                  );
-                                }
-                                const bulkParam = updateAll
-                                  ? { landingName: order.landingName, amount: order.amount }
-                                  : undefined;
-                                const res = await updateOrderCurrencyAction(order.id, curr.code as any, bulkParam);
-                                if (res.error) throw new Error(res.error);
-
-                                if (updateAll) {
-                                  setUnresolvedOrders((prev) =>
-                                    prev.filter((o) => !(o.landingName === order.landingName && o.amount === order.amount))
-                                  );
-                                } else {
-                                  setUnresolvedOrders((prev) => prev.filter((o) => o.id !== order.id));
-                                }
-                                router.refresh();
-                              } catch (err: any) {
-                                alert("Помилка оновлення валюти: " + err.message);
-                              } finally {
-                                setUpdatingCurrencyId(null);
-                              }
-                            }}
-                            className="px-2.5 py-1.5 rounded-lg bg-crm-input-bg hover:bg-emerald-500 hover:text-black disabled:opacity-40 text-[10px] font-extrabold text-crm-text border border-crm-border hover:border-emerald-550 transition-all cursor-pointer"
-                          >
-                            {curr.symbol}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <UnresolvedOrdersModal
+        isOpen={showUnresolvedModal}
+        onClose={handleCloseUnresolvedModal}
+        unresolvedOrders={unresolvedOrders}
+        setUnresolvedOrders={setUnresolvedOrders}
+        onUpdateCurrency={handleUpdateCurrency}
+        modalBgClass={modalBgClass}
+        formatLocaleNumber={formatLocaleNumber}
+        onRefresh={handleRefresh}
+      />
       {isDevMode && <DevLogConsole />}
     </div>
   );
