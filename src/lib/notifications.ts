@@ -42,7 +42,7 @@ export class NotificationService {
       `🔔 <b>Нова заявка на сайті!</b>`,
       `• <b>Ім'я:</b> ${lead.name}`,
       `• <b>Телефон:</b> ${lead.phone}`,
-      cleanTg ? `• <b>Telegram:</b> <a href="https://t.me/${cleanTg}">t.me/${cleanTg}</a>` : `• <b>Telegram:</b> не вказано`,
+      cleanTg ? `• <b>Telegram:</b> <a href="https://telegram.me/${cleanTg}">telegram.me/${cleanTg}</a>` : `• <b>Telegram:</b> не вказано`,
       cleanInst ? `• <b>Instagram:</b> <a href="https://instagram.com/${cleanInst}">instagram.com/${cleanInst}</a>` : `• <b>Instagram:</b> не вказано`
     ].join("\n");
 

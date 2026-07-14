@@ -445,7 +445,7 @@ export default function BwMainDashboard({
 
     return (
       <a
-        href={`https://t.me/${clean}`}
+        href={`https://telegram.me/${clean}`}
         target="_blank"
         rel="noopener noreferrer"
         className="inline-flex items-center gap-1 text-[9px] font-black uppercase text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 px-2 py-1 rounded transition-all cursor-pointer"

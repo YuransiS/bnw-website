@@ -121,7 +121,7 @@ export const LeadsTab = React.memo(function LeadsTab({
       .replace(/^https?:\/\/(www\.)?instagram\.com\//, "");
     if (!clean) return null;
 
-    const href = type === "tg" ? `https://t.me/${clean}` : `https://instagram.com/${clean}`;
+    const href = type === "tg" ? `https://telegram.me/${clean}` : `https://instagram.com/${clean}`;
 
     return (
       <a

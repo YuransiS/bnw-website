@@ -31,13 +31,13 @@ export function Footer() {
                 </a>
               </li>
               <li>
-                <a href="https://t.me/victor_petryk" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-white/70 hover:text-white transition-colors">
+                <a href="https://telegram.me/victor_petryk" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-white/70 hover:text-white transition-colors">
                   <Send className="w-5 h-5" />
                   Telegram Віктора
                 </a>
               </li>
               <li>
-                <a href="https://t.me/pan_producer" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-white/70 hover:text-white transition-colors">
+                <a href="https://telegram.me/pan_producer" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-white/70 hover:text-white transition-colors">
                   <Send className="w-5 h-5" />
                   Telegram Дмитра
                 </a>
