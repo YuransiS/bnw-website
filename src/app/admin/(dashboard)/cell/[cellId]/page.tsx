@@ -202,34 +202,39 @@ export default async function CellDashboardPage({ params }: PageProps) {
             </h2>
 
             <div className="space-y-3">
-              {cellProducers.map((op: any, index: number) => (
-                <div
-                  key={op.producer_email}
-                  className="flex items-center justify-between p-3 border border-white/5 rounded-xl bg-white/[0.01]"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-6 h-6 rounded-full bg-white/10 text-white/60 flex items-center justify-center text-[10px] font-black shrink-0">
-                      {index + 1}
+              {cellProducers.map((op: any, index: number) => {
+                const pEmail = op.email || "";
+                const pName = op.name || pEmail.split("@")[0] || "Продюсер";
+                const pCount = op.projectNames ? op.projectNames.split(",").length : 0;
+                return (
+                  <div
+                    key={op.producerId || pEmail}
+                    className="flex items-center justify-between p-3 border border-white/5 rounded-xl bg-white/[0.01]"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-6 h-6 rounded-full bg-white/10 text-white/60 flex items-center justify-center text-[10px] font-black shrink-0">
+                        {index + 1}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-black truncate text-white" title={pEmail}>
+                          {pName}
+                        </p>
+                        <p className="text-[10px] text-white/30 truncate">
+                          {pCount} {pCount === 1 ? "проект" : "проекти"}
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-black truncate text-white" title={op.producer_email}>
-                        {op.producer_email.split("@")[0]}
+                    <div className="text-right shrink-0 pl-2">
+                      <p className="text-xs font-black text-emerald-400">
+                        {Math.round(op.uah_revenue || 0).toLocaleString("uk-UA")} ₴
                       </p>
-                      <p className="text-[10px] text-white/30 truncate">
-                        {op.projects_count} {op.projects_count === 1 ? "проект" : "проекти"}
+                      <p className="text-[10px] text-white/30 font-semibold">
+                        ROI: <span className="text-emerald-400">{Math.round(op.roi || 0)}%</span>
                       </p>
                     </div>
                   </div>
-                  <div className="text-right shrink-0 pl-2">
-                    <p className="text-xs font-black text-emerald-400">
-                      {Math.round(op.revenue_uah).toLocaleString("uk-UA")} ₴
-                    </p>
-                    <p className="text-[10px] text-white/30 font-semibold">
-                      ROI: <span className="text-emerald-400">{Math.round(op.roi || 0)}%</span>
-                    </p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
 
               {cellProducers.length === 0 && (
                 <p className="text-xs text-white/30 italic text-center py-4">Продюсери в осередку не закріплені</p>

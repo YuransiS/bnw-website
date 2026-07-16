@@ -191,9 +191,12 @@ export default async function FounderDashboardPage() {
             <div className="space-y-3">
               {leaderboard.map((op: any, index: number) => {
                 const isLeader = index === 0;
+                const pEmail = op.email || "";
+                const pName = op.name || pEmail.split("@")[0] || "Продюсер";
+                const pCount = op.projectNames ? op.projectNames.split(",").length : 0;
                 return (
                   <div
-                    key={op.producer_email}
+                    key={op.producerId || pEmail}
                     className={`flex items-center justify-between p-3 border rounded-xl bg-white/[0.01] ${
                       isLeader ? "border-emerald-500/35 shadow-[0_0_15px_rgba(16,185,129,0.05)]" : "border-white/5"
                     }`}
@@ -205,17 +208,17 @@ export default async function FounderDashboardPage() {
                         {index + 1}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-xs font-black truncate text-white" title={op.producer_email}>
-                          {op.producer_email.split("@")[0]}
+                        <p className="text-xs font-black truncate text-white" title={pEmail}>
+                          {pName}
                         </p>
                         <p className="text-[10px] text-white/30 truncate">
-                          {op.projects_count} {op.projects_count === 1 ? "проект" : "проекти"}
+                          {pCount} {pCount === 1 ? "проект" : "проекти"}
                         </p>
                       </div>
                     </div>
                     <div className="text-right shrink-0 pl-2">
                       <p className="text-xs font-black text-emerald-400">
-                        {Math.round(op.revenue_uah).toLocaleString("uk-UA")} ₴
+                        {Math.round(op.uah_revenue || 0).toLocaleString("uk-UA")} ₴
                       </p>
                       <p className="text-[10px] text-white/30 font-semibold">
                         ROI: <span className="text-emerald-400">{Math.round(op.roi || 0)}%</span>
