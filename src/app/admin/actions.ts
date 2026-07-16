@@ -38,12 +38,12 @@ export async function getSessionAndAccess(selectedProjectSlug?: string) {
 
   const devEmails = ["yura3zaxar@outlook.com", "yura3zaxar@gmail.com"];
   const isActualDev = (user.email && devEmails.includes(user.email.toLowerCase())) ||
-    (profile && (profile.role === "admin" || profile.role === "superman"));
+    (profile && (profile.role === "admin" || profile.role === "superman" || profile.role === "founder" || profile.role === "developer"));
 
   if (isActualDev) {
     const cookieStore = await cookies();
     const impersonated = cookieStore.get("crm_impersonated_role")?.value;
-    if (impersonated && ["superman", "producer", "rop", "sales", "pending"].includes(impersonated)) {
+    if (impersonated && ["founder", "cell_leader", "producer", "developer", "pending"].includes(impersonated)) {
       profile = profile ? { ...profile, role: impersonated } : { id: user.id, email: user.email || "", role: impersonated };
     }
   }
@@ -52,7 +52,8 @@ export async function getSessionAndAccess(selectedProjectSlug?: string) {
     throw new Error("Access Pending Approval");
   }
 
-  const isSuperman = profile.role === "admin" || profile.role === "superman";
+  const isSuperman = ["admin", "superman", "founder", "developer"].includes(profile.role);
+  const isCellLeader = profile.role === "cell_leader";
 
   // Fetch allowed projects mapping
   let allowedProjects: { id: string; name: string; slug: string }[] = [];
@@ -66,6 +67,23 @@ export async function getSessionAndAccess(selectedProjectSlug?: string) {
     const projectsList = allProj || [];
 
     allowedProjects = projectsList.filter((p) => p.is_active);
+  } else if (isCellLeader) {
+    // Cell Leader role sees all projects belonging to their cells
+    const { data: cells } = await adminSupabase
+      .from("cells")
+      .select("id")
+      .eq("cell_leader_id", user.id);
+    const cellIds = (cells || []).map((c) => c.id);
+
+    if (cellIds.length > 0) {
+      const { data: cellProj } = await adminSupabase
+        .from("projects")
+        .select("id, name, slug, is_active")
+        .in("cell_id", cellIds)
+        .order("name");
+      const projectsList = cellProj || [];
+      allowedProjects = projectsList.filter((p) => p.is_active);
+    }
   } else {
     const { data } = await supabase
       .from("profile_projects")
@@ -121,7 +139,25 @@ export async function checkProjectAccess(projectId: string) {
     .single();
 
   if (!profile || profile.role === "pending") throw new Error("Access Pending Approval");
-  if (profile.role === "admin" || profile.role === "superman") return true;
+  if (["admin", "superman", "founder", "developer"].includes(profile.role)) return true;
+
+  if (profile.role === "cell_leader") {
+    const { data: project } = await adminSupabase
+      .from("projects")
+      .select("cell_id")
+      .eq("id", projectId)
+      .single();
+    if (project?.cell_id) {
+      const { data: cell } = await adminSupabase
+        .from("cells")
+        .select("id")
+        .eq("id", project.cell_id)
+        .eq("cell_leader_id", user.id)
+        .maybeSingle();
+      if (cell) return true;
+    }
+    throw new Error("Access Denied: You do not have access to this project.");
+  }
 
   const { data } = await supabase
     .from("profile_projects")
@@ -158,7 +194,7 @@ export async function getUnifiedCRMData(
 
     // Fetch unresolved transactions (amount > 0 and missing/invalid currency metadata)
     let unresolvedOrders: any[] = [];
-    if (["admin", "superman", "producer", "rop"].includes(profile.role)) {
+    if (["admin", "superman", "founder", "developer", "producer"].includes(profile.role)) {
       try {
         const { data: rawUnresolved, error: unresolvedErr } = await adminSupabase
           .from("unified_orders")
@@ -268,16 +304,7 @@ export async function getUnifiedCRMData(
 
     const activeProject = allowedProjects.find((p) => p.slug === activeSlug)!;
 
-    const { data: assignedProfilesData } = await adminSupabase
-      .from("profile_projects")
-      .select("profiles(role)")
-      .eq("project_id", activeProject.id);
-
-    const hasRop = (assignedProfilesData || [])
-      .map((item: any) => item.profiles)
-      .some((p: any) => p && p.role === "rop");
-
-    const isSalesFiltered = profile.role === "sales" && hasRop;
+    const isSalesFiltered = false;
 
     // --- Caching Rebuild Trigger Check ---
     const cacheCheckStart = performance.now();
@@ -765,7 +792,7 @@ export async function getUnifiedCRMData(
 
     // Fetch sales managers for active project
     let salesManagers: { id: string; email: string; full_name: string }[] = [];
-    if (activeProject && ["admin", "superman", "producer", "rop"].includes(profile.role)) {
+    if (activeProject && ["admin", "superman", "founder", "developer", "producer"].includes(profile.role)) {
       const { data: assignedSales } = await adminSupabase
         .from("profile_projects")
         .select("profile_id, profiles(id, email, role, full_name)")
@@ -1874,6 +1901,263 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
     };
   } catch (err: any) {
     return { error: err.message || "Failed to fetch traffic analytics data" };
+  }
+}
+
+// ----------------------------------------------------
+// NEW SERVER ACTIONS FOR CRM V3.1
+// ----------------------------------------------------
+
+export async function getCellsAction() {
+  try {
+    const supabase = await createClient();
+    const adminSupabase = createAdminClient();
+    const { data: cells, error } = await adminSupabase
+      .from("cells")
+      .select("*, profiles(email)")
+      .order("name");
+
+    if (error) throw error;
+    return cells || [];
+  } catch (err: any) {
+    return { error: err.message || "Failed to fetch cells" };
+  }
+}
+
+export async function createCellAction(name: string, leaderId: string) {
+  try {
+    const adminSupabase = createAdminClient();
+    const { data, error } = await adminSupabase
+      .from("cells")
+      .insert({ name, cell_leader_id: leaderId || null })
+      .select()
+      .single();
+
+    if (error) throw error;
+    revalidatePath("/admin");
+    return { success: true, cell: data };
+  } catch (err: any) {
+    return { error: err.message || "Failed to create cell" };
+  }
+}
+
+export async function createFunnelAction(
+  projectId: string,
+  name: string,
+  startDate: string,
+  campaignIds: string[],
+  landingSlugs: string[],
+  description?: string
+) {
+  try {
+    await checkProjectAccess(projectId);
+    const adminSupabase = createAdminClient();
+    const { data, error } = await adminSupabase
+      .from("funnels")
+      .insert({
+        project_id: projectId,
+        name,
+        start_date: startDate,
+        campaign_ids: campaignIds,
+        landing_slugs: landingSlugs,
+        description: description || ""
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, funnel: data };
+  } catch (err: any) {
+    return { error: err.message || "Failed to create funnel" };
+  }
+}
+
+export async function getFunnelsAction(projectId: string) {
+  try {
+    await checkProjectAccess(projectId);
+    const adminSupabase = createAdminClient();
+    const { data, error } = await adminSupabase
+      .from("funnels")
+      .select("*")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (err: any) {
+    return { error: err.message || "Failed to fetch funnels" };
+  }
+}
+
+export async function createTaskAction(
+  projectId: string,
+  funnelId: string | null,
+  title: string,
+  description: string,
+  dueDate: string
+) {
+  try {
+    await checkProjectAccess(projectId);
+    const adminSupabase = createAdminClient();
+    const { data, error } = await adminSupabase
+      .from("tasks")
+      .insert({
+        project_id: projectId,
+        funnel_id: funnelId || null,
+        title,
+        description,
+        due_date: dueDate,
+        status: "TODO"
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, task: data };
+  } catch (err: any) {
+    return { error: err.message || "Failed to create task" };
+  }
+}
+
+export async function getTasksAction(projectId: string) {
+  try {
+    await checkProjectAccess(projectId);
+    const adminSupabase = createAdminClient();
+    
+    // Fetch tasks
+    const { data: tasks, error: tasksErr } = await adminSupabase
+      .from("tasks")
+      .select("*, funnels(name)")
+      .eq("project_id", projectId)
+      .order("due_date", { ascending: true });
+
+    if (tasksErr) throw tasksErr;
+    return tasks || [];
+  } catch (err: any) {
+    return { error: err.message || "Failed to fetch tasks" };
+  }
+}
+
+export async function updateTaskStatusAction(taskId: string, status: "TODO" | "IN_PROGRESS" | "DONE") {
+  try {
+    const adminSupabase = createAdminClient();
+    const { data: task, error: fetchErr } = await adminSupabase
+      .from("tasks")
+      .select("project_id")
+      .eq("id", taskId)
+      .single();
+
+    if (fetchErr || !task) throw new Error("Task not found");
+    await checkProjectAccess(task.project_id);
+
+    const { error: updateErr } = await adminSupabase
+      .from("tasks")
+      .update({ status })
+      .eq("id", taskId);
+
+    if (updateErr) throw updateErr;
+    return { success: true };
+  } catch (err: any) {
+    return { error: err.message || "Failed to update task status" };
+  }
+}
+
+export async function logTaskPostponementAction(
+  taskId: string,
+  newDueDate: string,
+  reason: string
+) {
+  try {
+    if (!reason || reason.trim().length < 10) {
+      return { error: "Причина переносу повинна містити мінімум 10 символів." };
+    }
+
+    const adminSupabase = createAdminClient();
+    const { data: task, error: fetchErr } = await adminSupabase
+      .from("tasks")
+      .select("id, project_id, due_date")
+      .eq("id", taskId)
+      .single();
+
+    if (fetchErr || !task) throw new Error("Task not found");
+    await checkProjectAccess(task.project_id);
+
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Unauthorized");
+
+    // 1. Log the postponement
+    const { error: logErr } = await adminSupabase
+      .from("task_logs")
+      .insert({
+        task_id: taskId,
+        changed_by: user.id,
+        old_due_date: task.due_date,
+        new_due_date: newDueDate,
+        postponement_reason: reason
+      });
+
+    if (logErr) throw logErr;
+
+    // 2. Update task due date
+    const { error: updateErr } = await adminSupabase
+      .from("tasks")
+      .update({ due_date: newDueDate })
+      .eq("id", taskId);
+
+    if (updateErr) throw updateErr;
+
+    return { success: true };
+  } catch (err: any) {
+    return { error: err.message || "Failed to reschedule task" };
+  }
+}
+
+export async function getTaskLogsAction(projectId: string) {
+  try {
+    await checkProjectAccess(projectId);
+    const adminSupabase = createAdminClient();
+    const { data, error } = await adminSupabase
+      .from("task_logs")
+      .select("*, tasks!inner(title, project_id), profiles(email)")
+      .eq("tasks.project_id", projectId)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (err: any) {
+    return { error: err.message || "Failed to fetch task postponement logs" };
+  }
+}
+
+export async function getGlobalTaskLogsAction() {
+  try {
+    const supabase = await createClient();
+    const adminSupabase = createAdminClient();
+    
+    // Auth check for founder/admin
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Unauthorized");
+    const { data: profile } = await adminSupabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile || !["admin", "superman", "founder", "developer"].includes(profile.role)) {
+      throw new Error("Forbidden");
+    }
+
+    const { data, error } = await adminSupabase
+      .from("task_logs")
+      .select("*, tasks!inner(title, project_id), profiles(email)")
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    if (error) throw error;
+    return data || [];
+  } catch (err: any) {
+    return { error: err.message || "Failed to fetch global task logs" };
   }
 }
 

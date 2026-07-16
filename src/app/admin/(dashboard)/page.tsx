@@ -1,37 +1,63 @@
-import React from "react";
-import LeadsDashboard from "../LeadsDashboard";
-import BwMainDashboard from "../BwMainDashboard";
-import { getUnifiedCRMData, getSessionAndAccess, getDashboardData } from "../actions";
+import { redirect } from "next/navigation";
+import { getSessionAndAccess } from "../actions";
+import { createAdminClient } from "@/utils/supabase/server";
 
-// Force dynamic rendering to always show the freshest leads and analytics
 export const revalidate = 0;
 
-interface PageProps {
-  searchParams: Promise<{ slug?: string }>;
-}
+export default async function AdminDashboardPage() {
+  // 1. Resolve session and permissions
+  const { profile, allowedProjects, user } = await getSessionAndAccess();
 
-export default async function AdminDashboardPage({ searchParams }: PageProps) {
-  const params = await searchParams;
-  
-  // 1. Resolve active slug based on user session and project permissions
-  const { activeSlug } = await getSessionAndAccess(params.slug);
+  const role = profile.role || "pending";
 
-  // 2. Render special B&W Main landing page dashboard if selected
-  if (activeSlug === "bw_main") {
-    const mainData = await getDashboardData();
-    return (
-      <BwMainDashboard
-        initialLeads={mainData.leads}
-        initialPageViews={mainData.pageViews}
-        initialClicks={mainData.clicks}
-      />
-    );
+  // 2. Perform redirect based on role hierarchy
+  const isSupervisor = ["admin", "superman", "founder", "developer"].includes(role);
+
+  if (isSupervisor) {
+    redirect("/admin/founder");
   }
 
-  // 3. Otherwise render default CRM LeadsDashboard with unified analytics
-  const initialData = await getUnifiedCRMData(activeSlug);
+  if (role === "cell_leader") {
+    const adminSupabase = createAdminClient();
+    const { data: cells } = await adminSupabase
+      .from("cells")
+      .select("id")
+      .eq("cell_leader_id", user.id)
+      .limit(1);
 
+    if (cells && cells.length > 0) {
+      redirect(`/admin/cell/${cells[0].id}`);
+    } else {
+      // Fallback if no cell is linked yet
+      return (
+        <div className="flex h-[50vh] items-center justify-center">
+          <div className="text-center p-8 bg-neutral-900 border border-white/5 rounded-2xl max-w-md">
+            <h1 className="text-xl font-bold text-white mb-2">Осередків не знайдено</h1>
+            <p className="text-sm text-white/40">
+              Ви авторизовані як Керівник ячейки, але за вами не закріплено жодного осередку в базі даних.
+            </p>
+          </div>
+        </div>
+      );
+    }
+  }
+
+  // 3. For project-level roles (producers, sales, experts, marketers)
+  if (allowedProjects.length > 0) {
+    // If only 1 project is assigned, go straight to it.
+    // If multiple are assigned, the sidebar allows switching; we redirect to the first one by default.
+    redirect(`/admin/project/${allowedProjects[0].id}`);
+  }
+
+  // 4. Default roadblock if no projects or cells mapped
   return (
-    <LeadsDashboard initialData={initialData} />
+    <div className="flex h-[50vh] items-center justify-center">
+      <div className="text-center p-8 bg-neutral-900 border border-white/5 rounded-2xl max-w-md">
+        <h1 className="text-xl font-bold text-white mb-2">Проектів не знайдено</h1>
+        <p className="text-sm text-white/40">
+          За вашим профілем не закріплено жодного активного проекту. Будь ласка, зверніться до адміністратора.
+        </p>
+      </div>
+    </div>
   );
 }

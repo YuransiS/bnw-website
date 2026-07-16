@@ -34,12 +34,19 @@ interface FeedbackItem {
   status: string;
 }
 
+interface Cell {
+  id: string;
+  name: string;
+  cell_leader_id?: string | null;
+}
+
 interface SettingsFormProps {
   currentUserId: string;
   profiles: Profile[];
   projects: Project[];
   profileProjects: ProfileProjectMapping[];
   crmFeedback?: FeedbackItem[];
+  cells?: Cell[];
 }
 
 export default function SettingsForm({
@@ -48,6 +55,7 @@ export default function SettingsForm({
   projects,
   profileProjects,
   crmFeedback = [],
+  cells = [],
 }: SettingsFormProps) {
   const { theme } = useTheme();
   const isLight = theme === "light";
@@ -71,6 +79,7 @@ export default function SettingsForm({
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<string>("pending");
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+  const [selectedCellId, setSelectedCellId] = useState<string>("");
   
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -89,6 +98,7 @@ export default function SettingsForm({
     setPassword("");
     setRole("pending");
     setSelectedProjects([]);
+    setSelectedCellId("");
     setError(null);
   };
 
@@ -99,6 +109,9 @@ export default function SettingsForm({
     setFullName(profile.full_name || "");
     setPassword("");
     setRole(profile.role);
+    
+    const managedCell = cells.find(c => c.cell_leader_id === profile.id);
+    setSelectedCellId(managedCell?.id || "");
     
     // Find assigned projects from mapping list
     const assignedIds = profileProjects
@@ -147,7 +160,8 @@ export default function SettingsForm({
           password.trim() || undefined,
           role,
           selectedProjects,
-          fullName
+          fullName,
+          selectedCellId || undefined
         );
         if (res.error) {
           setError(res.error);
@@ -173,6 +187,7 @@ export default function SettingsForm({
         formData.append("password", password);
         formData.append("role", role);
         formData.append("projectIds", JSON.stringify(selectedProjects));
+        formData.append("cellId", selectedCellId);
 
         const res = await createUserAction(null, formData);
         if (res?.error) {
@@ -239,12 +254,22 @@ export default function SettingsForm({
       case "admin":
       case "superman":
         return "Супермен";
+      case "founder":
+        return "Фаундер";
+      case "cell_leader":
+        return "Керівник ячейки";
       case "producer":
         return "Операційний продюсер";
       case "rop":
         return "Керівник ВП (РОП)";
       case "sales":
         return "Відділ продажів";
+      case "expert":
+        return "Експерт / Партнер";
+      case "marketer":
+        return "Маркетолог";
+      case "developer":
+        return "Розробник";
       case "pending":
         return "Очікує схвалення";
       default:
@@ -257,12 +282,22 @@ export default function SettingsForm({
       case "admin":
       case "superman":
         return "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+      case "founder":
+        return "bg-teal-500/10 text-teal-400 border border-teal-500/20";
+      case "cell_leader":
+        return "bg-amber-500/10 text-amber-400 border border-amber-500/20";
       case "producer":
         return "bg-purple-500/10 text-purple-400 border border-purple-500/20";
       case "rop":
         return "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20";
       case "sales":
         return "bg-blue-500/10 text-blue-400 border border-blue-500/20";
+      case "expert":
+        return "bg-pink-500/10 text-pink-400 border border-pink-500/20";
+      case "marketer":
+        return "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20";
+      case "developer":
+        return "bg-red-500/10 text-red-400 border border-red-500/20";
       case "pending":
         return "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 animate-pulse";
       default:
@@ -378,10 +413,10 @@ export default function SettingsForm({
               <div className={`space-y-1 p-1 rounded-xl ${rolePanelClass}`}>
                 {[
                   { key: "pending", label: "Очікує схвалення (Pending)" },
-                  { key: "superman", label: "Супермен (Superman)" },
+                  { key: "founder", label: "Фаундер (Founder)" },
+                  { key: "cell_leader", label: "Керівник ячейки (Cell Leader)" },
                   { key: "producer", label: "Операційний продюсер (Producer)" },
-                  { key: "rop", label: "Керівник ВП (РОП)" },
-                  { key: "sales", label: "Відділ продажів (Sales)" }
+                  { key: "developer", label: "Розробник (Developer)" }
                 ].map((item) => (
                   <button
                     key={item.key}
@@ -393,17 +428,41 @@ export default function SettingsForm({
                       }
                     }}
                     className={`w-full py-2 px-3 rounded-lg text-xs font-semibold cursor-pointer text-left transition-all flex items-center justify-between ${
-                      role === item.key || (item.key === "superman" && role === "admin")
+                      role === item.key
                         ? activeRoleBtnClass
                         : inactiveRoleBtnClass
                     }`}
                   >
                     <span>{item.label}</span>
-                    {(role === item.key || (item.key === "superman" && role === "admin")) && <Check className="w-3.5 h-3.5" />}
+                    {role === item.key && <Check className="w-3.5 h-3.5" />}
                   </button>
                 ))}
               </div>
             </div>
+
+            {role === "cell_leader" && (
+              <div className={`space-y-2 border-t pt-4 animate-in fade-in slide-in-from-top-2 duration-300 ${borderClass}`}>
+                <label className={`block text-[10px] font-bold uppercase tracking-widest ${textMutedClass}`}>
+                  Закріпити ячейку (Керування)
+                </label>
+                <select
+                  value={selectedCellId}
+                  onChange={(e) => setSelectedCellId(e.target.value)}
+                  className={`w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all text-sm ${inputClass}`}
+                >
+                  <option value="" disabled className={isLight ? "text-neutral-900 bg-white" : "text-white bg-[#0C0C0F]"}>Оберіть ячейку...</option>
+                  {cells.map((cell) => (
+                    <option
+                      key={cell.id}
+                      value={cell.id}
+                      className={isLight ? "text-neutral-900 bg-white" : "text-white bg-[#0C0C0F]"}
+                    >
+                      {cell.name} {cell.cell_leader_id && cell.cell_leader_id !== editingUser?.id ? "(Вже має керівника)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Project selection - show for all roles except pending */}
             {role !== "pending" && (

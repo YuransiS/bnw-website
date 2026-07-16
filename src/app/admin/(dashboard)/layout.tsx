@@ -26,16 +26,16 @@ export default async function AdminLayout({
     .eq("id", user.id)
     .single();
 
-  // Auto-provision or auto-upgrade developer emails to 'superman' role
+  // Auto-provision or auto-upgrade developer emails to 'founder' role
   const devEmails = ["yura3zaxar@outlook.com", "yura3zaxar@gmail.com"];
-  if (user.email && devEmails.includes(user.email.toLowerCase()) && (!profile || (profile.role !== "admin" && profile.role !== "superman"))) {
+  if (user.email && devEmails.includes(user.email.toLowerCase()) && (!profile || (profile.role !== "founder" && profile.role !== "developer"))) {
     try {
       const { createAdminClient } = await import("@/utils/supabase/server");
       const adminSupabase = createAdminClient();
       await adminSupabase.from("profiles").upsert({
         id: user.id,
         email: user.email.toLowerCase(),
-        role: "superman",
+        role: "founder",
       });
       // Re-fetch the profile to reflect changes
       const { data: updatedProfile } = await supabase
@@ -45,19 +45,19 @@ export default async function AdminLayout({
         .single();
       profile = updatedProfile;
     } catch (e) {
-      console.error("Failed to auto-upgrade user to admin/superman role:", e);
+      console.error("Failed to auto-upgrade user to founder role:", e);
     }
   }
 
   const userEmail = profile?.email || user.email || "";
   const isActualDev = !!((user.email && devEmails.includes(user.email.toLowerCase())) || 
-                       (profile && (profile.role === "admin" || profile.role === "superman")));
+                       (profile && (profile.role === "admin" || profile.role === "superman" || profile.role === "founder" || profile.role === "developer")));
 
   let userRole = profile?.role || "pending";
   if (isActualDev) {
     const cookieStore = await cookies();
     const impersonated = cookieStore.get("crm_impersonated_role")?.value;
-    if (impersonated && ["superman", "producer", "rop", "sales", "pending"].includes(impersonated)) {
+    if (impersonated && ["founder", "cell_leader", "producer", "developer", "pending"].includes(impersonated)) {
       userRole = impersonated;
     }
   }
@@ -69,24 +69,42 @@ export default async function AdminLayout({
     redirect("/admin/pending");
   }
 
-  const isSuperman = userRole === "admin" || userRole === "superman";
+  const isSuperman = ["admin", "superman", "founder", "developer"].includes(userRole);
+  const isCellLeader = userRole === "cell_leader";
 
   // Fetch allowed projects mapping dynamically
-  let allowedProjects: { id: string; name: string; slug: string }[] = [];
+  let allowedProjects: { id: string; name: string; slug: string; cell_id?: string | null }[] = [];
 
   if (isSuperman) {
     // Superman role sees all active projects without checking profile_projects mapping and RLS
     const { data: allProj } = await adminSupabase
       .from("projects")
-      .select("id, name, slug, is_active")
+      .select("id, name, slug, is_active, cell_id")
       .order("name");
     const projectsList = allProj || [];
 
     allowedProjects = projectsList.filter((p) => p.is_active);
+  } else if (isCellLeader) {
+    // Cell Leader role sees all projects belonging to their cell(s)
+    const { data: cells } = await adminSupabase
+      .from("cells")
+      .select("id")
+      .eq("cell_leader_id", user.id);
+    const cellIds = (cells || []).map((c) => c.id);
+
+    if (cellIds.length > 0) {
+      const { data: cellProj } = await adminSupabase
+        .from("projects")
+        .select("id, name, slug, is_active, cell_id")
+        .in("cell_id", cellIds)
+        .order("name");
+      const projectsList = cellProj || [];
+      allowedProjects = projectsList.filter((p) => p.is_active);
+    }
   } else {
     const { data } = await supabase
       .from("profile_projects")
-      .select("projects(id, name, slug, is_active)")
+      .select("projects(id, name, slug, is_active, cell_id)")
       .eq("profile_id", user.id);
 
     allowedProjects = (data || [])

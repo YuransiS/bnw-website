@@ -21,7 +21,7 @@ async function verifyAdminAccess() {
     .eq("id", user.id)
     .single();
 
-  if (profile?.role !== "admin" && profile?.role !== "superman") {
+  if (profile?.role !== "admin" && profile?.role !== "superman" && profile?.role !== "founder" && profile?.role !== "developer") {
     throw new Error("403 Доступ заборонено.");
   }
 
@@ -73,6 +73,7 @@ export async function createUserAction(prevState: any, formData: FormData) {
     const fullName = formData.get("fullName") as string;
     const projectIdsJson = formData.get("projectIds") as string;
     const projectIds: string[] = projectIdsJson ? JSON.parse(projectIdsJson) : [];
+    const cellId = formData.get("cellId") as string;
 
     if (!email || !password || !role) {
       return { error: "Будь ласка, заповніть усі обов'язкові поля." };
@@ -81,7 +82,7 @@ export async function createUserAction(prevState: any, formData: FormData) {
       return { error: "Пароль має містити не менше 6 символів." };
     }
 
-    const allowedRoles = ["admin", "superman", "producer", "rop", "sales", "pending"];
+    const allowedRoles = ["founder", "cell_leader", "producer", "developer", "pending"];
     if (!allowedRoles.includes(role)) {
       return { error: "Невірна роль користувача." };
     }
@@ -118,23 +119,30 @@ export async function createUserAction(prevState: any, formData: FormData) {
       return { error: "Помилка створення профілю: " + profileError.message };
     }
 
-    // Assign projects if user is not pending
-    if (role !== "pending" && projectIds.length > 0) {
+    // Insert project access links
+    if (projectIds.length > 0) {
       const inserts = projectIds.map((pId) => ({
-        profile_id: authData.user.id,
+        profile_id: authData.user!.id,
         project_id: pId,
       }));
-      const { error: accessError } = await supabaseAdmin
-        .from("profile_projects")
-        .insert(inserts);
+      await supabaseAdmin.from("profile_projects").insert(inserts);
+    }
 
-      if (accessError) {
-        console.error("Failed to assign project access inside create:", accessError.message);
-      }
+    // Bind cell leader to cell
+    if (role === "cell_leader" && cellId) {
+      await supabaseAdmin
+        .from("cells")
+        .update({ cell_leader_id: null })
+        .eq("cell_leader_id", authData.user.id);
+      
+      await supabaseAdmin
+        .from("cells")
+        .update({ cell_leader_id: authData.user.id })
+        .eq("id", cellId);
     }
 
     revalidatePath("/admin/settings");
-    return { success: true, message: "Користувача успішно створено!" };
+    return { success: true, message: "Обліковий запис успішно створено!" };
   } catch (err: any) {
     return { error: err.message || "Невідома помилка на сервері." };
   }
@@ -147,7 +155,8 @@ export async function editUserAction(
   password?: string,
   role?: string,
   projectIds: string[] = [],
-  fullName?: string
+  fullName?: string,
+  cellId?: string
 ) {
   try {
     const currentUserId = await verifyAdminAccess();
@@ -156,7 +165,7 @@ export async function editUserAction(
       return { error: "Ідентифікатор користувача та пошта є обов'язковими." };
     }
 
-    const allowedRoles = ["admin", "superman", "producer", "rop", "sales", "pending"];
+    const allowedRoles = ["founder", "cell_leader", "producer", "developer", "pending"];
     if (role && !allowedRoles.includes(role)) {
       return { error: "Невірна роль користувача." };
     }
@@ -192,10 +201,10 @@ export async function editUserAction(
       profileParams.full_name = fullName.trim();
     }
 
-    // Prevent self-demoting from admin/superman role to maintain system integrity
+    // Prevent self-demoting from founder/developer role to maintain system integrity
     if (role) {
-      if (profileId === currentUserId && role !== "admin" && role !== "superman") {
-        return { error: "Ви не можете змінити власну роль з Адміністратора!" };
+      if (profileId === currentUserId && role !== "founder" && role !== "developer") {
+        return { error: "Ви не можете змінити власну роль з Фаундера або Розробника!" };
       }
       profileParams.role = role;
     }
@@ -229,6 +238,26 @@ export async function editUserAction(
       if (accessError) {
         return { error: "Помилка призначення проектів: " + accessError.message };
       }
+    }
+
+    // Sync cell leader bindings
+    if (role === "cell_leader") {
+      if (cellId) {
+        await supabaseAdmin
+          .from("cells")
+          .update({ cell_leader_id: null })
+          .eq("cell_leader_id", profileId);
+        
+        await supabaseAdmin
+          .from("cells")
+          .update({ cell_leader_id: profileId })
+          .eq("id", cellId);
+      }
+    } else {
+      await supabaseAdmin
+        .from("cells")
+        .update({ cell_leader_id: null })
+        .eq("cell_leader_id", profileId);
     }
 
     revalidatePath("/admin/settings");

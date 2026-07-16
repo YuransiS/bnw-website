@@ -26,14 +26,14 @@ export default async function AdminSettingsPage() {
     .eq("id", user.id)
     .single();
 
-  // Auto-provision or auto-upgrade developer emails to 'superman' / 'admin' role
+  // Auto-provision or auto-upgrade developer emails to 'founder' role
   const devEmails = ["yura3zaxar@outlook.com", "yura3zaxar@gmail.com"];
-  if (user.email && devEmails.includes(user.email.toLowerCase()) && (!profile || (profile.role !== "admin" && profile.role !== "superman"))) {
+  if (user.email && devEmails.includes(user.email.toLowerCase()) && (!profile || (profile.role !== "founder" && profile.role !== "developer"))) {
     try {
       await adminSupabase.from("profiles").upsert({
         id: user.id,
         email: user.email.toLowerCase(),
-        role: "superman",
+        role: "founder",
       });
       // Re-fetch privilege details
       const { data: updatedProfile } = await adminSupabase
@@ -43,12 +43,12 @@ export default async function AdminSettingsPage() {
         .single();
       profile = updatedProfile;
     } catch (e) {
-      console.error("Failed to auto-upgrade user to superman role in settings page:", e);
+      console.error("Failed to auto-upgrade user to founder role in settings page:", e);
     }
   }
 
-  // 3. Strict gate check - Only Superman (Admin) allowed in Settings
-  if (profile?.role !== "admin" && profile?.role !== "superman") {
+  // 3. Strict gate check - Only Founder / Developer allowed in Settings
+  if (profile?.role !== "founder" && profile?.role !== "developer" && profile?.role !== "superman" && profile?.role !== "admin") {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 font-sans">
         <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500/20 text-red-500 flex items-center justify-center mb-6 shadow-[0_0_20px_rgba(239,68,68,0.1)]">
@@ -70,17 +70,19 @@ export default async function AdminSettingsPage() {
     );
   }
 
-  // 4. Fetch team members profiles, projects list, and mapping in parallel
+  // 4. Fetch team members profiles, projects list, cells, and mapping in parallel
   // Use admin client to bypass RLS for administrative commands
-  const [profilesRes, projectsRes, mappingRes] = await Promise.all([
+  const [profilesRes, projectsRes, mappingRes, cellsRes] = await Promise.all([
     adminSupabase.from("profiles").select("id, email, role, full_name").order("email"),
     adminSupabase.from("projects").select("id, name, slug, is_active").order("name"),
     adminSupabase.from("profile_projects").select("profile_id, project_id"),
+    adminSupabase.from("cells").select("id, name, cell_leader_id").order("name"),
   ]);
 
   const profiles = profilesRes.data || [];
   const projects = projectsRes.data || [];
   const profileProjects = mappingRes.data || [];
+  const cells = cellsRes.data || [];
 
   const isYura = user.email && (user.email.toLowerCase() === "yura3zaxar@gmail.com" || user.email.toLowerCase() === "yura3zaxar@outlook.com");
   let crmFeedback: any[] = [];
@@ -88,7 +90,8 @@ export default async function AdminSettingsPage() {
     const { data: feedbackData } = await adminSupabase
       .from("crm_feedback")
       .select("*")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(50);
     crmFeedback = feedbackData || [];
   }
 
@@ -99,6 +102,7 @@ export default async function AdminSettingsPage() {
       projects={projects}
       profileProjects={profileProjects}
       crmFeedback={crmFeedback}
+      cells={cells}
     />
   );
 }

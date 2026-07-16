@@ -8,14 +8,14 @@ import {
   BarChart4,
   Activity,
   ClipboardCheck,
-  KanbanSquare,
   Grid,
-  Link as LinkIcon,
   AlertCircle,
   Briefcase,
   RefreshCw,
   XCircle,
-  ChevronDown
+  ChevronDown,
+  Wallet,
+  Plus
 } from "lucide-react";
 
 import { useTheme } from "../ThemeProvider";
@@ -42,11 +42,15 @@ import {
 import HubTab from "./tabs/HubTab";
 import LeaderboardTab from "./tabs/LeaderboardTab";
 import AnalyticsTab from "./tabs/AnalyticsTab";
-import KanbanTab from "./tabs/KanbanTab";
 import LeadsTab from "./tabs/LeadsTab";
-import PaylinkTab from "./tabs/PaylinkTab";
 import QuizzesTab from "./tabs/QuizzesTab";
 import DiagnosticsTab from "./tabs/DiagnosticsTab";
+import FunnelsTab from "./tabs/FunnelsTab";
+import FinanceDashboardTab from "./tabs/FinanceDashboardTab";
+import CashflowFeed from "./components/CashflowFeed";
+import AddTransactionModal from "./components/AddTransactionModal";
+import { getFinanceSummaryAction } from "../(dashboard)/project/financeActions";
+import { getFunnelsAction } from "../actions";
 import LeadJourneyModal from "./components/LeadJourneyModal";
 import AddLeadModal from "./components/AddLeadModal";
 import UnresolvedOrdersModal from "./components/UnresolvedOrdersModal";
@@ -116,7 +120,13 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       if (currentSlug === "all") {
         setActiveTab("hub");
       } else if (prevSlugRef.current === "all") {
-        setActiveTab(initialData.role === "sales" ? "leads" : "analytics");
+        if (initialData.role === "expert") {
+          setActiveTab("finance_expert");
+        } else if (initialData.role === "sales") {
+          setActiveTab("leads");
+        } else {
+          setActiveTab("analytics");
+        }
       }
 
       prevSlugRef.current = currentSlug;
@@ -129,43 +139,21 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       setCurrentPage(1);
       setSelectedLanding("all");
       setSearchQuery("");
-      setKanbanSearchQuery("");
-      setKanbanTouchFilter("all");
-      setKanbanSourceFilter("all");
       setDateRangePreset("all");
     }
 
     setDashboardData(initialData);
 
     // Sync the parameter reference with the new server-provided initialData
-    const isKan = activeTab === "kanban";
     lastFetchedParamsRef.current = JSON.stringify({
       activeSlug: currentSlug,
-      page: isKan ? 1 : isProjectSwitched ? 1 : currentPage,
-      pageSize: isKan ? 500 : pageSize,
-      searchQuery: isKan
-        ? isProjectSwitched
-          ? ""
-          : debouncedKanbanSearchQuery
-        : isProjectSwitched
-        ? ""
-        : debouncedSearchQuery,
-      statusFilter: isKan ? "all" : isProjectSwitched ? "all" : statusFilter,
-      touchCountFilter: isKan
-        ? isProjectSwitched
-          ? "all"
-          : kanbanTouchFilter
-        : isProjectSwitched
-        ? "all"
-        : touchCountFilter,
-      sourceFilter: isKan
-        ? isProjectSwitched
-          ? "all"
-          : kanbanSourceFilter
-        : isProjectSwitched
-        ? "all"
-        : sourceFilter,
-      unpaidIntentOnly: isKan ? false : isProjectSwitched ? false : unpaidIntentOnly,
+      page: isProjectSwitched ? 1 : currentPage,
+      pageSize: pageSize,
+      searchQuery: isProjectSwitched ? "" : debouncedSearchQuery,
+      statusFilter: isProjectSwitched ? "all" : statusFilter,
+      touchCountFilter: isProjectSwitched ? "all" : touchCountFilter,
+      sourceFilter: isProjectSwitched ? "all" : sourceFilter,
+      unpaidIntentOnly: isProjectSwitched ? false : unpaidIntentOnly,
       startDate: isProjectSwitched ? "" : startDate,
       endDate: isProjectSwitched ? "" : endDate,
       selectedLanding: isProjectSwitched ? "all" : selectedLanding,
@@ -198,6 +186,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   // Local component states
   const [activeTab, setActiveTab] = useState<string>(() => {
     if (viewType === "all") return "hub";
+    if (role === "expert") return "finance_expert";
     if (role === "sales") return "leads";
     return "analytics";
   });
@@ -247,11 +236,41 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const [selectedLanding, setSelectedLanding] = useState<string>("all");
   const [activeQuizLeadId, setActiveQuizLeadId] = useState<string | null>(null);
 
-  // Kanban separate isolated filter states to prevent bleeding
-  const [kanbanSearchQuery, setKanbanSearchQuery] = useState("");
-  const [kanbanTouchFilter, setKanbanTouchFilter] = useState("all");
-  const [kanbanSourceFilter, setKanbanSourceFilter] = useState("all");
-  const [activeKanbanCol, setActiveKanbanCol] = useState("Новий лід");
+  // Finance Subsystem States & Handlers
+  const [financeData, setFinanceData] = useState<any>(null);
+  const [financeLimit, setFinanceLimit] = useState(20);
+  const [showAddTransaction, setShowAddTransaction] = useState(false);
+  const [isFinanceLoading, setIsFinanceLoading] = useState(false);
+  const [funnelsList, setFunnelsList] = useState<any[]>([]);
+
+  const fetchFinanceData = useCallback(async () => {
+    if (!activeProject || activeTab !== "finance") return;
+    setIsFinanceLoading(true);
+    try {
+      const data = await getFinanceSummaryAction(activeProject.id, startDate, endDate, financeLimit);
+      if (data && !("error" in data)) {
+        setFinanceData(data);
+      }
+    } catch (e) {
+      console.error("Failed to load finance data", e);
+    } finally {
+      setIsFinanceLoading(false);
+    }
+  }, [activeProject, activeTab, startDate, endDate, financeLimit]);
+
+  useEffect(() => {
+    fetchFinanceData();
+  }, [fetchFinanceData]);
+
+  useEffect(() => {
+    if (activeProject && activeTab === "finance") {
+      getFunnelsAction(activeProject.id).then((res) => {
+        if (res && !("error" in res)) {
+          setFunnelsList(res as any[]);
+        }
+      });
+    }
+  }, [activeProject, activeTab]);
 
   const applyPreset = useCallback((preset: "all" | "30d" | "7d" | "1d") => {
     setDateRangePreset(preset);
@@ -315,7 +334,6 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
   // Debounce search query to prevent excessive server requests
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
-  const [debouncedKanbanSearchQuery, setDebouncedKanbanSearchQuery] = useState(kanbanSearchQuery);
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -326,15 +344,6 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     };
   }, [searchQuery]);
 
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedKanbanSearchQuery(kanbanSearchQuery);
-    }, 400);
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [kanbanSearchQuery]);
-
   // Fetch filtered and paginated CRM data from the server action when filters change
   const [clientRequestMs, setClientRequestMs] = useState<number | null>(null);
 
@@ -342,17 +351,16 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     let isMounted = true;
     if (viewType !== "single" || !activeSlug) return;
 
-    const isKanban = activeTab === "kanban";
     const skipTraffic = activeTab !== "analytics";
     const currentParamsKey = JSON.stringify({
       activeSlug,
-      page: isKanban ? 1 : currentPage,
-      pageSize: isKanban ? 500 : pageSize,
-      searchQuery: isKanban ? debouncedKanbanSearchQuery : debouncedSearchQuery,
-      statusFilter: isKanban ? "all" : statusFilter,
-      touchCountFilter: isKanban ? kanbanTouchFilter : touchCountFilter,
-      sourceFilter: isKanban ? kanbanSourceFilter : sourceFilter,
-      unpaidIntentOnly: isKanban ? false : unpaidIntentOnly,
+      page: currentPage,
+      pageSize,
+      searchQuery: debouncedSearchQuery,
+      statusFilter,
+      touchCountFilter,
+      sourceFilter,
+      unpaidIntentOnly,
       startDate: startDate,
       endDate: endDate,
       selectedLanding: selectedLanding,
@@ -381,16 +389,16 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     }
 
     const paramsPayload = {
-      page: isKanban ? 1 : currentPage,
-      pageSize: isKanban ? 500 : pageSize,
-      searchQuery: isKanban ? debouncedKanbanSearchQuery : debouncedSearchQuery,
-      statusFilter: isKanban ? "all" : statusFilter,
-      touchCountFilter: isKanban ? kanbanTouchFilter : touchCountFilter,
-      sourceFilter: isKanban ? kanbanSourceFilter : sourceFilter,
-      unpaidIntentOnly: isKanban ? false : unpaidIntentOnly,
+      page: currentPage,
+      pageSize,
+      searchQuery: debouncedSearchQuery,
+      statusFilter,
+      touchCountFilter,
+      sourceFilter,
+      unpaidIntentOnly,
       startDate: startDate,
       endDate: endDate,
-      selectedLanding: selectedLanding,
+      selectedLanding,
       skipTraffic
     };
 
@@ -439,9 +447,6 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     endDate,
     selectedLanding,
     debouncedSearchQuery,
-    debouncedKanbanSearchQuery,
-    kanbanTouchFilter,
-    kanbanSourceFilter,
     viewType
   ]);
 
@@ -470,13 +475,9 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     if (viewType === "all") {
       setActiveTab("hub");
     } else {
-      if (role === "sales") {
-        setActiveTab("leads");
-      } else {
-        setActiveTab("analytics");
-      }
+      setActiveTab("analytics");
     }
-  }, [viewType, role]);
+  }, [viewType]);
 
   const handleToggleTheme = toggleTheme;
 
@@ -490,7 +491,6 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   // Server-side precalculated analytics & dashboard variables
   const processedLeads = dashboardData.leads || [];
   const paginatedLeads = processedLeads;
-  const kanbanProcessedLeads = dashboardData.leads || [];
   const singleProjectStats = dashboardData.stats;
   const splineTrendData = dashboardData.splineTrendData || [];
   const utmAttributionTree = dashboardData.utmAttributionTree || [];
@@ -499,36 +499,6 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const performanceInfo = dashboardData.performance;
   const totalCount = dashboardData.totalCount || 0;
   const uniqueSources = dashboardData.uniqueSources || [];
-
-  // --- Kanban Column logic & state manipulation ---
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-  }, []);
-
-  const handleDragStart = useCallback((e: React.DragEvent, orderId: string) => {
-    e.dataTransfer.setData("text/plain", orderId);
-  }, []);
-
-  const handleDrop = useCallback(async (e: React.DragEvent, targetColumn: string) => {
-    e.preventDefault();
-    const orderId = e.dataTransfer.getData("text/plain");
-    if (!orderId) return;
-
-    // Fast-optimistic status switch in local UI state
-    setUpdatingId(orderId);
-
-    try {
-      const res = await updateUnifiedLeadStatusAction(orderId, targetColumn);
-      if (res.error) throw new Error(res.error);
-
-      // Force trigger state reload on success
-      router.refresh();
-    } catch (err: any) {
-      alert("Помилка переміщення ліда: " + err.message);
-    } finally {
-      setUpdatingId(null);
-    }
-  }, [router]);
 
   const handleCreateLead = useCallback(async (payload: any) => {
     if (!activeProject?.id) return { error: "No active project" };
@@ -873,8 +843,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           </button>
         )}
 
-        {/* Project Traffic & Costs Tab - Superman, Admin & Producer */}
-        {viewType === "single" && (role === "admin" || role === "superman" || role === "producer") && (
+        {/* Project Traffic & Costs Tab - Superman, Admin, Founder, Developer & Producer */}
+        {viewType === "single" && (role === "admin" || role === "superman" || role === "founder" || role === "developer" || role === "producer") && (
           <button
             onClick={() => setActiveTab("traffic")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
@@ -909,25 +879,6 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           </button>
         )}
 
-        {/* Kanban Tab - All approved */}
-        {viewType === "single" && (
-          <button
-            onClick={() => setActiveTab("kanban")}
-            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === "kanban"
-                ? isLight
-                  ? "bg-neutral-900 text-white shadow-sm"
-                  : "bg-white text-black shadow-lg"
-                : isLight
-                ? "text-neutral-500 hover:text-neutral-900"
-                : "text-white/40 hover:text-white"
-            }`}
-          >
-            <KanbanSquare className="w-4 h-4" />
-            Канбан дошка
-          </button>
-        )}
-
         {/* Leads Tab - All approved */}
         {viewType === "single" && (
           <button
@@ -947,12 +898,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           </button>
         )}
 
-        {/* Payment link generator Tab - All approved */}
-        {viewType === "single" && (
+        {/* Project Funnels Tab - Superman, Admin, Founder, Cell Leader, Producer, Developer */}
+        {viewType === "single" && ["admin", "superman", "founder", "cell_leader", "producer", "developer"].includes(role) && (
           <button
-            onClick={() => setActiveTab("paylink")}
+            onClick={() => setActiveTab("funnels")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === "paylink"
+              activeTab === "funnels"
                 ? isLight
                   ? "bg-neutral-900 text-white shadow-sm"
                   : "bg-white text-black shadow-lg"
@@ -961,8 +912,26 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                 : "text-white/40 hover:text-white"
             }`}
           >
-            <LinkIcon className="w-4 h-4" />
-            Платіжні кнопки
+            <Layers className="w-4 h-4" />
+            Воронки
+          </button>
+        )}
+
+        {/* Project Finance Tab - Founder, Developer, Cell Leader & Producer */}
+        {viewType === "single" && ["admin", "superman", "founder", "cell_leader", "producer", "developer"].includes(role) && (
+          <button
+            onClick={() => setActiveTab("finance")}
+            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
+              activeTab === "finance"
+                ? isLight
+                  ? "bg-neutral-900 text-white shadow-sm"
+                  : "bg-white text-black shadow-lg"
+                : isLight
+                ? "text-neutral-500 hover:text-neutral-900"
+                : "text-white/40 hover:text-white"
+            }`}
+          >
+            <Wallet className="w-4 h-4 text-emerald-400" />💳 Фінанси
           </button>
         )}
 
@@ -1002,6 +971,67 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           <LeaderboardTab producersLeaderboard={producersLeaderboard} />
         )}
 
+        {activeTab === "funnels" && viewType === "single" && (
+          <FunnelsTab
+            projectId={activeProject?.id || ""}
+            campaignsList={dashboardData.campaignsData || []}
+            leadsList={processedLeads}
+            isLight={isLight}
+          />
+        )}
+
+        {activeTab === "finance" && viewType === "single" && activeProject && (
+          <div className="space-y-6">
+            {/* Quick Action Panel */}
+            <div className="flex justify-between items-center bg-white/5 p-4 rounded-2xl border border-white/5">
+              <div>
+                <h3 className="text-sm font-bold text-neutral-200">Фінансовий облік проекту</h3>
+                <p className="text-[10px] text-neutral-400 mt-0.5">Внесення витрат, доходів та аналіз P&L</p>
+              </div>
+              <button
+                onClick={() => setShowAddTransaction(true)}
+                className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold rounded-xl cursor-pointer transition-all flex items-center gap-1.5"
+              >
+                <Plus className="w-4 h-4" /> Додати операцію
+              </button>
+            </div>
+
+            {isFinanceLoading && !financeData ? (
+              <div className="flex h-[200px] items-center justify-center">
+                <RefreshCw className="w-6 h-6 animate-spin text-emerald-500" />
+              </div>
+            ) : (
+              financeData && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start animate-in fade-in duration-300">
+                  {/* Left Column: Visual Dashboard / P&L Details */}
+                  <div className="lg:col-span-2">
+                    <FinanceDashboardTab
+                      summary={financeData.summary}
+                      accounts={financeData.accounts}
+                      pnl={financeData.pnl}
+                      isLight={isLight}
+                    />
+                  </div>
+
+                  {/* Right Column: Recent Activity Feed */}
+                  <div>
+                    <CashflowFeed
+                      projectId={activeProject.id}
+                      transactions={financeData.transactions}
+                      hasMore={financeData.hasMore}
+                      onLoadMore={() => setFinanceLimit(prev => prev + 20)}
+                      onDeleteSuccess={fetchFinanceData}
+                      accounts={financeData.accounts}
+                      isLight={isLight}
+                      userRole={role}
+                    />
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+        )}
+
         {activeTab === "traffic" && viewType === "single" && (
           <PerformanceView activeSlug={activeSlug} isLight={isLight} startDate={startDate} endDate={endDate} />
         )}
@@ -1028,26 +1058,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           />
         )}
 
-        {activeTab === "kanban" && viewType === "single" && (
-          <KanbanTab
-            kanbanProcessedLeads={kanbanProcessedLeads}
-            uniqueSources={uniqueSources}
-            updatingId={updatingId}
-            kanbanSearchQuery={kanbanSearchQuery}
-            setKanbanSearchQuery={setKanbanSearchQuery}
-            kanbanTouchFilter={kanbanTouchFilter}
-            setKanbanTouchFilter={setKanbanTouchFilter}
-            kanbanSourceFilter={kanbanSourceFilter}
-            setKanbanSourceFilter={setKanbanSourceFilter}
-            activeKanbanCol={activeKanbanCol}
-            setActiveKanbanCol={setActiveKanbanCol}
-            onDragStart={handleDragStart}
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            openLeadModal={openLeadModal}
-            setShowAddLead={setShowAddLead}
-          />
-        )}
+
 
         {activeTab === "leads" && viewType === "single" && (
           <LeadsTab
@@ -1083,9 +1094,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           />
         )}
 
-        {activeTab === "paylink" && viewType === "single" && (
-          <PaylinkTab activeProjectSlug={activeSlug} selectedLeadInfo={selectedLeadInfo} />
-        )}
+
 
         {activeTab === "quizzes" && viewType === "single" && (
           <QuizzesTab
@@ -1155,6 +1164,20 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         formatLocaleNumber={formatLocaleNumber}
         onRefresh={handleRefresh}
       />
+      {/* Wizard for transaction entry */}
+      {showAddTransaction && activeProject && financeData && (
+        <AddTransactionModal
+          projectId={activeProject.id}
+          funnels={funnelsList}
+          accounts={financeData.accounts}
+          customCategories={financeData.categories.custom}
+          defaultCategories={financeData.categories.default}
+          onClose={() => setShowAddTransaction(false)}
+          onSuccess={fetchFinanceData}
+          isLight={isLight}
+        />
+      )}
+
       {isDevMode && <DevLogConsole />}
     </div>
   );

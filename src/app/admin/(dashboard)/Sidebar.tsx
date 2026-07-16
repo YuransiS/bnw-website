@@ -26,13 +26,14 @@ import {
   Lightbulb,
   Check
 } from "lucide-react";
-import { signOutAction, submitCrmFeedbackAction, impersonateRoleAction } from "../actions";
+import { signOutAction, submitCrmFeedbackAction, impersonateRoleAction, getCellsAction } from "../actions";
 import { useTheme } from "../ThemeProvider";
 
 interface Project {
   id: string;
   name: string;
   slug: string;
+  cell_id?: string | null;
 }
 
 interface SidebarProps {
@@ -97,7 +98,62 @@ export default function Sidebar({
   };
 
   const isSettingsPage = pathname === "/admin/settings";
-  const activeSlug = isSettingsPage ? "" : (searchParams.get("slug") || (isSuperman ? "all" : allowedProjects[0]?.slug || ""));
+  
+  // Resolve active states based on URL pathname
+  let activeProjectId = "";
+  let activeCellId = "";
+  let activeAll = false;
+  let activeMain = false;
+
+  if (pathname.includes("/admin/project/")) {
+    activeProjectId = pathname.split("/project/")[1]?.split("/")[0] || "";
+    const activeProj = allowedProjects.find(p => p.id === activeProjectId);
+    if (activeProj?.slug === "bw_main") {
+      activeMain = true;
+    }
+  } else if (pathname.includes("/admin/cell/")) {
+    activeCellId = pathname.split("/cell/")[1]?.split("/")[0] || "";
+  } else if (pathname === "/admin/founder") {
+    activeAll = true;
+  }
+
+  const [cells, setCells] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (["admin", "superman", "founder", "developer"].includes(userRole)) {
+      getCellsAction().then((res) => {
+        if (Array.isArray(res)) {
+          setCells(res);
+        }
+      });
+    }
+  }, [userRole]);
+
+  // Group allowed projects by cell_id for supervisor view
+  const groupedProjects = React.useMemo(() => {
+    const list = allowedProjects.filter(p => p.slug !== "bw_main");
+    if (!["admin", "superman", "founder", "developer"].includes(userRole)) {
+      return { unassigned: list, groups: {} as Record<string, Project[]> };
+    }
+    
+    const groups: Record<string, Project[]> = {};
+    const unassigned: Project[] = [];
+    
+    list.forEach(proj => {
+      if (proj.cell_id) {
+        if (!groups[proj.cell_id]) {
+          groups[proj.cell_id] = [];
+        }
+        groups[proj.cell_id].push(proj);
+      } else {
+        unassigned.push(proj);
+      }
+    });
+    
+    return { groups, unassigned };
+  }, [allowedProjects, userRole]);
+
+  const isSupervisor = ["admin", "superman", "founder", "developer"].includes(userRole);
 
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
@@ -127,10 +183,11 @@ export default function Sidebar({
   };
 
   const getRoleLabel = (role: string) => {
-    if (role === "admin" || role === "superman") return "Супермен";
-    if (role === "producer") return "Продюсер";
-    if (role === "rop") return "Керівник ВП (РОП)";
-    if (role === "sales") return "Продажі";
+    if (role === "admin" || role === "superman" || role === "founder") return "Фаундер";
+    if (role === "cell_leader") return "Керівник ячейки";
+    if (role === "producer") return "Операційний продюсер";
+    if (role === "developer") return "Розробник";
+    if (role === "pending") return "Очікує схвалення";
     return role;
   };
 
@@ -246,40 +303,44 @@ export default function Sidebar({
           {/* Primary & Navigation sections */}
           <nav className="space-y-6">
             {/* Main Landing Page (B&W Main) section at the very top */}
-            {allowedProjects.some((p) => p.slug === "bw_main") && (
-              <div className="space-y-1">
-                {!isCollapsed && (
-                  <p className={`text-[10px] font-bold uppercase tracking-widest px-4 mb-2 ${isLight ? "text-neutral-400" : "text-white/40"}`}>
-                    Головний лендінг
-                  </p>
-                )}
-                <div className="relative group">
-                  <Link
-                    href="/admin?slug=bw_main"
-                    onClick={(e) => handleLinkClick(e, "/admin?slug=bw_main")}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all font-semibold text-sm cursor-pointer ${
-                      activeSlug === "bw_main"
-                        ? isLight
-                          ? "bg-neutral-900 text-white border-neutral-900 shadow-md font-extrabold"
-                          : "bg-white text-black shadow-lg border-white font-extrabold"
-                        : isLight
-                        ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-neutral-700 hover:text-neutral-900"
-                        : "border-white/5 hover:border-white/10 bg-white/5 hover:bg-white/10 text-white"
-                    } ${isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : ""}`}
-                  >
-                    <Crown className="w-4 h-4 text-emerald-400 shrink-0" />
-                    {!isCollapsed && <span>B&W Main (Лендінг /)</span>}
-                  </Link>
-                  {isCollapsed && (
-                    <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl ${
-                      isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
-                    }`}>
-                      B&W Main (Лендінг /)
-                    </div>
+            {(() => {
+              const bwMainProj = allowedProjects.find((p) => p.slug === "bw_main");
+              if (!bwMainProj) return null;
+              return (
+                <div className="space-y-1">
+                  {!isCollapsed && (
+                    <p className={`text-[10px] font-bold uppercase tracking-widest px-4 mb-2 ${isLight ? "text-neutral-400" : "text-white/40"}`}>
+                      Головний лендінг
+                    </p>
                   )}
+                  <div className="relative group">
+                    <Link
+                      href={`/admin/project/${bwMainProj.id}`}
+                      onClick={(e) => handleLinkClick(e, `/admin/project/${bwMainProj.id}`)}
+                      className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all font-semibold text-sm cursor-pointer ${
+                        activeMain
+                          ? isLight
+                            ? "bg-neutral-900 text-white border-neutral-900 shadow-md font-extrabold"
+                            : "bg-white text-black shadow-lg border-white font-extrabold"
+                          : isLight
+                          ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-neutral-700 hover:text-neutral-900"
+                          : "border-white/5 hover:border-white/10 bg-white/5 hover:bg-white/10 text-white"
+                      } ${isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : ""}`}
+                    >
+                      <Crown className="w-4 h-4 text-emerald-400 shrink-0" />
+                      {!isCollapsed && <span>B&W Main (Лендінг /)</span>}
+                    </Link>
+                    {isCollapsed && (
+                      <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl ${
+                        isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
+                      }`}>
+                        B&W Main (Лендінг /)
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Projects list container */}
             <div className="space-y-2">
@@ -289,14 +350,14 @@ export default function Sidebar({
                 </p>
               )}
               <div className="space-y-1 max-h-[350px] overflow-y-auto custom-scrollbar p-0.5">
-                {/* Hub "Всі експерти" link - merged into projects submenu list */}
+                {/* Hub "Панель фаундерів" link */}
                 {isSuperman && (
                   <div className="relative group">
                     <Link
-                      href="/admin?slug=all"
-                      onClick={(e) => handleLinkClick(e, "/admin?slug=all")}
+                      href="/admin/founder"
+                      onClick={(e) => handleLinkClick(e, "/admin/founder")}
                       className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border transition-all text-xs font-black cursor-pointer ${
-                        activeSlug === "all"
+                        activeAll
                           ? isLight
                             ? "bg-neutral-900 text-white border-neutral-900 font-extrabold shadow-md"
                             : "bg-white text-black shadow-lg border-white font-extrabold"
@@ -306,50 +367,152 @@ export default function Sidebar({
                       } ${isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : ""}`}
                     >
                       <Layers className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      {!isCollapsed && <span className="truncate">Всі експерти</span>}
+                      {!isCollapsed && <span className="truncate">Панель фаундерів</span>}
                     </Link>
                     {isCollapsed && (
                       <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl ${
                         isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
                       }`}>
-                        Всі експерти
+                        Панель фаундерів
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* Individual dynamic projects - excludes main site */}
-                {allowedProjects.filter(p => p.slug !== "bw_main").map((proj, idx) => {
-                  const ProjIcon = getProjectIcon(proj.slug, idx);
-                  const isCurrent = activeSlug === proj.slug;
-                  return (
-                    <div key={proj.slug} className="relative group">
-                      <Link
-                        href={`/admin?slug=${proj.slug}`}
-                        onClick={(e) => handleLinkClick(e, `/admin?slug=${proj.slug}`)}
-                        className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border transition-all text-xs font-black cursor-pointer ${
-                          isCurrent
-                            ? isLight
-                              ? "bg-neutral-900 text-white border-neutral-900 font-extrabold shadow-md"
-                              : "bg-white text-black shadow-lg border-white font-extrabold"
-                            : isLight
-                            ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-neutral-700 hover:text-neutral-900"
-                            : "bg-white/5 hover:bg-white/10 border-white/5 text-white/70 hover:text-white"
-                        } ${isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : ""}`}
-                      >
-                        <ProjIcon className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        {!isCollapsed && <span className="truncate">{proj.name}</span>}
-                      </Link>
-                      {isCollapsed && (
-                        <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl ${
-                          isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
-                        }`}>
-                          {proj.name}
+                {/* Individual dynamic projects - grouped by Cell for supervisors */}
+                {isSupervisor && cells.length > 0 ? (
+                  <div className="space-y-4 pt-1">
+                    {cells.map((cell) => {
+                      const cellProjs = groupedProjects.groups[cell.id] || [];
+                      if (cellProjs.length === 0) return null;
+                      const isCellCurrent = activeCellId === cell.id;
+
+                      return (
+                        <div key={cell.id} className="space-y-1">
+                          {!isCollapsed && (
+                            <Link
+                              href={`/admin/cell/${cell.id}`}
+                              onClick={(e) => handleLinkClick(e, `/admin/cell/${cell.id}`)}
+                              className={`text-[9px] font-extrabold uppercase tracking-widest pl-2 border-l border-emerald-500/20 mb-1 block hover:text-emerald-400 transition-colors ${
+                                isCellCurrent ? "text-emerald-400 font-black" : isLight ? "text-neutral-400" : "text-white/40"
+                              }`}
+                            >
+                              {cell.name}
+                            </Link>
+                          )}
+                          <div className="space-y-1 pl-1">
+                            {cellProjs.map((proj, idx) => {
+                              const ProjIcon = getProjectIcon(proj.slug, idx);
+                              const isCurrent = activeProjectId === proj.id;
+                              return (
+                                <div key={proj.id} className="relative group">
+                                  <Link
+                                    href={`/admin/project/${proj.id}`}
+                                    onClick={(e) => handleLinkClick(e, `/admin/project/${proj.id}`)}
+                                    className={`flex items-center gap-3 px-4 py-2 rounded-xl border transition-all text-xs font-black cursor-pointer ${
+                                      isCurrent
+                                        ? isLight
+                                          ? "bg-neutral-900 text-white border-neutral-900 font-extrabold shadow-md"
+                                          : "bg-white text-black shadow-lg border-white font-extrabold"
+                                        : isLight
+                                        ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-neutral-700 hover:text-neutral-900"
+                                        : "bg-white/5 hover:bg-white/10 border-white/5 text-white/70 hover:text-white"
+                                    } ${isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : ""}`}
+                                  >
+                                    <ProjIcon className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                    {!isCollapsed && <span className="truncate">{proj.name}</span>}
+                                  </Link>
+                                  {isCollapsed && (
+                                    <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl ${
+                                      isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
+                                    }`}>
+                                      {proj.name} ({cell.name})
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+
+                    {groupedProjects.unassigned.length > 0 && (
+                      <div className="space-y-1">
+                        {!isCollapsed && (
+                          <p className={`text-[9px] font-extrabold uppercase tracking-widest pl-2 border-l border-white/10 mb-1 ${isLight ? "text-neutral-400" : "text-white/40"}`}>
+                            Інші проекти
+                          </p>
+                        )}
+                        <div className="space-y-1 pl-1">
+                          {groupedProjects.unassigned.map((proj, idx) => {
+                            const ProjIcon = getProjectIcon(proj.slug, idx + 10);
+                            const isCurrent = activeProjectId === proj.id;
+                            return (
+                              <div key={proj.id} className="relative group">
+                                <Link
+                                  href={`/admin/project/${proj.id}`}
+                                  onClick={(e) => handleLinkClick(e, `/admin/project/${proj.id}`)}
+                                  className={`flex items-center gap-3 px-4 py-2 rounded-xl border transition-all text-xs font-black cursor-pointer ${
+                                    isCurrent
+                                      ? isLight
+                                        ? "bg-neutral-900 text-white border-neutral-900 font-extrabold shadow-md"
+                                        : "bg-white text-black shadow-lg border-white font-extrabold"
+                                      : isLight
+                                      ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-neutral-700 hover:text-neutral-900"
+                                      : "bg-white/5 hover:bg-white/10 border-white/5 text-white/70 hover:text-white"
+                                  } ${isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : ""}`}
+                                >
+                                  <ProjIcon className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                  {!isCollapsed && <span className="truncate">{proj.name}</span>}
+                                </Link>
+                                {isCollapsed && (
+                                  <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl ${
+                                    isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
+                                  }`}>
+                                    {proj.name}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  allowedProjects.filter(p => p.slug !== "bw_main").map((proj, idx) => {
+                    const ProjIcon = getProjectIcon(proj.slug, idx);
+                    const isCurrent = activeProjectId === proj.id;
+                    return (
+                      <div key={proj.id} className="relative group">
+                        <Link
+                          href={`/admin/project/${proj.id}`}
+                          onClick={(e) => handleLinkClick(e, `/admin/project/${proj.id}`)}
+                          className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border transition-all text-xs font-black cursor-pointer ${
+                            isCurrent
+                              ? isLight
+                                ? "bg-neutral-900 text-white border-neutral-900 font-extrabold shadow-md"
+                                : "bg-white text-black shadow-lg border-white font-extrabold"
+                              : isLight
+                              ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-neutral-700 hover:text-neutral-900"
+                              : "bg-white/5 hover:bg-white/10 border-white/5 text-white/70 hover:text-white"
+                          } ${isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : ""}`}
+                        >
+                          <ProjIcon className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          {!isCollapsed && <span className="truncate">{proj.name}</span>}
+                        </Link>
+                        {isCollapsed && (
+                          <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl ${
+                            isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
+                          }`}>
+                            {proj.name}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
           </nav>
@@ -455,11 +618,11 @@ export default function Sidebar({
                       disabled={isImpersonating}
                       className="w-full appearance-none pl-3.5 pr-8 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-emerald-500 text-[11px] font-bold text-white cursor-pointer"
                     >
-                      <option value="reset" className="bg-[#0C0C0F] text-emerald-450 font-black">Справжня роль ({getRoleLabel(actualRole || "superman")})</option>
-                      <option value="superman" className="bg-[#0C0C0F] text-white">Супермен (Superman)</option>
-                      <option value="producer" className="bg-[#0C0C0F] text-white">Продюсер (Producer)</option>
-                      <option value="rop" className="bg-[#0C0C0F] text-white">Керівник ВП (РОП)</option>
-                      <option value="sales" className="bg-[#0C0C0F] text-white">Відділ продажів (Sales)</option>
+                      <option value="reset" className="bg-[#0C0C0F] text-emerald-450 font-black">Справжня роль ({getRoleLabel(actualRole || "founder")})</option>
+                      <option value="founder" className="bg-[#0C0C0F] text-white">Фаундер</option>
+                      <option value="cell_leader" className="bg-[#0C0C0F] text-white">Керівник ячейки</option>
+                      <option value="producer" className="bg-[#0C0C0F] text-white">Продюсер</option>
+                      <option value="developer" className="bg-[#0C0C0F] text-white">Розробник</option>
                       <option value="pending" className="bg-[#0C0C0F] text-white">Очікує схвалення (Pending)</option>
                     </select>
                     <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none text-white/40 rotate-90" />
@@ -477,11 +640,11 @@ export default function Sidebar({
                     isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
                   }`}>
                     <span className="font-extrabold uppercase tracking-wider text-emerald-400">Режим розробника</span>
-                    <button onClick={() => handleImpersonate("reset")} className="text-left hover:underline text-[9px] cursor-pointer">Справжня роль ({getRoleLabel(actualRole || "superman")})</button>
-                    <button onClick={() => handleImpersonate("superman")} className="text-left hover:underline text-[9px] cursor-pointer">Супермен</button>
+                    <button onClick={() => handleImpersonate("reset")} className="text-left hover:underline text-[9px] cursor-pointer">Справжня роль ({getRoleLabel(actualRole || "founder")})</button>
+                    <button onClick={() => handleImpersonate("founder")} className="text-left hover:underline text-[9px] cursor-pointer">Фаундер</button>
+                    <button onClick={() => handleImpersonate("cell_leader")} className="text-left hover:underline text-[9px] cursor-pointer">Керівник ячейки</button>
                     <button onClick={() => handleImpersonate("producer")} className="text-left hover:underline text-[9px] cursor-pointer">Продюсер</button>
-                    <button onClick={() => handleImpersonate("rop")} className="text-left hover:underline text-[9px] cursor-pointer">РОП</button>
-                    <button onClick={() => handleImpersonate("sales")} className="text-left hover:underline text-[9px] cursor-pointer">Sales</button>
+                    <button onClick={() => handleImpersonate("developer")} className="text-left hover:underline text-[9px] cursor-pointer">Розробник</button>
                     <button onClick={() => handleImpersonate("pending")} className="text-left hover:underline text-[9px] cursor-pointer">Pending</button>
                   </div>
                 </div>
@@ -519,7 +682,13 @@ export default function Sidebar({
                     ? "bg-purple-500/10 text-purple-400 border-purple-500/20"
                     : userRole === "rop"
                     ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
-                    : "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                    : userRole === "cell_leader"
+                    ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                    : userRole === "expert"
+                    ? "bg-pink-500/10 text-pink-400 border-pink-500/20"
+                    : userRole === "marketer"
+                    ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                    : "bg-neutral-500/10 text-neutral-400 border-neutral-500/20"
                 }`}>
                   {getRoleLabel(userRole)}
                 </span>
