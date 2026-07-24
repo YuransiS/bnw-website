@@ -53,7 +53,7 @@ export default function CellDashboardClient({
   };
 
   return (
-    <div className="space-y-8 text-white w-full max-w-[1700px] mx-auto font-sans">
+    <div className="space-y-8 text-white w-full mx-auto font-sans">
       
       {/* Header */}
       <div className="bg-neutral-900 border border-white/5 p-6 rounded-2xl flex flex-wrap items-center justify-between gap-4">

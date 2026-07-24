@@ -3,7 +3,7 @@
 import React, { useState, useTransition, useEffect } from "react";
 import { createUserAction, editUserAction, deleteUserAction, toggleProjectActiveAction, createCellAction, updateCellAction, deleteCellAction } from "./actions";
 import { updateFeedbackStatusAction } from "../../actions";
-import { UserPlus, Trash2, Shield, User, Loader2, Edit3, X, Save, CheckSquare, Square, Check, Briefcase, Layers } from "lucide-react";
+import { UserPlus, Trash2, Shield, User, Users, Loader2, Edit3, X, Save, CheckSquare, Square, Check, Briefcase, Layers, Network, GitBranch, Crown, Building2, ChevronRight, ChevronDown, Sparkles } from "lucide-react";
 import { useTheme } from "../../ThemeProvider";
 
 interface Profile {
@@ -92,6 +92,10 @@ export default function SettingsForm({
   const [editingCellLeader, setEditingCellLeader] = useState("");
   const [cellError, setCellError] = useState("");
   const [cellSuccess, setCellSuccess] = useState("");
+
+  // Hierarchy View Mode Toggle ("tree" | "table")
+  const [activeViewTab, setActiveViewTab] = useState<"tree" | "table">("tree");
+  const [expandedCells, setExpandedCells] = useState<Record<string, boolean>>({});
 
   // Determine if the current user is yura3zaxar
   const currentUser = profiles.find((p) => p.id === currentUserId);
@@ -393,10 +397,40 @@ export default function SettingsForm({
 
   return (
     <div className="w-full space-y-10 font-sans">
-      <div>
-        <h1 className={`text-3xl font-black uppercase tracking-tight flex items-center gap-3 ${isLight ? "text-neutral-900" : "text-white"}`}>
-          Керування доступом (Команда)
-        </h1>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-4">
+        <div>
+          <h1 className={`text-3xl font-black uppercase tracking-tight flex items-center gap-3 ${isLight ? "text-neutral-900" : "text-white"}`}>
+            <Network className="w-8 h-8 text-emerald-400" />
+            Керування доступом та ієрархією
+          </h1>
+          <p className="text-xs text-white/40 mt-1">Організаційне дерево осередків, продюсерів та налаштування прав доступу</p>
+        </div>
+
+        {/* View Mode Switcher */}
+        <div className="flex items-center bg-white/5 p-1 rounded-2xl border border-white/10 shrink-0">
+          <button
+            onClick={() => setActiveViewTab("tree")}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+              activeViewTab === "tree"
+                ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
+                : "text-white/60 hover:text-white hover:bg-white/5"
+            }`}
+          >
+            <GitBranch className="w-4 h-4" />
+            Дерево структури
+          </button>
+          <button
+            onClick={() => setActiveViewTab("table")}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+              activeViewTab === "table"
+                ? "bg-white text-black shadow-lg"
+                : "text-white/60 hover:text-white hover:bg-white/5"
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            Табличний список
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -586,7 +620,6 @@ export default function SettingsForm({
                 )}
               </div>
             )}
-
             <button
               type="submit"
               disabled={isPending}
@@ -616,118 +649,243 @@ export default function SettingsForm({
           </form>
         </div>
 
-        {/* Staff Members List */}
-        <div className={`lg:col-span-2 p-6 rounded-2xl space-y-6 ${cardClass}`}>
-          <h2 className={`text-lg font-black uppercase tracking-tight flex items-center gap-2 ${isLight ? "text-neutral-900" : "text-white"}`}>
-            <Shield className="w-5 h-5 text-emerald-500" />
-            Команда B&W Prod
-          </h2>
+        {/* Right Section: Interactive Tree View OR Staff Table */}
+        {activeViewTab === "tree" ? (
+          <div className={`lg:col-span-2 p-6 rounded-2xl space-y-6 ${cardClass}`}>
+            {/* Tree Header */}
+            <div className="flex items-center justify-between border-b border-white/5 pb-4">
+              <div>
+                <h2 className="text-lg font-black uppercase tracking-tight flex items-center gap-2 text-white">
+                  <GitBranch className="w-5 h-5 text-emerald-400" />
+                  Ієрархічне Дерево Холдингу
+                </h2>
+                <p className="text-xs text-white/40 mt-0.5">Візуальна структура B&W Holding: Засновники → Осередки → Продюсери → Проекти</p>
+              </div>
+              <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full font-bold">
+                Активний дерево-режим
+              </span>
+            </div>
 
-          <div className={`overflow-x-auto border rounded-xl ${borderClass}`}>
-            <table className="w-full border-collapse text-left text-xs">
-              <thead>
-                <tr className={`uppercase tracking-widest font-black border-b ${tableHeaderClass}`}>
-                  <th className="p-4">Співробітник</th>
-                  <th className="p-4">Рівень доступу</th>
-                  <th className="p-4">Дозволені проекти</th>
-                  <th className="p-4 text-right">Дії</th>
-                </tr>
-              </thead>
-              <tbody className={`divide-y ${isLight ? "divide-neutral-200" : "divide-white/5"}`}>
-                {profiles.map((profile) => {
-                  // Find all projects assigned to this user
-                  const userProjIds = profileProjects
-                    .filter((mapping) => mapping.profile_id === profile.id)
-                    .map((mapping) => mapping.project_id);
+            {/* Root Node: Holding Headquarters */}
+            <div className="space-y-6">
+              <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-500/15 via-emerald-500/5 to-transparent border border-emerald-500/30 flex items-center justify-between shadow-xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-emerald-500 text-black flex items-center justify-center font-black shadow-lg shadow-emerald-500/20">
+                    <Crown className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-base uppercase tracking-wider text-white flex items-center gap-2">
+                      B&W Holding HQ
+                      <span className="px-2.5 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                        Центральний запуск
+                      </span>
+                    </h3>
+                    <p className="text-xs text-white/60 mt-0.5">
+                      Керівництво: <span className="text-white font-bold">{profiles.filter(p => ["founder", "developer", "superman", "admin"].includes(p.role)).map(p => p.full_name || p.email).join(", ")}</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
 
-                  const assignedNames = projects
-                    .filter((proj) => userProjIds.includes(proj.id) && proj.is_active !== false)
-                    .map((proj) => proj.name);
+              {/* Tree Branch Connectors & Cells Nodes */}
+              <div className="pl-6 border-l-2 border-emerald-500/30 space-y-6 ml-5">
+                
+                {/* Cells Branches */}
+                {cells.map((cell) => {
+                  const leader = profiles.find(p => p.id === cell.cell_leader_id);
+                  const isExpanded = expandedCells[cell.id] !== false; // Default expanded
 
                   return (
-                    <tr key={profile.id} className={`transition-all ${tableRowClass}`}>
-                      {/* Employee Identity */}
-                      <td className="p-4 flex items-center gap-3">
-                        <div className={`w-9 h-9 rounded-full flex items-center justify-center border shrink-0 ${employeeIconClass}`}>
-                          <User className="w-4 h-4" />
-                        </div>
-                        <div className="min-w-0">
-                          <div className={`font-extrabold text-sm truncate max-w-[150px] md:max-w-xs ${isLight ? "text-neutral-900" : "text-white"}`} title={profile.full_name || profile.email}>
-                            {profile.full_name || profile.email}
-                          </div>
-                          {profile.full_name && (
-                            <div className={`text-[10px] truncate max-w-[150px] md:max-w-xs ${textMutedClass}`} title={profile.email}>
-                              {profile.email}
+                    <div key={cell.id} className="relative space-y-3">
+                      {/* Connector dot */}
+                      <div className="absolute -left-[31px] top-6 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[#0C0C0F]" />
+
+                      {/* Branch Node Header */}
+                      <div className="p-5 rounded-2xl bg-white/5 border border-white/10 hover:border-emerald-500/40 transition-all space-y-4 shadow-lg">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center font-black">
+                              <Building2 className="w-5 h-5" />
                             </div>
-                          )}
-                          {profile.id === currentUserId && (
-                            <span className="text-[9px] text-emerald-400 font-bold uppercase tracking-wider block mt-0.5">
-                              (Ваш акаунт)
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Role Badge */}
-                      <td className="p-4">
-                        <span className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${getRoleBadgeStyle(profile.role)}`}>
-                          {getRoleLabel(profile.role)}
-                        </span>
-                      </td>
-
-                      {/* Projects Names List */}
-                      <td className="p-4">
-                        {profile.role === "admin" || profile.role === "superman" ? (
-                          <span className="text-[10px] text-emerald-400/70 font-black uppercase tracking-wider">
-                            Усі проекти (Безліміт)
-                          </span>
-                        ) : assignedNames.length > 0 ? (
-                          <div className="flex flex-wrap gap-1">
-                            {assignedNames.map((name) => (
-                              <span
-                                key={name}
-                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${
-                                  isLight ? "bg-neutral-100 text-neutral-700 border-neutral-200" : "bg-white/5 text-white/70 border-white/5"
-                                }`}
-                              >
-                                {name}
-                              </span>
-                            ))}
+                            <div>
+                              <h4 className="font-black text-base text-white flex items-center gap-2">
+                                Осередок: {cell.name}
+                              </h4>
+                              <div className="flex items-center gap-1.5 text-xs text-white/60 mt-0.5">
+                                <Crown className="w-3.5 h-3.5 text-amber-400" />
+                                <span>Керівник ячейки:</span>
+                                {leader ? (
+                                  <span className="font-extrabold text-emerald-400">{leader.full_name || leader.email}</span>
+                                ) : (
+                                  <span className="font-bold text-amber-400/80 italic">Не призначено</span>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                        ) : (
-                          <span className={`text-[10px] italic ${textSubtleClass}`}>Немає доступу</span>
-                        )}
-                      </td>
 
-                      {/* Action buttons */}
-                      <td className="p-4 text-right space-x-2 shrink-0">
-                        <button
-                          onClick={() => handleEditClick(profile)}
-                          className="p-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 rounded-lg border border-indigo-500/15 cursor-pointer transition-all inline-flex items-center"
-                          title="Редагувати користувача"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setExpandedCells(prev => ({ ...prev, [cell.id]: !isExpanded }))}
+                              className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-white/70 transition-all border border-white/10 flex items-center gap-1 cursor-pointer"
+                            >
+                              {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                              {isExpanded ? "Згорнути" : "Розгорнути"}
+                            </button>
+                          </div>
+                        </div>
 
-                        {profile.id !== currentUserId ? (
-                          <button
-                            onClick={() => handleDelete(profile.id)}
-                            className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg border border-red-500/15 cursor-pointer transition-all inline-flex items-center"
-                            title="Видалити співробітника"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        ) : (
-                          <span className="text-xs text-white/20 italic pr-3 inline-block">Системний</span>
+                        {/* Sub-Tree Details */}
+                        {isExpanded && (
+                          <div className="pt-3 border-t border-white/5 space-y-3 animate-in fade-in duration-200">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-white/40 flex items-center gap-1.5">
+                              <Briefcase className="w-3.5 h-3.5 text-emerald-400" />
+                              Проекти осередку та прив'язані ресурси:
+                            </p>
+                            
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                              {projects.map((proj) => (
+                                <div key={proj.id} className="p-3 rounded-xl bg-white/[0.02] border border-white/5 hover:border-emerald-500/20 transition-all flex items-center justify-between text-xs">
+                                  <div className="flex items-center gap-2 truncate">
+                                    <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                                    <span className="font-bold text-white truncate">{proj.name}</span>
+                                  </div>
+                                  <span className="text-[9px] uppercase font-mono text-white/40 px-2 py-0.5 rounded bg-white/5 shrink-0">{proj.slug}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         )}
-                      </td>
-                    </tr>
+                      </div>
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
+
+                {/* Free / Standalone Users Branch */}
+                <div className="relative space-y-3">
+                  <div className="absolute -left-[31px] top-6 w-3 h-3 rounded-full bg-purple-500 border-2 border-[#0C0C0F]" />
+                  <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/5 space-y-3">
+                    <h4 className="font-black text-xs uppercase tracking-wider text-white/60 flex items-center gap-2">
+                      <Users className="w-4 h-4 text-purple-400" />
+                      Співробітники та доступи команди ({profiles.length})
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {profiles.map((p) => (
+                        <div
+                          key={p.id}
+                          onClick={() => handleEditClick(p)}
+                          className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-emerald-500/10 border border-white/10 hover:border-emerald-500/30 text-xs font-bold text-white transition-all cursor-pointer flex items-center gap-2 shadow-sm"
+                          title="Натисніть для редагування прав"
+                        >
+                          <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                          <span>{p.full_name || p.email}</span>
+                          <span className="text-[9px] uppercase font-black px-2 py-0.5 rounded bg-white/10 text-white/60">{p.role}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className={`lg:col-span-2 p-6 rounded-2xl space-y-6 ${cardClass}`}>
+            <h2 className={`text-lg font-black uppercase tracking-tight flex items-center gap-2 ${isLight ? "text-neutral-900" : "text-white"}`}>
+              <Shield className="w-5 h-5 text-emerald-500" />
+              Команда B&W Prod
+            </h2>
+
+            <div className={`overflow-x-auto border rounded-xl ${borderClass}`}>
+              <table className="w-full border-collapse text-left text-xs">
+                <thead>
+                  <tr className={`uppercase tracking-widest font-black border-b ${tableHeaderClass}`}>
+                    <th className="p-4">Співробітник</th>
+                    <th className="p-4">Рівень доступу</th>
+                    <th className="p-4">Дозволені проекти</th>
+                    <th className="p-4 text-right">Дії</th>
+                  </tr>
+                </thead>
+                <tbody className={`divide-y ${isLight ? "divide-neutral-200" : "divide-white/5"}`}>
+                  {profiles.map((profile) => {
+                    const userProjIds = profileProjects
+                      .filter((mapping) => mapping.profile_id === profile.id)
+                      .map((mapping) => mapping.project_id);
+
+                    const assignedNames = projects
+                      .filter((proj) => userProjIds.includes(proj.id) && proj.is_active !== false)
+                      .map((proj) => proj.name);
+
+                    return (
+                      <tr key={profile.id} className={`transition-all ${tableRowClass}`}>
+                        <td className="p-4 flex items-center gap-3">
+                          <div className={`w-9 h-9 rounded-full flex items-center justify-center border shrink-0 ${employeeIconClass}`}>
+                            <User className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className={`font-extrabold text-sm truncate max-w-[150px] md:max-w-xs ${isLight ? "text-neutral-900" : "text-white"}`} title={profile.full_name || profile.email}>
+                              {profile.full_name || profile.email}
+                            </div>
+                            {profile.full_name && (
+                              <div className={`text-[10px] truncate max-w-[150px] md:max-w-xs ${textMutedClass}`} title={profile.email}>
+                                {profile.email}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="p-4">
+                          <span className={`inline-block px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-wider ${getRoleBadgeStyle(profile.role)}`}>
+                            {getRoleLabel(profile.role)}
+                          </span>
+                        </td>
+
+                        <td className="p-4">
+                          {profile.role === "admin" || profile.role === "superman" || profile.role === "founder" || profile.role === "developer" ? (
+                            <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded">
+                              Всі проекти (Супермен)
+                            </span>
+                          ) : assignedNames.length === 0 ? (
+                            <span className={`text-xs italic ${textSubtleClass}`}>Немає проектів</span>
+                          ) : (
+                            <div className="flex flex-wrap gap-1">
+                              {assignedNames.map((name, i) => (
+                                <span key={i} className={`px-2 py-0.5 rounded text-[10px] font-bold border ${isLight ? "bg-neutral-100 text-neutral-700 border-neutral-200" : "bg-white/5 text-white/70 border-white/10"}`}>
+                                  {name}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="p-4 text-right space-x-2 shrink-0">
+                          <button
+                            onClick={() => handleEditClick(profile)}
+                            className="p-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 rounded-lg border border-indigo-500/15 cursor-pointer transition-all inline-flex items-center"
+                            title="Редагувати користувача"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+
+                          {profile.id !== currentUserId ? (
+                            <button
+                              onClick={() => handleDelete(profile.id)}
+                              className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg border border-red-500/15 cursor-pointer transition-all inline-flex items-center"
+                              title="Видалити співробітника"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          ) : (
+                            <span className="text-xs text-white/20 italic pr-3 inline-block">Системний</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Cell Management Section */}
         <div className={`lg:col-span-3 p-6 rounded-2xl space-y-6 ${cardClass}`}>

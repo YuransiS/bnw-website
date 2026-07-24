@@ -88,7 +88,7 @@ export default async function ProducerPerformancePage({ params }: PageProps) {
   const cpl = leaderStats?.cpl || (leadsCount > 0 ? spendUsd / leadsCount : 0);
 
   return (
-    <div className="space-y-8 text-white max-w-7xl mx-auto font-sans">
+    <div className="space-y-8 text-white w-full mx-auto font-sans">
       {/* Profile Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-neutral-900 border border-white/5 p-6 rounded-2xl">
         <div className="flex items-center gap-4">

@@ -54,7 +54,7 @@ export default function FounderDashboardClient({
   });
 
   return (
-    <div className="space-y-8 text-white w-full max-w-[1700px] mx-auto font-sans">
+    <div className="space-y-8 text-white w-full mx-auto font-sans">
       
       {/* Sticky Global Filter Header */}
       <div className="sticky top-0 z-40 backdrop-blur-md border border-white/5 p-4 rounded-2xl bg-[#0c0c0f]/80 flex flex-wrap items-center justify-between gap-4 shadow-xl">

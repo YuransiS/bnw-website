@@ -82,7 +82,7 @@ export default function AccountSettingsClient({
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-8 font-sans text-white">
+    <div className="w-full space-y-8 font-sans text-white">
       
       {/* Page Header */}
       <div className="bg-neutral-900 border border-white/5 p-6 rounded-2xl flex items-center justify-between">
