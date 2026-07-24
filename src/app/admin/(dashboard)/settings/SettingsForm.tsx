@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useState, useTransition, useEffect } from "react";
-import { createUserAction, editUserAction, deleteUserAction, toggleProjectActiveAction, createCellAction, updateCellAction, deleteCellAction } from "./actions";
+import { createUserAction, editUserAction, deleteUserAction, toggleProjectActiveAction, createCellAction, updateCellAction, deleteCellAction, assignProjectCellAction } from "./actions";
 import { updateFeedbackStatusAction } from "../../actions";
-import { UserPlus, Trash2, Shield, User, Users, Loader2, Edit3, X, Save, CheckSquare, Square, Check, Briefcase, Layers, Network, GitBranch, Crown, Building2, ChevronRight, ChevronDown, Sparkles } from "lucide-react";
+import { UserPlus, Trash2, Shield, User, Users, Loader2, Edit3, X, Save, CheckSquare, Square, Check, Briefcase, Layers, Network, GitBranch, Crown, Building2, ChevronRight, ChevronDown, Sparkles, Plus, Link2 } from "lucide-react";
 import { useTheme } from "../../ThemeProvider";
 
 interface Profile {
@@ -18,6 +18,7 @@ interface Project {
   name: string;
   slug: string;
   is_active?: boolean;
+  cell_id?: string | null;
 }
 
 interface ProfileProjectMapping {
@@ -330,6 +331,32 @@ export default function SettingsForm({
         setCellSuccess(res.message || "Осередок успішно видалено!");
       }
       setCellToDelete(null);
+    });
+  };
+
+  const handleQuickAssignLeader = (cellId: string, cellName: string, leaderId: string) => {
+    setCellError("");
+    setCellSuccess("");
+    startTransition(async () => {
+      const res = await updateCellAction(cellId, cellName, leaderId || null);
+      if (res.error) {
+        setCellError(res.error);
+      } else {
+        setCellSuccess(res.message || "Керівника осередку оновлено!");
+      }
+    });
+  };
+
+  const handleQuickAssignProject = (projectId: string, cellId: string | null) => {
+    setCellError("");
+    setCellSuccess("");
+    startTransition(async () => {
+      const res = await assignProjectCellAction(projectId, cellId);
+      if (res.error) {
+        setCellError(res.error);
+      } else {
+        setCellSuccess(res.message || "Проект прив'язано до осередку!");
+      }
     });
   };
 
@@ -711,19 +738,41 @@ export default function SettingsForm({
                               <h4 className="font-black text-base text-white flex items-center gap-2">
                                 Осередок: {cell.name}
                               </h4>
-                              <div className="flex items-center gap-1.5 text-xs text-white/60 mt-0.5">
-                                <Crown className="w-3.5 h-3.5 text-amber-400" />
-                                <span>Керівник ячейки:</span>
-                                {leader ? (
-                                  <span className="font-extrabold text-emerald-400">{leader.full_name || leader.email}</span>
-                                ) : (
-                                  <span className="font-bold text-amber-400/80 italic">Не призначено</span>
-                                )}
+                              <div className="flex flex-wrap items-center gap-2 text-xs text-white/60 mt-1">
+                                <span className="flex items-center gap-1 font-semibold text-white/40">
+                                  <Crown className="w-3.5 h-3.5 text-amber-400" />
+                                  Керівник:
+                                </span>
+                                <select
+                                  value={cell.cell_leader_id || ""}
+                                  onChange={(e) => handleQuickAssignLeader(cell.id, cell.name, e.target.value)}
+                                  className="px-2.5 py-1 bg-white/10 border border-white/15 rounded-lg text-xs font-extrabold text-emerald-400 focus:outline-none focus:border-emerald-500 cursor-pointer transition-all"
+                                >
+                                  <option value="" className="bg-[#0C0C0F] text-white/50">-- Обрати керівника (продюсера) --</option>
+                                  {profiles
+                                    .filter(p => ["producer", "cell_leader", "founder", "developer", "rop", "admin"].includes(p.role))
+                                    .map((p) => (
+                                      <option key={p.id} value={p.id} className="bg-[#0C0C0F] text-white font-bold">
+                                        {p.full_name || p.email} ({getRoleLabel(p.role)})
+                                      </option>
+                                    ))}
+                                </select>
                               </div>
                             </div>
                           </div>
 
                           <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                setEditingCellId(cell.id);
+                                setEditingCellName(cell.name);
+                                setEditingCellLeader(cell.cell_leader_id || "");
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-xs font-bold text-indigo-400 transition-all border border-indigo-500/20 flex items-center gap-1 cursor-pointer"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                              Редагувати
+                            </button>
                             <button
                               onClick={() => setExpandedCells(prev => ({ ...prev, [cell.id]: !isExpanded }))}
                               className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-white/70 transition-all border border-white/10 flex items-center gap-1 cursor-pointer"
@@ -734,24 +783,56 @@ export default function SettingsForm({
                           </div>
                         </div>
 
-                        {/* Sub-Tree Details */}
+                        {/* Sub-Tree Details: Projects attached to this cell */}
                         {isExpanded && (
                           <div className="pt-3 border-t border-white/5 space-y-3 animate-in fade-in duration-200">
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-white/40 flex items-center gap-1.5">
-                              <Briefcase className="w-3.5 h-3.5 text-emerald-400" />
-                              Проекти осередку та прив'язані ресурси:
-                            </p>
+                            <div className="flex items-center justify-between">
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-white/40 flex items-center gap-1.5">
+                                <Briefcase className="w-3.5 h-3.5 text-emerald-400" />
+                                Проекти осередку ({projects.filter(p => p.cell_id === cell.id).length}):
+                              </p>
+
+                              {/* Quick Project Attacher Dropdown */}
+                              <select
+                                onChange={(e) => {
+                                  if (e.target.value) {
+                                    handleQuickAssignProject(e.target.value, cell.id);
+                                    e.target.value = "";
+                                  }
+                                }}
+                                className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg text-[10px] font-black text-emerald-400 uppercase tracking-wider focus:outline-none cursor-pointer"
+                              >
+                                <option value="" className="bg-[#0C0C0F] text-white/50">+ Прив'язати проект...</option>
+                                {projects.map((proj) => (
+                                  <option key={proj.id} value={proj.id} className="bg-[#0C0C0F] text-white">
+                                    {proj.name} {proj.cell_id === cell.id ? "✓ (В цій ячейці)" : proj.cell_id ? "(В іншій ячейці)" : "(Вільний)"}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
                             
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                              {projects.map((proj) => (
-                                <div key={proj.id} className="p-3 rounded-xl bg-white/[0.02] border border-white/5 hover:border-emerald-500/20 transition-all flex items-center justify-between text-xs">
-                                  <div className="flex items-center gap-2 truncate">
-                                    <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                                    <span className="font-bold text-white truncate">{proj.name}</span>
-                                  </div>
-                                  <span className="text-[9px] uppercase font-mono text-white/40 px-2 py-0.5 rounded bg-white/5 shrink-0">{proj.slug}</span>
+                              {projects.filter(p => p.cell_id === cell.id).length === 0 ? (
+                                <div className="col-span-full p-3 rounded-xl bg-white/[0.01] border border-dashed border-white/10 text-xs text-white/30 italic text-center">
+                                  Немає прив'язаних проектів до цього осередку. Оберіть проект вище, щоб прив'язати.
                                 </div>
-                              ))}
+                              ) : (
+                                projects.filter(p => p.cell_id === cell.id).map((proj) => (
+                                  <div key={proj.id} className="p-3 rounded-xl bg-white/[0.02] border border-white/10 hover:border-emerald-500/30 transition-all flex items-center justify-between text-xs group">
+                                    <div className="flex items-center gap-2 truncate">
+                                      <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                                      <span className="font-bold text-white truncate">{proj.name}</span>
+                                    </div>
+                                    <button
+                                      onClick={() => handleQuickAssignProject(proj.id, null)}
+                                      className="text-[9px] font-bold text-rose-400/60 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      title="Відв'язати від осередку"
+                                    >
+                                      Відв'язати
+                                    </button>
+                                  </div>
+                                ))
+                              )}
                             </div>
                           </div>
                         )}
@@ -1005,10 +1086,10 @@ export default function SettingsForm({
                   >
                     <option value="" className="bg-[#0C0C0F] text-white/50">Не призначено</option>
                     {profiles
-                      .filter(p => p.role === "cell_leader")
+                      .filter(p => ["producer", "cell_leader", "founder", "developer", "rop", "admin"].includes(p.role))
                       .map((p) => (
-                        <option key={p.id} value={p.id} className="bg-[#0C0C0F] text-white">
-                          {p.full_name || p.email}
+                        <option key={p.id} value={p.id} className="bg-[#0C0C0F] text-white font-bold">
+                          {p.full_name || p.email} ({getRoleLabel(p.role)})
                         </option>
                       ))}
                   </select>

@@ -105,10 +105,10 @@ export default function AccountSettingsClient({
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         
         {/* Main Settings Form */}
-        <div className="md:col-span-2 space-y-6">
+        <div className="lg:col-span-1 space-y-6">
           
           {/* Profile Details Form */}
           <div className="bg-neutral-900 border border-white/5 p-6 rounded-2xl space-y-6">

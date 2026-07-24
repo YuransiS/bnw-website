@@ -72,7 +72,7 @@ export default async function AdminUsersPage() {
   // 4. Fetch team members profiles, projects list, cells, and mapping in parallel
   const [profilesRes, projectsRes, mappingRes, cellsRes] = await Promise.all([
     adminSupabase.from("profiles").select("id, email, role, full_name").order("email"),
-    adminSupabase.from("projects").select("id, name, slug, is_active").order("name"),
+    adminSupabase.from("projects").select("id, name, slug, is_active, cell_id").order("name"),
     adminSupabase.from("profile_projects").select("profile_id, project_id"),
     adminSupabase.from("cells").select("id, name, cell_leader_id").order("name"),
   ]);

@@ -435,3 +435,25 @@ export async function updateSelfAccountAction(fullName?: string, password?: stri
   }
 }
 
+// 11. Assign or detach a project to a cell
+export async function assignProjectCellAction(projectId: string, cellId: string | null) {
+  try {
+    await verifyAdminAccess();
+    const supabaseAdmin = createAdminClient();
+
+    const { error } = await supabaseAdmin
+      .from("projects")
+      .update({ cell_id: cellId || null })
+      .eq("id", projectId);
+
+    if (error) throw error;
+
+    revalidatePath("/admin/settings");
+    revalidatePath("/admin/users");
+    revalidatePath("/admin");
+    return { success: true, message: "Проект успішно перев'язано до осередку!" };
+  } catch (err: any) {
+    return { error: err.message || "Не вдалося прив'язати проект до осередку." };
+  }
+}
+
