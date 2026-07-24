@@ -9,6 +9,16 @@ import { devLogger } from "@/utils/logger";
 import { rebuildProjectCache } from "@/lib/crmCache";
 import { parseClientDateRange, statusPriority } from "./utils";
 
+// Memory cache for Superman Global Hub mode
+let globalSupermanSummaryCache: {
+  timestamp: number;
+  data: {
+    summaryData: any[];
+    campaignsData: any[];
+    producersLeaderboard: any[];
+  };
+} | null = null;
+
 export async function signOutAction() {
   const supabase = await createClient();
   await supabase.auth.signOut();
@@ -244,49 +254,90 @@ export async function getUnifiedCRMData(
       }
     }
 
-    // 1. Superman Global Hub mode (direct fast RPC)
-    if (isSuperman && activeSlug === "all") {
-      const [summaryRes, campaignRes, leaderboardRes] = await Promise.all([
-        supabase.rpc("get_superman_summary"),
-        supabase.rpc("get_campaigns_summary"),
-        adminSupabase.rpc("get_producers_leaderboard")
-      ]);
+    // 1. All-projects summary mode (direct fast cached RPC)
+    if (activeSlug === "all") {
+      const now = Date.now();
+      let summary = [];
+      let campaigns = [];
+      let leaderboard = [];
 
-      let rawSummary = summaryRes.data || [];
-      let summary = rawSummary.map((p: any) => ({
-        project_id: p.project_id,
-        project_name: p.project_name,
-        project_slug: p.project_slug,
-        cell_id: p.cell_id,
-        revenue_uah: Number(p.uah_revenue || 0),
-        expenses_uah: Number(p.spend || 0),
-        revenue_usd: Number(p.usd_revenue || 0),
-        revenue_eur: Number(p.eur_revenue || 0),
-        leads_count: Number(p.leads_count || 0),
-        cpl: Number(p.cpl || 0),
-        roi: Number(p.spend || 0) > 0 ? ((Number(p.uah_revenue || 0) - Number(p.spend || 0)) / Number(p.spend || 0)) * 100 : 0
-      }));
-      let campaigns = campaignRes.data || [];
-      let leaderboard = (leaderboardRes.data || []).map((l: any) => ({
-        producerId: l.producer_id,
-        email: l.email,
-        name: l.name,
-        avatar_url: l.avatar_url,
-        projectNames: l.project_names,
-        spend: Number(l.spend || 0),
-        leadsCount: Number(l.leads_count || 0),
-        cpl: Number(l.cpl || 0),
-        usd_revenue: Number(l.usd_revenue || 0),
-        uah_revenue: Number(l.uah_revenue || 0),
-        eur_revenue: Number(l.eur_revenue || 0),
-        blended_revenue: Number(l.blended_revenue || 0),
-        profit: Number(l.profit || 0),
-        roi: Number(l.roi || 0),
-        isLeaderOfMonth: false,
-      }));
+      if (globalSupermanSummaryCache && (now - globalSupermanSummaryCache.timestamp < 10000)) {
+        summary = globalSupermanSummaryCache.data.summaryData;
+        campaigns = globalSupermanSummaryCache.data.campaignsData;
+        leaderboard = globalSupermanSummaryCache.data.producersLeaderboard;
+      } else {
+        const [summaryRes, campaignRes, leaderboardRes] = await Promise.all([
+          supabase.rpc("get_superman_summary"),
+          supabase.rpc("get_campaigns_summary"),
+          adminSupabase.rpc("get_producers_leaderboard")
+        ]);
 
-      if (leaderboard.length > 0 && leaderboard[0].blended_revenue > 0) {
-        leaderboard[0].isLeaderOfMonth = true;
+        let rawSummary = summaryRes.data || [];
+        summary = rawSummary.map((p: any) => ({
+          project_id: p.project_id,
+          project_name: p.project_name,
+          project_slug: p.project_slug,
+          cell_id: p.cell_id,
+          revenue_uah: Number(p.uah_revenue || 0),
+          expenses_uah: Number(p.spend || 0),
+          revenue_usd: Number(p.usd_revenue || 0),
+          revenue_eur: Number(p.eur_revenue || 0),
+          leads_count: Number(p.leads_count || 0),
+          cpl: Number(p.cpl || 0),
+          roi: Number(p.spend || 0) > 0 ? ((Number(p.uah_revenue || 0) - Number(p.spend || 0)) / Number(p.spend || 0)) * 100 : 0
+        }));
+
+        campaigns = campaignRes.data || [];
+        leaderboard = (leaderboardRes.data || []).map((l: any) => ({
+          producerId: l.producer_id,
+          email: l.email,
+          name: l.name,
+          avatar_url: l.avatar_url,
+          projectNames: l.project_names,
+          spend: Number(l.spend || 0),
+          leadsCount: Number(l.leads_count || 0),
+          cpl: Number(l.cpl || 0),
+          usd_revenue: Number(l.usd_revenue || 0),
+          uah_revenue: Number(l.uah_revenue || 0),
+          eur_revenue: Number(l.eur_revenue || 0),
+          blended_revenue: Number(l.blended_revenue || 0),
+          profit: Number(l.profit || 0),
+          roi: Number(l.roi || 0),
+          isLeaderOfMonth: false,
+        }));
+
+        if (leaderboard.length > 0 && leaderboard[0].blended_revenue > 0) {
+          leaderboard[0].isLeaderOfMonth = true;
+        }
+
+        globalSupermanSummaryCache = {
+          timestamp: now,
+          data: {
+            summaryData: summary,
+            campaignsData: campaigns,
+            producersLeaderboard: leaderboard
+          }
+        };
+      }
+
+      // Filter summary data based on user's allowed projects if they are not Superman
+      let filteredSummary = summary;
+      let filteredCampaigns = campaigns;
+      let filteredLeaderboard = leaderboard;
+
+      if (!isSuperman) {
+        const allowedIds = new Set(allowedProjects.map((p) => p.id));
+        filteredSummary = summary.filter((p: any) => allowedIds.has(p.project_id));
+        filteredCampaigns = campaigns.filter((c: any) => allowedIds.has(c.project_id));
+        
+        filteredLeaderboard = leaderboard.map((l: any) => {
+          const lProjects = String(l.projectNames || "").split(", ").map(p => p.trim());
+          const hasSharedProject = lProjects.some(lpName => 
+            allowedProjects.some(ap => ap.name === lpName)
+          );
+          if (hasSharedProject) return l;
+          return null;
+        }).filter(Boolean);
       }
 
       return {
@@ -294,10 +345,10 @@ export async function getUnifiedCRMData(
         role: profile.role,
         allowedProjects,
         activeSlug: "all",
-        summaryData: summary,
-        campaignsData: campaigns,
-        producersLeaderboard: leaderboard,
-        unresolvedOrders,
+        summaryData: filteredSummary,
+        campaignsData: filteredCampaigns,
+        producersLeaderboard: filteredLeaderboard,
+        unresolvedOrders: isSuperman ? unresolvedOrders : [],
       };
     }
 
