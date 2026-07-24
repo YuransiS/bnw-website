@@ -82,7 +82,7 @@ export async function createUserAction(prevState: any, formData: FormData) {
       return { error: "Пароль має містити не менше 6 символів." };
     }
 
-    const allowedRoles = ["founder", "cell_leader", "producer", "developer", "pending"];
+    const allowedRoles = ["founder", "cell_leader", "producer", "developer", "pending", "rop", "sales", "expert", "marketer", "admin", "superman"];
     if (!allowedRoles.includes(role)) {
       return { error: "Невірна роль користувача." };
     }
@@ -165,7 +165,7 @@ export async function editUserAction(
       return { error: "Ідентифікатор користувача та пошта є обов'язковими." };
     }
 
-    const allowedRoles = ["founder", "cell_leader", "producer", "developer", "pending"];
+    const allowedRoles = ["founder", "cell_leader", "producer", "developer", "pending", "rop", "sales", "expert", "marketer", "admin", "superman"];
     if (role && !allowedRoles.includes(role)) {
       return { error: "Невірна роль користувача." };
     }

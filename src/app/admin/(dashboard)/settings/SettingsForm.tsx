@@ -563,6 +563,10 @@ export default function SettingsForm({
                   { key: "founder", label: "Фаундер (Founder)" },
                   { key: "cell_leader", label: "Керівник ячейки (Cell Leader)" },
                   { key: "producer", label: "Операційний продюсер (Producer)" },
+                  { key: "rop", label: "Керівник ВП (РОП)" },
+                  { key: "sales", label: "Відділ продажів (Sales)" },
+                  { key: "expert", label: "Експерт / Партнер (Expert)" },
+                  { key: "marketer", label: "Маркетолог (Marketer)" },
                   { key: "developer", label: "Розробник (Developer)" }
                 ].map((item) => (
                   <button
@@ -597,7 +601,7 @@ export default function SettingsForm({
                   onChange={(e) => setSelectedCellId(e.target.value)}
                   className={`w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all text-sm ${inputClass}`}
                 >
-                  <option value="" disabled className={isLight ? "text-neutral-900 bg-white" : "text-white bg-[#0C0C0F]"}>Оберіть ячейку...</option>
+                  <option value="" className={isLight ? "text-neutral-900 bg-white" : "text-white bg-[#0C0C0F]"}>-- Не призначено --</option>
                   {cells.map((cell) => (
                     <option
                       key={cell.id}
@@ -722,6 +726,18 @@ export default function SettingsForm({
                   const leader = profiles.find(p => p.id === cell.cell_leader_id);
                   const isExpanded = expandedCells[cell.id] !== false; // Default expanded
 
+                  // Get projects of this cell
+                  const cellProjects = projects.filter(p => p.cell_id === cell.id);
+                  const cellProjIds = cellProjects.map(p => p.id);
+
+                  // Find profile IDs that are assigned to these projects
+                  const cellProfileIds = profileProjects
+                    .filter((pp) => cellProjIds.includes(pp.project_id))
+                    .map((pp) => pp.profile_id);
+
+                  // Get unique profiles that are assigned to this cell
+                  const cellProfiles = profiles.filter((p) => cellProfileIds.includes(p.id));
+
                   return (
                     <div key={cell.id} className="relative space-y-3">
                       {/* Connector dot */}
@@ -783,57 +799,96 @@ export default function SettingsForm({
                           </div>
                         </div>
 
-                        {/* Sub-Tree Details: Projects attached to this cell */}
+                        {/* Sub-Tree Details: Projects and Employees attached to this cell */}
                         {isExpanded && (
-                          <div className="pt-3 border-t border-white/5 space-y-3 animate-in fade-in duration-200">
-                            <div className="flex items-center justify-between">
-                              <p className="text-[10px] font-bold uppercase tracking-widest text-white/40 flex items-center gap-1.5">
-                                <Briefcase className="w-3.5 h-3.5 text-emerald-400" />
-                                Проекти осередку ({projects.filter(p => p.cell_id === cell.id).length}):
-                              </p>
-
-                              {/* Quick Project Attacher Dropdown */}
-                              <select
-                                onChange={(e) => {
-                                  if (e.target.value) {
-                                    handleQuickAssignProject(e.target.value, cell.id);
-                                    e.target.value = "";
-                                  }
-                                }}
-                                className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg text-[10px] font-black text-emerald-400 uppercase tracking-wider focus:outline-none cursor-pointer"
-                              >
-                                <option value="" className="bg-[#0C0C0F] text-white/50">+ Прив'язати проект...</option>
-                                {projects.map((proj) => (
-                                  <option key={proj.id} value={proj.id} className="bg-[#0C0C0F] text-white">
-                                    {proj.name} {proj.cell_id === cell.id ? "✓ (В цій ячейці)" : proj.cell_id ? "(В іншій ячейці)" : "(Вільний)"}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
+                          <div className="pt-3 border-t border-white/5 space-y-4 animate-in fade-in duration-200">
                             
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                              {projects.filter(p => p.cell_id === cell.id).length === 0 ? (
-                                <div className="col-span-full p-3 rounded-xl bg-white/[0.01] border border-dashed border-white/10 text-xs text-white/30 italic text-center">
-                                  Немає прив'язаних проектів до цього осередку. Оберіть проект вище, щоб прив'язати.
-                                </div>
-                              ) : (
-                                projects.filter(p => p.cell_id === cell.id).map((proj) => (
-                                  <div key={proj.id} className="p-3 rounded-xl bg-white/[0.02] border border-white/10 hover:border-emerald-500/30 transition-all flex items-center justify-between text-xs group">
-                                    <div className="flex items-center gap-2 truncate">
-                                      <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                                      <span className="font-bold text-white truncate">{proj.name}</span>
-                                    </div>
-                                    <button
-                                      onClick={() => handleQuickAssignProject(proj.id, null)}
-                                      className="text-[9px] font-bold text-rose-400/60 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                                      title="Відв'язати від осередку"
-                                    >
-                                      Відв'язати
-                                    </button>
+                            {/* Projects Sub-section */}
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-white/40 flex items-center gap-1.5">
+                                  <Briefcase className="w-3.5 h-3.5 text-emerald-400" />
+                                  Проекти осередку ({cellProjects.length}):
+                                </p>
+
+                                {/* Quick Project Attacher Dropdown */}
+                                <select
+                                  onChange={(e) => {
+                                    if (e.target.value) {
+                                      handleQuickAssignProject(e.target.value, cell.id);
+                                      e.target.value = "";
+                                    }
+                                  }}
+                                  className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg text-[10px] font-black text-emerald-400 uppercase tracking-wider focus:outline-none cursor-pointer"
+                                >
+                                  <option value="" className="bg-[#0C0C0F] text-white/50">+ Прив'язати проект...</option>
+                                  {projects.map((proj) => (
+                                    <option key={proj.id} value={proj.id} className="bg-[#0C0C0F] text-white">
+                                      {proj.name} {proj.cell_id === cell.id ? "✓ (В цій ячейці)" : proj.cell_id ? "(В іншій ячейці)" : "(Вільний)"}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                {cellProjects.length === 0 ? (
+                                  <div className="col-span-full p-3 rounded-xl bg-white/[0.01] border border-dashed border-white/10 text-xs text-white/30 italic text-center">
+                                    Немає прив'язаних проектів до цього осередку. Оберіть проект вище, щоб прив'язати.
                                   </div>
-                                ))
-                              )}
+                                ) : (
+                                  cellProjects.map((proj) => (
+                                    <div key={proj.id} className="p-3 rounded-xl bg-white/[0.02] border border-white/10 hover:border-emerald-500/30 transition-all flex items-center justify-between text-xs group">
+                                      <div className="flex items-center gap-2 truncate">
+                                        <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                                        <span className="font-bold text-white truncate">{proj.name}</span>
+                                      </div>
+                                      <button
+                                        onClick={() => handleQuickAssignProject(proj.id, null)}
+                                        className="text-[9px] font-bold text-rose-400/60 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        title="Відв'язати від осередку"
+                                      >
+                                        Відв'язати
+                                      </button>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
                             </div>
+
+                            {/* Employees Sub-section */}
+                            <div className="pt-2 border-t border-white/5 space-y-2">
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-white/40 flex items-center gap-1.5">
+                                <Users className="w-3.5 h-3.5 text-purple-400" />
+                                Співробітники осередку ({cellProfiles.length}):
+                              </p>
+                              
+                              <div className="flex flex-wrap gap-1.5">
+                                {cellProfiles.length === 0 ? (
+                                  <span className={`text-[11px] italic ${textMutedClass}`}>
+                                    Немає підв'язаних співробітників. Призначте співробітнику один із проектів осередку в лівій формі.
+                                  </span>
+                                ) : (
+                                  cellProfiles.map((p) => (
+                                    <div
+                                      key={p.id}
+                                      onClick={() => handleEditClick(p)}
+                                      className="px-2.5 py-1.5 rounded bg-white/5 border border-white/10 hover:border-emerald-500/35 text-[11px] font-bold text-white transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
+                                      title="Натисніть для редагування доступу співробітника"
+                                    >
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                      <span>{p.full_name || p.email.split("@")[0]}</span>
+                                      <span className="text-[9px] uppercase font-black bg-white/10 text-white/60 px-1.5 py-0.5 rounded">
+                                        {getRoleLabel(p.role)}
+                                      </span>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                              <p className={`text-[9px] italic ${textMutedClass}`}>
+                                * Співробітники прив'язуються до осередку автоматично, якщо вони мають доступ до його проектів.
+                              </p>
+                            </div>
+
                           </div>
                         )}
                       </div>

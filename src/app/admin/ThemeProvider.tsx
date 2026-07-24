@@ -31,7 +31,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>
-      <div className={`admin-layout-root min-h-screen bg-crm-bg text-crm-text flex flex-col md:flex-row font-sans transition-all duration-200 ${theme === "light" ? "theme-light" : ""}`}>
+      <div className={`admin-layout-root w-full min-h-screen bg-crm-bg text-crm-text flex flex-col font-sans transition-all duration-200 ${theme === "light" ? "theme-light" : ""}`}>
         {children}
       </div>
     </ThemeContext.Provider>

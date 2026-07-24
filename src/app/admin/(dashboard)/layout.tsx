@@ -119,7 +119,7 @@ export default async function AdminLayout({
 
   return (
     <ThemeProvider>
-      <div className="min-h-screen flex flex-col bg-[#0C0C0F]">
+      <div className="min-h-screen w-full flex flex-col bg-[#0C0C0F]">
         {/* Background visual orb */}
         <div className="fixed top-0 left-0 w-[500px] h-[500px] bg-emerald-500/[0.02] rounded-full blur-[150px] pointer-events-none" />
 
