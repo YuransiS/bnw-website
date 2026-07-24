@@ -1869,14 +1869,35 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
 
 export async function getCellsAction() {
   try {
-    const supabase = await createClient();
     const adminSupabase = createAdminClient();
-    const { data: cells, error } = await adminSupabase
+    let { data: cells, error } = await adminSupabase
       .from("cells")
       .select("*, profiles(email)")
       .order("name");
 
     if (error) throw error;
+
+    const defaultCellNames = [
+      "Слободянюк Саша",
+      "Ставицкий Саша",
+      "Уткин Дмитрий"
+    ];
+
+    const existingNames = (cells || []).map((c: any) => c.name);
+    const missingNames = defaultCellNames.filter(name => !existingNames.includes(name));
+
+    if (missingNames.length > 0) {
+      for (const name of missingNames) {
+        await adminSupabase.from("cells").insert({ name });
+      }
+
+      const { data: refetchedCells } = await adminSupabase
+        .from("cells")
+        .select("*, profiles(email)")
+        .order("name");
+      cells = refetchedCells || [];
+    }
+
     return cells || [];
   } catch (err: any) {
     return { error: err.message || "Failed to fetch cells" };

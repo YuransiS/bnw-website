@@ -404,3 +404,34 @@ export async function deleteCellAction(id: string) {
   }
 }
 
+// 10. Update self profile (Full Name & Password)
+export async function updateSelfAccountAction(fullName?: string, password?: string) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Неавторизовано.");
+
+    const adminSupabase = createAdminClient();
+
+    if (fullName !== undefined) {
+      const { error: pErr } = await adminSupabase
+        .from("profiles")
+        .update({ full_name: fullName.trim() })
+        .eq("id", user.id);
+      if (pErr) throw pErr;
+    }
+
+    if (password && password.trim().length >= 6) {
+      const { error: aErr } = await adminSupabase.auth.admin.updateUserById(user.id, {
+        password: password.trim()
+      });
+      if (aErr) throw aErr;
+    }
+
+    revalidatePath("/admin/settings");
+    return { success: true, message: "Налаштування профілю успішно оновлено!" };
+  } catch (err: any) {
+    return { error: err.message || "Помилка оновлення профілю." };
+  }
+}
+

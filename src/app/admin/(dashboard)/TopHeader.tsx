@@ -104,8 +104,8 @@ export default function TopHeader({
   const producerId = isProducer ? currentUserId : "";
 
   return (
-    <header className="sticky top-0 z-50 bg-[#0C0C0F]/90 backdrop-blur-md border-b border-white/10 px-4 lg:px-8 py-3">
-      <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+    <header className="sticky top-0 z-50 bg-[#0C0C0F]/90 backdrop-blur-md border-b border-white/10 px-4 lg:px-8 py-3 w-full">
+      <div className="w-full max-w-[1700px] mx-auto flex items-center justify-between gap-4">
         
         {/* Left: Brand Logo */}
         <div className="flex items-center gap-3 shrink-0">
