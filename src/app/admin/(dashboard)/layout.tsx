@@ -53,14 +53,7 @@ export default async function AdminLayout({
   const isActualDev = !!((user.email && devEmails.includes(user.email.toLowerCase())) || 
                        (profile && (profile.role === "admin" || profile.role === "superman" || profile.role === "founder" || profile.role === "developer")));
 
-  let userRole = profile?.role || "pending";
-  if (isActualDev) {
-    const cookieStore = await cookies();
-    const impersonated = cookieStore.get("crm_impersonated_role")?.value;
-    if (impersonated && ["founder", "cell_leader", "producer", "developer", "pending"].includes(impersonated)) {
-      userRole = impersonated;
-    }
-  }
+  const userRole = profile?.role || "pending";
 
   const fullName = user.user_metadata?.full_name || user.user_metadata?.name || "";
 
@@ -113,6 +106,17 @@ export default async function AdminLayout({
       .filter((p: any) => p.is_active !== false);
   }
 
+  // Fetch profiles and mappings for the hierarchical Sidebar
+  const { data: dbProfiles } = await adminSupabase
+    .from("profiles")
+    .select("id, email, role, full_name")
+    .order("email");
+  const { data: dbProfileProjects } = await adminSupabase
+    .from("profile_projects")
+    .select("profile_id, project_id");
+  const profilesList = dbProfiles || [];
+  const profileProjectsList = dbProfileProjects || [];
+
   return (
     <ThemeProvider>
       {/* Background visual orb */}
@@ -127,6 +131,8 @@ export default async function AdminLayout({
         fullName={fullName}
         isActualDev={isActualDev}
         actualRole={profile?.role || "superman"}
+        profiles={profilesList}
+        profileProjects={profileProjectsList}
       />
 
       {/* Main content grid */}

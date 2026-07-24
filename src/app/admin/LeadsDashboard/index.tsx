@@ -47,6 +47,7 @@ import QuizzesTab from "./tabs/QuizzesTab";
 import DiagnosticsTab from "./tabs/DiagnosticsTab";
 import FunnelsTab from "./tabs/FunnelsTab";
 import FinanceDashboardTab from "./tabs/FinanceDashboardTab";
+import FinanceExpertTab from "./tabs/FinanceExpertTab";
 import CashflowFeed from "./components/CashflowFeed";
 import AddTransactionModal from "./components/AddTransactionModal";
 import { getFinanceSummaryAction } from "../(dashboard)/project/financeActions";
@@ -232,6 +233,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [dateRangePreset, setDateRangePreset] = useState<"all" | "30d" | "7d" | "1d" | "custom">("all");
+  const [globalCurrency, setGlobalCurrency] = useState<"USD" | "UAH">("UAH");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedLanding, setSelectedLanding] = useState<string>("all");
   const [activeQuizLeadId, setActiveQuizLeadId] = useState<string | null>(null);
@@ -264,9 +266,9 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
   useEffect(() => {
     if (activeProject && activeTab === "finance") {
-      getFunnelsAction(activeProject.id).then((res) => {
-        if (res && !("error" in res)) {
-          setFunnelsList(res as any[]);
+      getFunnelsAction(activeProject.id).then((res: any) => {
+        if (res && !res.error && Array.isArray(res.funnels)) {
+          setFunnelsList(res.funnels);
         }
       });
     }
@@ -785,6 +787,79 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         </div>
       </div>
 
+      {/* Sticky Global Filter Bar */}
+      <div className={`sticky top-0 z-40 backdrop-blur-md border p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 mb-6 shadow-xl ${isLight ? 'bg-white/80 border-neutral-250' : 'bg-[#0c0c0f]/80 border-white/5'}`}>
+        <div className="flex items-center gap-3">
+          <span className={`text-[10px] font-bold uppercase tracking-widest ${textMutedClass}`}>Валюта:</span>
+          <div className="flex bg-white/5 p-0.5 rounded-xl border border-white/5 shrink-0">
+            <button
+              onClick={() => setGlobalCurrency("UAH")}
+              className={`px-3 py-1 text-[10px] font-black rounded-lg transition-all cursor-pointer ${
+                globalCurrency === "UAH" ? "bg-emerald-500 text-black shadow-sm" : "text-white/40 hover:text-white"
+              }`}
+            >
+              ₴ UAH
+            </button>
+            <button
+              onClick={() => setGlobalCurrency("USD")}
+              className={`px-3 py-1 text-[10px] font-black rounded-lg transition-all cursor-pointer ${
+                globalCurrency === "USD" ? "bg-white text-black shadow-sm" : "text-white/40 hover:text-white"
+              }`}
+            >
+              $ USD
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-3">
+            <span className={`text-[10px] font-bold uppercase tracking-widest ${textMutedClass}`}>Період:</span>
+            <div className="flex bg-white/5 p-0.5 rounded-xl border border-white/5 shrink-0">
+              {[
+                { key: "all", label: "Все время" },
+                { key: "30d", label: "30 днів" },
+                { key: "7d", label: "7 днів" },
+                { key: "1d", label: "Сьогодні" }
+              ].map((preset) => (
+                <button
+                  key={preset.key}
+                  onClick={() => applyPreset(preset.key as any)}
+                  className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                    dateRangePreset === preset.key
+                      ? "bg-white/10 text-white shadow-sm"
+                      : "text-white/40 hover:text-white"
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs">
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                setDateRangePreset("custom");
+              }}
+              className="bg-white/5 border border-white/10 rounded-xl px-2.5 py-1 text-white focus:outline-none focus:border-emerald-500 text-[10px] cursor-pointer"
+            />
+            <span className="text-white/30">—</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => {
+                setEndDate(e.target.value);
+                setDateRangePreset("custom");
+              }}
+              className="bg-white/5 border border-white/10 rounded-xl px-2.5 py-1 text-white focus:outline-none focus:border-emerald-500 text-[10px] cursor-pointer"
+            />
+          </div>
+        </div>
+      </div>
+
       {/* Tabs navigation panel */}
       <div className="flex gap-2 overflow-x-auto pb-4 mb-6 border-b border-white/5 custom-scrollbar">
         {/* Management Center (Supermen) */}
@@ -1010,6 +1085,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                       accounts={financeData.accounts}
                       pnl={financeData.pnl}
                       isLight={isLight}
+                      userRole={role}
+                      projectId={activeProject.id}
+                      onRefresh={fetchFinanceData}
+                      categories={financeData.categories}
+                      project={financeData.project}
+                      globalCurrency={globalCurrency}
                     />
                   </div>
 
@@ -1030,6 +1111,15 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
               )
             )}
           </div>
+        )}
+
+        {activeTab === "finance_expert" && viewType === "single" && activeProject && (
+          <FinanceExpertTab
+            projectId={activeProject.id}
+            projectRevenue={dashboardData.totalRevenueUAH}
+            projectSpend={dashboardData.totalSpendUAH}
+            isLight={isLight}
+          />
         )}
 
         {activeTab === "traffic" && viewType === "single" && (

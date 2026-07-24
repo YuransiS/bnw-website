@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useState, useTransition, useEffect } from "react";
-import { createUserAction, editUserAction, deleteUserAction, toggleProjectActiveAction } from "./actions";
+import { createUserAction, editUserAction, deleteUserAction, toggleProjectActiveAction, createCellAction, updateCellAction, deleteCellAction } from "./actions";
 import { updateFeedbackStatusAction } from "../../actions";
-import { UserPlus, Trash2, Shield, User, Loader2, Edit3, X, Save, CheckSquare, Square, Check, Briefcase } from "lucide-react";
+import { UserPlus, Trash2, Shield, User, Loader2, Edit3, X, Save, CheckSquare, Square, Check, Briefcase, Layers } from "lucide-react";
 import { useTheme } from "../../ThemeProvider";
 
 interface Profile {
@@ -84,6 +84,14 @@ export default function SettingsForm({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const [newCellName, setNewCellName] = useState("");
+  const [newCellLeader, setNewCellLeader] = useState("");
+  const [editingCellId, setEditingCellId] = useState<string | null>(null);
+  const [editingCellName, setEditingCellName] = useState("");
+  const [editingCellLeader, setEditingCellLeader] = useState("");
+  const [cellError, setCellError] = useState("");
+  const [cellSuccess, setCellSuccess] = useState("");
 
   // Determine if the current user is yura3zaxar
   const currentUser = profiles.find((p) => p.id === currentUserId);
@@ -249,6 +257,67 @@ export default function SettingsForm({
     });
   };
 
+  const handleCreateCell = (e: React.FormEvent) => {
+    e.preventDefault();
+    setCellError("");
+    setCellSuccess("");
+    const cleanName = newCellName.trim();
+    if (!cleanName) {
+      setCellError("Назва осередку не може бути порожньою.");
+      return;
+    }
+
+    startTransition(async () => {
+      const res = await createCellAction(cleanName, newCellLeader || null);
+      if (res.error) {
+        setCellError(res.error);
+      } else {
+        setCellSuccess(res.message || "Осередок створено!");
+        setNewCellName("");
+        setNewCellLeader("");
+      }
+    });
+  };
+
+  const handleUpdateCell = (e: React.FormEvent) => {
+    e.preventDefault();
+    setCellError("");
+    setCellSuccess("");
+    if (!editingCellId) return;
+    const cleanName = editingCellName.trim();
+    if (!cleanName) {
+      setCellError("Назва осередку не може бути порожньою.");
+      return;
+    }
+
+    startTransition(async () => {
+      const res = await updateCellAction(editingCellId, cleanName, editingCellLeader || null);
+      if (res.error) {
+        setCellError(res.error);
+      } else {
+        setCellSuccess(res.message || "Осередок оновлено!");
+        setEditingCellId(null);
+        setEditingCellName("");
+        setEditingCellLeader("");
+      }
+    });
+  };
+
+  const handleDeleteCell = (cellId: string) => {
+    if (!confirm("Ви впевнені, що хочете видалити цей осередок?")) return;
+    setCellError("");
+    setCellSuccess("");
+
+    startTransition(async () => {
+      const res = await deleteCellAction(cellId);
+      if (res.error) {
+        setCellError(res.error);
+      } else {
+        setCellSuccess(res.message || "Осередок видалено!");
+      }
+    });
+  };
+
   const getRoleLabel = (roleKey: string) => {
     switch (roleKey) {
       case "admin":
@@ -303,6 +372,12 @@ export default function SettingsForm({
       default:
         return "bg-neutral-500/10 text-neutral-400 border border-neutral-500/20";
     }
+  };
+
+  const getCellLeaderEmail = (leaderId?: string | null) => {
+    if (!leaderId) return "Не призначено";
+    const leader = profiles.find(p => p.id === leaderId);
+    return leader ? leader.full_name || leader.email : "Невідомий";
   };
 
   return (
@@ -640,6 +715,160 @@ export default function SettingsForm({
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        {/* Cell Management Section */}
+        <div className={`lg:col-span-3 p-6 rounded-2xl space-y-6 ${cardClass}`}>
+          <div className="flex items-center justify-between border-b border-white/5 pb-4">
+            <h2 className={`text-lg font-black uppercase tracking-tight flex items-center gap-2 ${isLight ? "text-neutral-900" : "text-white"}`}>
+              <Layers className="w-5 h-5 text-emerald-500" />
+              Керування осередками (Ячейками)
+            </h2>
+            <span className="text-xs bg-white/5 px-2.5 py-1 rounded-full text-white/60">
+              Всього: {cells.length}
+            </span>
+          </div>
+
+          {cellError && (
+            <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-semibold leading-relaxed animate-in fade-in">
+              {cellError}
+            </div>
+          )}
+
+          {cellSuccess && (
+            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold leading-relaxed animate-in fade-in">
+              {cellSuccess}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {/* Left Col: Cells list */}
+            <div className="md:col-span-2 space-y-3">
+              <p className={`text-xs font-bold uppercase tracking-wider ${textMutedClass}`}>
+                Список осередків холдингу
+              </p>
+              
+              <div className="space-y-3">
+                {cells.length === 0 ? (
+                  <p className="text-xs text-white/30 italic py-4 pl-1">Немає осередків в системі. Створіть перший праворуч.</p>
+                ) : (
+                  cells.map((cell) => {
+                    const isCellEditing = editingCellId === cell.id;
+                    const leaderText = getCellLeaderEmail(cell.cell_leader_id);
+                    return (
+                      <div
+                        key={cell.id}
+                        className={`p-4 rounded-xl border flex items-center justify-between transition-all ${
+                          isCellEditing
+                            ? "bg-indigo-500/5 border-indigo-500/30"
+                            : isLight
+                            ? "bg-neutral-50/50 border-neutral-200"
+                            : "bg-white/[0.01] border-white/5 hover:bg-white/[0.02]"
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <p className={`font-extrabold text-sm ${isLight ? "text-neutral-900" : "text-white"}`}>
+                            {cell.name}
+                          </p>
+                          <p className={`text-[10px] font-semibold uppercase mt-0.5 ${textMutedClass}`}>
+                            Керівник: <span className="text-emerald-450 font-bold">{leaderText}</span>
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setEditingCellId(cell.id);
+                              setEditingCellName(cell.name);
+                              setEditingCellLeader(cell.cell_leader_id || "");
+                              setCellError("");
+                              setCellSuccess("");
+                            }}
+                            className="p-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 rounded-lg border border-indigo-500/15 cursor-pointer transition-all inline-flex items-center"
+                            title="Редагувати осередок"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCell(cell.id)}
+                            className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg border border-red-500/15 cursor-pointer transition-all inline-flex items-center"
+                            title="Видалити осередок"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* Right Col: Add/Edit Cell form */}
+            <div className={`p-5 rounded-xl border ${isLight ? "bg-neutral-50 border-neutral-200" : "bg-white/[0.01] border-white/5"}`}>
+              <h3 className={`text-xs font-black uppercase tracking-widest mb-4 flex items-center gap-1.5 ${isLight ? "text-neutral-900" : "text-white"}`}>
+                {editingCellId ? "Редагувати осередок" : "Створити новий осередок"}
+              </h3>
+              
+              <form onSubmit={editingCellId ? handleUpdateCell : handleCreateCell} className="space-y-4">
+                <div>
+                  <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${textMutedClass}`}>
+                    Назва осередку
+                  </label>
+                  <input
+                    type="text"
+                    value={editingCellId ? editingCellName : newCellName}
+                    onChange={(e) => editingCellId ? setEditingCellName(e.target.value) : setNewCellName(e.target.value)}
+                    placeholder="Наприклад: Ячейка Дмитра"
+                    className="w-full px-3.5 py-2.5 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-emerald-500 text-xs font-bold text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${textMutedClass}`}>
+                    Керівник осередку
+                  </label>
+                  <select
+                    value={editingCellId ? editingCellLeader : newCellLeader}
+                    onChange={(e) => editingCellId ? setEditingCellLeader(e.target.value) : setNewCellLeader(e.target.value)}
+                    className="w-full pl-3 pr-8 py-2.5 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-emerald-500 text-xs font-bold text-white cursor-pointer"
+                  >
+                    <option value="" className="bg-[#0C0C0F] text-white/50">Не призначено</option>
+                    {profiles
+                      .filter(p => p.role === "cell_leader")
+                      .map((p) => (
+                        <option key={p.id} value={p.id} className="bg-[#0C0C0F] text-white">
+                          {p.full_name || p.email}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="submit"
+                    className="flex-grow py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold rounded-lg cursor-pointer transition-all shadow-md"
+                  >
+                    {editingCellId ? "Зберегти" : "Створити"}
+                  </button>
+                  
+                  {editingCellId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingCellId(null);
+                        setEditingCellName("");
+                        setEditingCellLeader("");
+                      }}
+                      className="py-2.5 px-3 bg-white/5 hover:bg-white/10 text-white text-xs font-bold rounded-lg cursor-pointer transition-all border border-white/5"
+                    >
+                      Скасувати
+                    </button>
+                  )}
+                </div>
+              </form>
+            </div>
           </div>
         </div>
 

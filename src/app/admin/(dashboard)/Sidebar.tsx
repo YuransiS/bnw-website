@@ -26,7 +26,7 @@ import {
   Lightbulb,
   Check
 } from "lucide-react";
-import { signOutAction, submitCrmFeedbackAction, impersonateRoleAction, getCellsAction } from "../actions";
+import { signOutAction, submitCrmFeedbackAction, getCellsAction } from "../actions";
 import { useTheme } from "../ThemeProvider";
 
 interface Project {
@@ -44,6 +44,8 @@ interface SidebarProps {
   fullName: string;
   isActualDev?: boolean;
   actualRole?: string;
+  profiles: any[];
+  profileProjects: any[];
 }
 
 // Deterministic premium icon assignment based on project attributes
@@ -64,7 +66,9 @@ export default function Sidebar({
   userEmail,
   fullName,
   isActualDev,
-  actualRole
+  actualRole,
+  profiles,
+  profileProjects
 }: SidebarProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -72,21 +76,7 @@ export default function Sidebar({
   const [isPending, startTransition] = useTransition();
   const { theme } = useTheme();
 
-  const [isImpersonating, setIsImpersonating] = useState(false);
 
-  const handleImpersonate = async (role: string) => {
-    setIsImpersonating(true);
-    try {
-      const targetRole = role === "reset" ? null : role;
-      const res = await impersonateRoleAction(targetRole);
-      if (res.error) throw new Error(res.error);
-      router.refresh();
-    } catch (err: any) {
-      alert("Помилка зміни ролі: " + err.message);
-    } finally {
-      setIsImpersonating(false);
-    }
-  };
 
   const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault();
@@ -102,6 +92,7 @@ export default function Sidebar({
   // Resolve active states based on URL pathname
   let activeProjectId = "";
   let activeCellId = "";
+  let activeProducerId = "";
   let activeAll = false;
   let activeMain = false;
 
@@ -113,6 +104,8 @@ export default function Sidebar({
     }
   } else if (pathname.includes("/admin/cell/")) {
     activeCellId = pathname.split("/cell/")[1]?.split("/")[0] || "";
+  } else if (pathname.includes("/admin/producer/")) {
+    activeProducerId = pathname.split("/producer/")[1]?.split("/")[0] || "";
   } else if (pathname === "/admin/founder") {
     activeAll = true;
   }
@@ -129,35 +122,106 @@ export default function Sidebar({
     }
   }, [userRole]);
 
-  // Group allowed projects by cell_id for supervisor view
-  const groupedProjects = React.useMemo(() => {
-    const list = allowedProjects.filter(p => p.slug !== "bw_main");
-    if (!["admin", "superman", "founder", "developer"].includes(userRole)) {
-      return { unassigned: list, groups: {} as Record<string, Project[]> };
+  // Retrieve current user ID from profiles mapping
+  const currentUserId = React.useMemo(() => {
+    const matched = profiles.find(p => p.email?.toLowerCase() === userEmail.toLowerCase());
+    return matched?.id || "";
+  }, [profiles, userEmail]);
+
+  // Hierarchical grouping: Cell -> Producer -> Project
+  const hierarchicalCells = React.useMemo(() => {
+    const activeProjects = allowedProjects.filter(p => p.slug !== "bw_main");
+
+    // 1. Filter cells based on role
+    let visibleCells = cells;
+    if (userRole === "cell_leader") {
+      visibleCells = cells.filter(c => c.cell_leader_id === currentUserId);
+    } else if (userRole === "producer") {
+      const producerCellIds = Array.from(new Set(activeProjects.map(p => p.cell_id).filter(Boolean)));
+      visibleCells = cells.filter(c => producerCellIds.includes(c.id));
     }
-    
-    const groups: Record<string, Project[]> = {};
-    const unassigned: Project[] = [];
-    
-    list.forEach(proj => {
-      if (proj.cell_id) {
-        if (!groups[proj.cell_id]) {
-          groups[proj.cell_id] = [];
+
+    return visibleCells.map(cell => {
+      const cellProjects = activeProjects.filter(p => p.cell_id === cell.id);
+      const cellProjectIds = cellProjects.map(p => p.id);
+
+      let cellProducers: any[] = [];
+
+      if (userRole === "producer") {
+        const currentUserProfile = profiles.find(p => p.id === currentUserId);
+        if (currentUserProfile) {
+          cellProducers = [{
+            ...currentUserProfile,
+            projects: cellProjects
+          }];
         }
-        groups[proj.cell_id].push(proj);
       } else {
-        unassigned.push(proj);
+        const cellProducerMappings = profileProjects.filter(pp => cellProjectIds.includes(pp.project_id));
+        const producerIdsInCell = Array.from(new Set(cellProducerMappings.map(pp => pp.profile_id)));
+        
+        cellProducers = profiles
+          .filter(p => producerIdsInCell.includes(p.id) && p.role === "producer")
+          .map(producer => {
+            const producerProjIds = profileProjects
+              .filter(pp => pp.profile_id === producer.id)
+              .map(pp => pp.project_id);
+            const producerProjectsInCell = cellProjects.filter(p => producerProjIds.includes(p.id));
+
+            return {
+              ...producer,
+              projects: producerProjectsInCell
+            };
+          });
+
+        const assignedProjectIds = cellProducerMappings.map(pp => pp.project_id);
+        const unassignedProjects = cellProjects.filter(p => !assignedProjectIds.includes(p.id));
+        if (unassignedProjects.length > 0) {
+          cellProducers.push({
+            id: "unassigned",
+            email: "unassigned",
+            role: "producer",
+            full_name: "Без продюсера",
+            projects: unassignedProjects
+          });
+        }
       }
+
+      return {
+        ...cell,
+        producers: cellProducers,
+        allProjects: cellProjects
+      };
     });
-    
-    return { groups, unassigned };
-  }, [allowedProjects, userRole]);
+  }, [cells, allowedProjects, profiles, profileProjects, userRole, currentUserId]);
 
   const isSupervisor = ["admin", "superman", "founder", "developer"].includes(userRole);
 
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+
+  const [expandedCellIds, setExpandedCellIds] = useState<string[]>([]);
+  const [expandedProducerIds, setExpandedProducerIds] = useState<string[]>([]);
+
+  const toggleCellExpand = (cellId: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    setExpandedCellIds(prev =>
+      prev.includes(cellId) ? prev.filter(id => id !== cellId) : [...prev, cellId]
+    );
+  };
+
+  const toggleProducerExpand = (producerId: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    setExpandedProducerIds(prev =>
+      prev.includes(producerId) ? prev.filter(id => id !== producerId) : [...prev, producerId]
+    );
+  };
 
   // Feedback modal states
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
@@ -379,139 +443,152 @@ export default function Sidebar({
                   </div>
                 )}
 
-                {/* Individual dynamic projects - grouped by Cell for supervisors */}
-                {isSupervisor && cells.length > 0 ? (
-                  <div className="space-y-4 pt-1">
-                    {cells.map((cell) => {
-                      const cellProjs = groupedProjects.groups[cell.id] || [];
-                      if (cellProjs.length === 0) return null;
+                {/* Dynamic Cell -> Producer -> Project Tree */}
+                {!isCollapsed ? (
+                  <div className="space-y-4 pt-1 select-none">
+                    {hierarchicalCells.map((cell) => {
+                      const isCellExpanded = expandedCellIds.includes(cell.id);
                       const isCellCurrent = activeCellId === cell.id;
 
                       return (
                         <div key={cell.id} className="space-y-1">
-                          {!isCollapsed && (
+                          {/* Cell Header */}
+                          <div className="flex items-center justify-between group px-1">
                             <Link
                               href={`/admin/cell/${cell.id}`}
                               onClick={(e) => handleLinkClick(e, `/admin/cell/${cell.id}`)}
-                              className={`text-[9px] font-extrabold uppercase tracking-widest pl-2 border-l border-emerald-500/20 mb-1 block hover:text-emerald-400 transition-colors ${
-                                isCellCurrent ? "text-emerald-400 font-black" : isLight ? "text-neutral-400" : "text-white/40"
+                              className={`text-[10px] font-extrabold uppercase tracking-widest hover:text-emerald-400 transition-colors truncate flex-grow ${
+                                isCellCurrent ? "text-emerald-400 font-black" : isLight ? "text-neutral-500" : "text-white/40"
                               }`}
                             >
-                              {cell.name}
+                              📁 {cell.name}
                             </Link>
-                          )}
-                          <div className="space-y-1 pl-1">
-                            {cellProjs.map((proj, idx) => {
-                              const ProjIcon = getProjectIcon(proj.slug, idx);
-                              const isCurrent = activeProjectId === proj.id;
-                              return (
-                                <div key={proj.id} className="relative group">
-                                  <Link
-                                    href={`/admin/project/${proj.id}`}
-                                    onClick={(e) => handleLinkClick(e, `/admin/project/${proj.id}`)}
-                                    className={`flex items-center gap-3 px-4 py-2 rounded-xl border transition-all text-xs font-black cursor-pointer ${
-                                      isCurrent
-                                        ? isLight
-                                          ? "bg-neutral-900 text-white border-neutral-900 font-extrabold shadow-md"
-                                          : "bg-white text-black shadow-lg border-white font-extrabold"
-                                        : isLight
-                                        ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-neutral-700 hover:text-neutral-900"
-                                        : "bg-white/5 hover:bg-white/10 border-white/5 text-white/70 hover:text-white"
-                                    } ${isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : ""}`}
-                                  >
-                                    <ProjIcon className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                                    {!isCollapsed && <span className="truncate">{proj.name}</span>}
-                                  </Link>
-                                  {isCollapsed && (
-                                    <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl ${
-                                      isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
-                                    }`}>
-                                      {proj.name} ({cell.name})
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
+                            
+                            {cell.producers.length > 0 && (
+                              <button
+                                onClick={(e) => toggleCellExpand(cell.id, e)}
+                                className="p-1 text-white/30 hover:text-emerald-400 rounded transition-colors cursor-pointer"
+                              >
+                                <ChevronRight className={`w-3.5 h-3.5 transform transition-transform duration-200 ${
+                                  isCellExpanded ? "rotate-90" : ""
+                                }`} />
+                              </button>
+                            )}
                           </div>
+
+                          {/* Cell Body: Producers list */}
+                          {isCellExpanded && cell.producers.length > 0 && (
+                            <div className="space-y-2.5 pl-3 border-l border-white/5 mt-1 ml-1.5 animate-in slide-in-from-top-1 duration-200">
+                              {cell.producers.map((prod: any) => {
+                                const isProdExpanded = expandedProducerIds.includes(prod.id);
+                                const isUnassigned = prod.id === "unassigned";
+                                const prodName = prod.full_name || prod.email.split("@")[0];
+
+                                return (
+                                  <div key={prod.id} className="space-y-1.5">
+                                    {/* Producer Header */}
+                                    <div className="flex items-center justify-between group px-1">
+                                      {isUnassigned ? (
+                                        <span className="text-[11px] font-bold text-white/30 truncate flex-grow cursor-default">
+                                          {prodName}
+                                        </span>
+                                      ) : (
+                                        <Link
+                                          href={`/admin/producer/${prod.id}`}
+                                          onClick={(e) => handleLinkClick(e, `/admin/producer/${prod.id}`)}
+                                          className={`text-[11px] font-bold transition-colors truncate flex-grow ${
+                                            prod.id === activeProducerId
+                                              ? "text-emerald-400 font-extrabold"
+                                              : "text-white/60 hover:text-emerald-400"
+                                          }`}
+                                        >
+                                          👤 {prodName}
+                                        </Link>
+                                      )}
+
+                                      {prod.projects.length > 0 && (
+                                        <button
+                                          onClick={(e) => toggleProducerExpand(prod.id, e)}
+                                          className="p-0.5 text-white/20 hover:text-emerald-400 rounded transition-colors cursor-pointer"
+                                        >
+                                          <ChevronRight className={`w-3 h-3 transform transition-transform duration-200 ${
+                                            isProdExpanded ? "rotate-90" : ""
+                                          }`} />
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    {/* Producer Projects list */}
+                                    {isProdExpanded && prod.projects.length > 0 && (
+                                      <div className="space-y-1 pl-3.5 border-l border-white/5 mt-1 ml-1 animate-in slide-in-from-top-1 duration-150">
+                                        {prod.projects.map((proj: any, idx: number) => {
+                                          const ProjIcon = getProjectIcon(proj.slug, idx);
+                                          const isCurrent = activeProjectId === proj.id;
+
+                                          return (
+                                            <div key={proj.id} className="relative">
+                                              <Link
+                                                href={`/admin/project/${proj.id}`}
+                                                onClick={(e) => handleLinkClick(e, `/admin/project/${proj.id}`)}
+                                                className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg border transition-all text-[11px] font-bold cursor-pointer ${
+                                                  isCurrent
+                                                    ? isLight
+                                                      ? "bg-neutral-900 text-white border-neutral-900 font-extrabold shadow-sm"
+                                                      : "bg-white text-black shadow-md border-white font-extrabold"
+                                                    : isLight
+                                                    ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-neutral-600 hover:text-neutral-950"
+                                                    : "bg-white/5 hover:bg-white/10 border-white/5 text-white/70 hover:text-white"
+                                                }`}
+                                              >
+                                                <ProjIcon className="w-3 h-3 text-emerald-400 shrink-0" />
+                                                <span className="truncate">{proj.name}</span>
+                                              </Link>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
-
-                    {groupedProjects.unassigned.length > 0 && (
-                      <div className="space-y-1">
-                        {!isCollapsed && (
-                          <p className={`text-[9px] font-extrabold uppercase tracking-widest pl-2 border-l border-white/10 mb-1 ${isLight ? "text-neutral-400" : "text-white/40"}`}>
-                            Інші проекти
-                          </p>
-                        )}
-                        <div className="space-y-1 pl-1">
-                          {groupedProjects.unassigned.map((proj, idx) => {
-                            const ProjIcon = getProjectIcon(proj.slug, idx + 10);
-                            const isCurrent = activeProjectId === proj.id;
-                            return (
-                              <div key={proj.id} className="relative group">
-                                <Link
-                                  href={`/admin/project/${proj.id}`}
-                                  onClick={(e) => handleLinkClick(e, `/admin/project/${proj.id}`)}
-                                  className={`flex items-center gap-3 px-4 py-2 rounded-xl border transition-all text-xs font-black cursor-pointer ${
-                                    isCurrent
-                                      ? isLight
-                                        ? "bg-neutral-900 text-white border-neutral-900 font-extrabold shadow-md"
-                                        : "bg-white text-black shadow-lg border-white font-extrabold"
-                                      : isLight
-                                      ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-neutral-700 hover:text-neutral-900"
-                                      : "bg-white/5 hover:bg-white/10 border-white/5 text-white/70 hover:text-white"
-                                  } ${isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : ""}`}
-                                >
-                                  <ProjIcon className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                                  {!isCollapsed && <span className="truncate">{proj.name}</span>}
-                                </Link>
-                                {isCollapsed && (
-                                  <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl ${
-                                    isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
-                                  }`}>
-                                    {proj.name}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 ) : (
-                  allowedProjects.filter(p => p.slug !== "bw_main").map((proj, idx) => {
-                    const ProjIcon = getProjectIcon(proj.slug, idx);
-                    const isCurrent = activeProjectId === proj.id;
-                    return (
-                      <div key={proj.id} className="relative group">
-                        <Link
-                          href={`/admin/project/${proj.id}`}
-                          onClick={(e) => handleLinkClick(e, `/admin/project/${proj.id}`)}
-                          className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border transition-all text-xs font-black cursor-pointer ${
-                            isCurrent
-                              ? isLight
-                                ? "bg-neutral-900 text-white border-neutral-900 font-extrabold shadow-md"
-                                : "bg-white text-black shadow-lg border-white font-extrabold"
-                              : isLight
-                              ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-neutral-700 hover:text-neutral-900"
-                              : "bg-white/5 hover:bg-white/10 border-white/5 text-white/70 hover:text-white"
-                          } ${isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : ""}`}
-                        >
-                          <ProjIcon className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                          {!isCollapsed && <span className="truncate">{proj.name}</span>}
-                        </Link>
-                        {isCollapsed && (
+                  /* Collapsed View: Flat icons for 1-click navigation */
+                  <div className="space-y-2">
+                    {allowedProjects.filter(p => p.slug !== "bw_main").map((proj, idx) => {
+                      const ProjIcon = getProjectIcon(proj.slug, idx);
+                      const isCurrent = activeProjectId === proj.id;
+                      return (
+                        <div key={proj.id} className="relative group flex justify-center">
+                          <Link
+                            href={`/admin/project/${proj.id}`}
+                            onClick={(e) => handleLinkClick(e, `/admin/project/${proj.id}`)}
+                            className={`flex items-center justify-center w-10 h-10 rounded-xl border transition-all cursor-pointer ${
+                              isCurrent
+                                ? isLight
+                                  ? "bg-neutral-900 text-white border-neutral-900 shadow-md"
+                                  : "bg-white text-black shadow-lg border-white"
+                                : isLight
+                                ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-neutral-700"
+                                : "bg-white/5 hover:bg-white/10 border-white/5 text-white/70 hover:text-white"
+                            }`}
+                          >
+                            <ProjIcon className="w-4 h-4 text-emerald-400 shrink-0" />
+                          </Link>
                           <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl ${
                             isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
                           }`}>
                             {proj.name}
                           </div>
-                        )}
-                      </div>
-                    );
-                  })
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             </div>
@@ -602,55 +679,6 @@ export default function Sidebar({
             </div>
           )}
 
-          {/* Developer Impersonation Controls */}
-          {isActualDev && (
-            <div className="space-y-1.5 p-1 border border-dashed border-emerald-500/20 rounded-xl bg-emerald-500/[0.02] mx-1.5">
-              {!isCollapsed ? (
-                <>
-                  <p className="text-[9px] font-black uppercase tracking-wider text-emerald-400 px-2 flex items-center gap-1">
-                    <Sparkles className="w-2.5 h-2.5 animate-pulse" />
-                    Режим розробника (Mock)
-                  </p>
-                  <div className="relative">
-                    <select
-                      value={userRole}
-                      onChange={(e) => handleImpersonate(e.target.value)}
-                      disabled={isImpersonating}
-                      className="w-full appearance-none pl-3.5 pr-8 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-emerald-500 text-[11px] font-bold text-white cursor-pointer"
-                    >
-                      <option value="reset" className="bg-[#0C0C0F] text-emerald-450 font-black">Справжня роль ({getRoleLabel(actualRole || "founder")})</option>
-                      <option value="founder" className="bg-[#0C0C0F] text-white">Фаундер</option>
-                      <option value="cell_leader" className="bg-[#0C0C0F] text-white">Керівник ячейки</option>
-                      <option value="producer" className="bg-[#0C0C0F] text-white">Продюсер</option>
-                      <option value="developer" className="bg-[#0C0C0F] text-white">Розробник</option>
-                      <option value="pending" className="bg-[#0C0C0F] text-white">Очікує схвалення (Pending)</option>
-                    </select>
-                    <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none text-white/40 rotate-90" />
-                  </div>
-                </>
-              ) : (
-                <div className="relative group flex justify-center">
-                  <button
-                    disabled={isImpersonating}
-                    className="w-10 h-10 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/15 flex items-center justify-center cursor-pointer transition-all"
-                  >
-                    <Sparkles className={`w-4 h-4 ${isImpersonating ? "animate-spin" : ""}`} />
-                  </button>
-                  <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-[10px] font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 shadow-2xl flex flex-col space-y-1.5 ${
-                    isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
-                  }`}>
-                    <span className="font-extrabold uppercase tracking-wider text-emerald-400">Режим розробника</span>
-                    <button onClick={() => handleImpersonate("reset")} className="text-left hover:underline text-[9px] cursor-pointer">Справжня роль ({getRoleLabel(actualRole || "founder")})</button>
-                    <button onClick={() => handleImpersonate("founder")} className="text-left hover:underline text-[9px] cursor-pointer">Фаундер</button>
-                    <button onClick={() => handleImpersonate("cell_leader")} className="text-left hover:underline text-[9px] cursor-pointer">Керівник ячейки</button>
-                    <button onClick={() => handleImpersonate("producer")} className="text-left hover:underline text-[9px] cursor-pointer">Продюсер</button>
-                    <button onClick={() => handleImpersonate("developer")} className="text-left hover:underline text-[9px] cursor-pointer">Розробник</button>
-                    <button onClick={() => handleImpersonate("pending")} className="text-left hover:underline text-[9px] cursor-pointer">Pending</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
 
           {/* User profile card details */}
           <div className={`px-1.5 ${isCollapsed ? "flex flex-col items-center text-center space-y-2" : ""}`}>

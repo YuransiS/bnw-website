@@ -129,32 +129,6 @@ export default function PendingApprovalPage() {
         </div>
 
         <div className="pt-2 space-y-2">
-          {typeof document !== "undefined" && document.cookie.includes("crm_impersonated_role") && (
-            <button
-              onClick={async () => {
-                startTransition(async () => {
-                  try {
-                    const { impersonateRoleAction } = await import("../actions");
-                    const res = await impersonateRoleAction(null);
-                    if (res.error) throw new Error(res.error);
-                    window.location.href = "/admin";
-                  } catch (err: any) {
-                    alert("Помилка скидання ролі: " + err.message);
-                  }
-                });
-              }}
-              disabled={isPending}
-              className="w-full flex items-center justify-center gap-2 px-5 py-3.5 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-450 font-bold text-sm border border-emerald-500/15 cursor-pointer transition-all hover:scale-[1.01] active:scale-95 duration-200 disabled:opacity-50"
-            >
-              {isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <ShieldAlert className="w-4 h-4" />
-              )}
-              Скинути режим перегляду (До Superman)
-            </button>
-          )}
-
           <button
             onClick={handleSignOut}
             disabled={isPending}

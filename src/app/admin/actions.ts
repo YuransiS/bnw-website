@@ -1363,47 +1363,6 @@ export async function updateOrderCurrencyAction(
   }
 }
 
-// Server action to override current role for debugging
-export async function impersonateRoleAction(role: string | null) {
-  try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("Unauthorized");
-
-    const devEmails = ["yura3zaxar@outlook.com", "yura3zaxar@gmail.com"];
-    const isActualDev = devEmails.includes(user.email?.toLowerCase() || "");
-
-    let hasAccess = isActualDev;
-
-    if (!hasAccess) {
-      const adminSupabase = createAdminClient();
-      const { data: profile } = await adminSupabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-      if (profile?.role === "admin" || profile?.role === "superman") {
-        hasAccess = true;
-      }
-    }
-
-    if (!hasAccess) {
-      throw new Error("403 Forbidden");
-    }
-
-    const cookieStore = await cookies();
-    if (!role) {
-      cookieStore.delete("crm_impersonated_role");
-    } else {
-      cookieStore.set("crm_impersonated_role", role, { maxAge: 60 * 60 * 24 });
-    }
-
-    revalidatePath("/admin");
-    return { success: true };
-  } catch (err: any) {
-    return { error: err.message || "Failed to override role" };
-  }
-}
 
 export async function traceVisitorUuidAction(phoneOrUuid: string, projectId: string) {
   try {
@@ -1976,14 +1935,26 @@ export async function getFunnelsAction(projectId: string) {
   try {
     await checkProjectAccess(projectId);
     const adminSupabase = createAdminClient();
-    const { data, error } = await adminSupabase
+    const { data: funnels, error: funnelsErr } = await adminSupabase
       .from("funnels")
       .select("*")
       .eq("project_id", projectId)
       .order("created_at", { ascending: false });
 
-    if (error) throw error;
-    return data || [];
+    if (funnelsErr) throw funnelsErr;
+
+    const { data: transactions, error: txErr } = await adminSupabase
+      .from("financial_transactions")
+      .select("*")
+      .eq("project_id", projectId)
+      .not("funnel_id", "is", null);
+
+    if (txErr) throw txErr;
+
+    return {
+      funnels: funnels || [],
+      transactions: transactions || []
+    };
   } catch (err: any) {
     return { error: err.message || "Failed to fetch funnels" };
   }

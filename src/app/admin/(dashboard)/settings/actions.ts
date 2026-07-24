@@ -312,3 +312,95 @@ export async function toggleProjectActiveAction(projectId: string, isActive: boo
     return { error: err.message || "Невідома помилка на сервері." };
   }
 }
+
+// 7. Create a new cell
+export async function createCellAction(name: string, cellLeaderId?: string | null) {
+  try {
+    await verifyAdminAccess();
+
+    const supabaseAdmin = createAdminClient();
+    const { data, error } = await supabaseAdmin
+      .from("cells")
+      .insert({
+        name,
+        cell_leader_id: cellLeaderId || null
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    revalidatePath("/admin/settings");
+    revalidatePath("/admin");
+    return { success: true, message: "Осередок успішно створено!", cell: data };
+  } catch (err: any) {
+    return { error: err.message || "Невідома помилка при створенні осередку." };
+  }
+}
+
+// 8. Update a cell (rename or assign leader)
+export async function updateCellAction(id: string, name: string, cellLeaderId?: string | null) {
+  try {
+    await verifyAdminAccess();
+
+    const supabaseAdmin = createAdminClient();
+    
+    // If setting a leader, reset that leader's other cell bindings first
+    if (cellLeaderId) {
+      await supabaseAdmin
+        .from("cells")
+        .update({ cell_leader_id: null })
+        .eq("cell_leader_id", cellLeaderId);
+    }
+
+    const { error } = await supabaseAdmin
+      .from("cells")
+      .update({
+        name,
+        cell_leader_id: cellLeaderId || null
+      })
+      .eq("id", id);
+
+    if (error) throw error;
+
+    revalidatePath("/admin/settings");
+    revalidatePath("/admin");
+    return { success: true, message: "Осередок успішно оновлено!" };
+  } catch (err: any) {
+    return { error: err.message || "Невідома помилка при оновленні осередку." };
+  }
+}
+
+// 9. Delete a cell (with project integrity checks)
+export async function deleteCellAction(id: string) {
+  try {
+    await verifyAdminAccess();
+
+    const supabaseAdmin = createAdminClient();
+
+    // Check if there are active projects referencing this cell to prevent orphans
+    const { count, error: countErr } = await supabaseAdmin
+      .from("projects")
+      .select("id", { count: "exact", head: true })
+      .eq("cell_id", id);
+
+    if (countErr) throw countErr;
+    if (count && count > 0) {
+      throw new Error("Неможливо видалити осередок, у якому є активні проекти. Спочатку переведіть проекти в інші осередки.");
+    }
+
+    const { error } = await supabaseAdmin
+      .from("cells")
+      .delete()
+      .eq("id", id);
+
+    if (error) throw error;
+
+    revalidatePath("/admin/settings");
+    revalidatePath("/admin");
+    return { success: true, message: "Осередок успішно видалено!" };
+  } catch (err: any) {
+    return { error: err.message || "Невідома помилка при видаленні осередку." };
+  }
+}
+

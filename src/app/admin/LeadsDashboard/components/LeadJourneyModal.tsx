@@ -107,13 +107,16 @@ export default function LeadJourneyModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[999] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
-      <div className="relative w-full max-w-5xl h-[90vh] bg-[#0C0C0F] border border-white/10 rounded-3xl p-6 shadow-2xl flex flex-col space-y-6 animate-in slide-in-from-bottom-4 duration-300">
+    <div className="fixed inset-0 z-[999] bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 flex justify-end">
+      {/* Click outside to close */}
+      <div className="absolute inset-0 cursor-pointer" onClick={onClose} />
+      
+      <div className="relative w-full max-w-xl h-full bg-[#0C0C0F] border-l border-white/10 p-6 shadow-2xl flex flex-col space-y-6 animate-in slide-in-from-right duration-300 z-10 overflow-y-auto">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-2 rounded-xl text-white/40 hover:text-white hover:bg-white/5 cursor-pointer transition-all"
         >
-          <XCircle className="w-5 h-5" />
+          <X className="w-5 h-5" />
         </button>
 
         <div className="border-b border-white/5 pb-4">
@@ -153,11 +156,11 @@ export default function LeadJourneyModal({
         </div>
 
         {/* Redesigned Roadmap Timeline Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-grow overflow-hidden">
+        <div className="grid grid-cols-1 gap-6 flex-grow overflow-hidden">
           {/* Left Column: Timeline list */}
           <div
             className={`overflow-y-auto custom-scrollbar space-y-0 pr-2 pt-2 h-full ${
-              activeModalTab === "journey" ? "flex flex-col flex-grow" : "hidden md:flex md:flex-col"
+              activeModalTab === "journey" ? "flex flex-col flex-grow" : "hidden"
             }`}
           >
             <h4 className="text-[10px] font-black uppercase text-white/40 tracking-widest mb-3">
@@ -427,8 +430,8 @@ export default function LeadJourneyModal({
 
           {/* Right Column: Lead info, Questionnaire, comments editor & manager assignments */}
           <div
-            className={`overflow-y-auto custom-scrollbar pl-2 space-y-6 h-full border-t md:border-t-0 md:border-l border-white/5 pt-4 md:pt-0 md:pl-6 ${
-              activeModalTab === "details" ? "block" : "hidden md:block"
+            className={`overflow-y-auto custom-scrollbar pl-2 space-y-6 h-full pt-4 ${
+              activeModalTab === "details" ? "block" : "hidden"
             }`}
           >
             {/* Core parameters */}

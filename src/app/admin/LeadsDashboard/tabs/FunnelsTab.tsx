@@ -23,17 +23,28 @@ interface Funnel {
 
 export default function FunnelsTab({ projectId, campaignsList, leadsList, isLight }: FunnelsTabProps) {
   const [funnels, setFunnels] = useState<Funnel[]>([]);
+  const [funnelTransactions, setFunnelTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   // Creation Form State
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [wizardStep, setWizardStep] = useState(1);
+  const [funnelType, setFunnelType] = useState("Вебінар");
+  const [selectedStages, setSelectedStages] = useState({
+    bot: true,
+    registration: true,
+    webinar: true,
+    quiz: false,
+    payment: true
+  });
   const [name, setName] = useState("");
   const [startDate, setStartDate] = useState("");
   const [campaignInput, setCampaignInput] = useState("");
   const [landingInput, setLandingInput] = useState("");
   const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [expandedFunnelId, setExpandedFunnelId] = useState<string | null>(null);
 
   // Load Funnels
   const loadFunnels = async () => {
@@ -41,10 +52,12 @@ export default function FunnelsTab({ projectId, campaignsList, leadsList, isLigh
     setError(null);
     try {
       const res = await getFunnelsAction(projectId);
-      if ("error" in res) {
-        setError(res.error);
+      if (res && "error" in res) {
+        setError(res.error as string);
       } else {
-        setFunnels(res as Funnel[]);
+        const data = res as { funnels: Funnel[]; transactions: any[] };
+        setFunnels(data.funnels || []);
+        setFunnelTransactions(data.transactions || []);
       }
     } catch (err: any) {
       setError(err.message || "Failed to load funnels");
@@ -77,11 +90,17 @@ export default function FunnelsTab({ projectId, campaignsList, leadsList, isLigh
         .map((s) => s.trim())
         .filter(Boolean);
 
-      const res = await createFunnelAction(projectId, name, startDate, campaignIds, landingSlugs, description);
+      const metaString = `[Type: ${funnelType}][Stages: ${Object.entries(selectedStages).filter(([_, v]) => v).map(([k]) => k).join(",")}]`;
+      const finalDesc = `${metaString} ${description.trim()}`.trim();
+
+      const res = await createFunnelAction(projectId, name, startDate, campaignIds, landingSlugs, finalDesc);
       if (res.error) {
         alert("Помилка створення воронки: " + res.error);
       } else {
         setShowCreateForm(false);
+        setWizardStep(1);
+        setFunnelType("Вебінар");
+        setSelectedStages({ bot: true, registration: true, webinar: true, quiz: false, payment: true });
         setName("");
         setStartDate("");
         setCampaignInput("");
@@ -133,6 +152,26 @@ export default function FunnelsTab({ projectId, campaignsList, leadsList, isLigh
       }
     });
 
+    // Sum manual transactions bound to this funnel
+    let manualSpendUAH = 0;
+    let manualIncomeUAH = 0;
+
+    funnelTransactions.forEach((tx: any) => {
+      if (tx.funnel_id === funnel.id) {
+        const amt = Number(tx.amount || 0);
+        const isUAH = tx.currency === "UAH";
+        const amtUAH = isUAH ? amt : amt * 44; // Conversion rate to UAH
+        if (tx.type === "expense") {
+          manualSpendUAH += amtUAH;
+        } else {
+          manualIncomeUAH += amtUAH;
+        }
+      }
+    });
+
+    revenue += manualIncomeUAH;
+    spend += manualSpendUAH;
+
     const leadsCount = matchedLeads.length;
     const profit = revenue - spend;
     const roi = spend > 0 ? (profit / spend) * 100 : 0;
@@ -145,7 +184,9 @@ export default function FunnelsTab({ projectId, campaignsList, leadsList, isLigh
       spend,
       profit,
       roi,
-      cr
+      cr,
+      manualSpend: manualSpendUAH,
+      manualIncome: manualIncomeUAH
     };
   };
 
@@ -184,145 +225,307 @@ export default function FunnelsTab({ projectId, campaignsList, leadsList, isLigh
 
       {/* Creation Form Panel */}
       {showCreateForm && (
-        <form onSubmit={handleSubmit} className="bg-neutral-900 border border-white/5 p-6 rounded-2xl space-y-4 max-w-2xl">
-          <h3 className="font-bold text-sm uppercase tracking-wider text-emerald-400">Параметри нової воронки</h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase font-bold text-white/50">Назва воронки *</label>
-              <input
-                type="text"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Марафон Липень 2026"
-                className="w-full pl-3 pr-3 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-xs text-white"
-              />
+        <form onSubmit={handleSubmit} className="bg-neutral-900 border border-white/5 p-6 rounded-2xl space-y-4 max-w-2xl text-xs text-white">
+          <div className="flex justify-between items-center border-b border-white/5 pb-2">
+            <h3 className="font-bold text-sm uppercase tracking-wider text-emerald-400">Створення воронки (Крок {wizardStep} з 4)</h3>
+            <span className="text-[10px] text-white/40">Конструктор B&W UX</span>
+          </div>
+
+          {/* STEP 1: Назва та тип */}
+          {wizardStep === 1 && (
+            <div className="space-y-4 animate-in fade-in duration-200">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-white/50">Назва воронки *</label>
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Марафон Липень 2026"
+                  className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase font-bold text-white/50 block">Тип воронки</label>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                  {["Вебінар", "Автовеб", "VSL", "Діагностика", "Трипваєр"].map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setFunnelType(t)}
+                      className={`py-2 px-1 rounded-lg border font-bold text-center transition-all cursor-pointer ${
+                        funnelType === t
+                          ? "bg-emerald-500/10 border-emerald-500 text-emerald-400"
+                          : "bg-white/5 border-white/5 text-white/50 hover:border-white/10"
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(2)}
+                  disabled={!name.trim()}
+                  className="px-4 py-2 rounded-xl bg-white hover:bg-neutral-100 text-black font-extrabold cursor-pointer disabled:opacity-50"
+                >
+                  Далі
+                </button>
+              </div>
             </div>
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase font-bold text-white/50">Дата старту *</label>
-              <input
-                type="date"
-                required
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full pl-3 pr-3 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-xs text-white"
-              />
+          )}
+
+          {/* STEP 2: Дата старту та Лендінги */}
+          {wizardStep === 2 && (
+            <div className="space-y-4 animate-in fade-in duration-200">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-white/50">Дата старту *</label>
+                <input
+                  type="date"
+                  required
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-white/50">Лендінги / Сторінки (через кому)</label>
+                <input
+                  type="text"
+                  value={landingInput}
+                  onChange={(e) => setLandingInput(e.target.value)}
+                  placeholder="rozbir, marathon_landing, page_vsl"
+                  className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white"
+                />
+                <p className="text-[9px] text-white/30">Сюди потраплять ліди, які зареєструвалися на цих сторінках</p>
+              </div>
+
+              <div className="flex justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(1)}
+                  className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white cursor-pointer"
+                >
+                  Назад
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(3)}
+                  disabled={!startDate}
+                  className="px-4 py-2 rounded-xl bg-white hover:bg-neutral-100 text-black font-extrabold cursor-pointer disabled:opacity-50"
+                >
+                  Далі
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase font-bold text-white/50">Рекламні кампанії (через кому)</label>
-            <input
-              type="text"
-              value={campaignInput}
-              onChange={(e) => setCampaignInput(e.target.value)}
-              placeholder="utm_campaign_1, meta_ads_july, EUR"
-              className="w-full pl-3 pr-3 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-xs text-white"
-            />
-            <p className="text-[9px] text-white/30">Будуть відібрані ліди та витрати, що містять ці фрагменти в назвах кампаній</p>
-          </div>
+          {/* STEP 3: Кампанії трафіку */}
+          {wizardStep === 3 && (
+            <div className="space-y-4 animate-in fade-in duration-200">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-white/50">Рекламні кампанії UTM (через кому)</label>
+                <input
+                  type="text"
+                  value={campaignInput}
+                  onChange={(e) => setCampaignInput(e.target.value)}
+                  placeholder="utm_campaign_1, meta_ads_july, EUR"
+                  className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white"
+                />
+                <p className="text-[9px] text-white/30">Сюди потраплять рекламні витрати, що містять ці мітки в UTM</p>
+              </div>
 
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase font-bold text-white/50">Лендінги / Сторінки (через кому)</label>
-            <input
-              type="text"
-              value={landingInput}
-              onChange={(e) => setLandingInput(e.target.value)}
-              placeholder="rozbir, marathon_landing, page_vsl"
-              className="w-full pl-3 pr-3 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-xs text-white"
-            />
-            <p className="text-[9px] text-white/30">Будуть відібрані ліди з реєстрацією на цих сторінках</p>
-          </div>
+              <div className="flex justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(2)}
+                  className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white cursor-pointer"
+                >
+                  Назад
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(4)}
+                  className="px-4 py-2 rounded-xl bg-white hover:bg-neutral-100 text-black font-extrabold cursor-pointer"
+                >
+                  Далі
+                </button>
+              </div>
+            </div>
+          )}
 
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase font-bold text-white/50">Опис / Нотатки</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Маркетинговий опис цілей та очікуваних результатів..."
-              rows={3}
-              className="w-full pl-3 pr-3 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-xs text-white"
-            />
-          </div>
+          {/* STEP 4: Конструктор етапів */}
+          {wizardStep === 4 && (
+            <div className="space-y-4 animate-in fade-in duration-200">
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase font-bold text-white/50 block">Активні етапи шляху клієнта</label>
+                <div className="space-y-2 bg-white/5 p-3 rounded-xl border border-white/10">
+                  {[
+                    { key: "bot", label: "Підписка в бот" },
+                    { key: "registration", label: "Реєстрація на подію" },
+                    { key: "webinar", label: "Перегляд вебінару" },
+                    { key: "quiz", label: "Анкета діагностики" },
+                    { key: "payment", label: "Оплата (Заявка)" }
+                  ].map((stage) => (
+                    <label key={stage.key} className="flex items-center gap-2 cursor-pointer py-1">
+                      <input
+                        type="checkbox"
+                        checked={(selectedStages as any)[stage.key]}
+                        onChange={(e) => setSelectedStages({
+                          ...selectedStages,
+                          [stage.key]: e.target.checked
+                        })}
+                        className="rounded border-white/10 bg-white/5 text-emerald-500 focus:ring-emerald-500/20 w-4 h-4 cursor-pointer"
+                      />
+                      <span>{stage.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
 
-          <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={() => setShowCreateForm(false)}
-              className="px-4 py-2 rounded-xl text-xs font-bold bg-white/5 hover:bg-white/10 text-white cursor-pointer"
-            >
-              Скасувати
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="px-4 py-2 rounded-xl text-xs font-black bg-emerald-500 hover:bg-emerald-400 text-black cursor-pointer disabled:opacity-50"
-            >
-              {isSubmitting ? "Створення..." : "Зберегти воронку"}
-            </button>
-          </div>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-white/50">Нотатки / Опис</label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Додаткова інформація..."
+                  rows={2}
+                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white"
+                />
+              </div>
+
+              <div className="flex justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(3)}
+                  className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white cursor-pointer"
+                >
+                  Назад
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmitting ? "Збереження..." : "Створити воронку"}
+                </button>
+              </div>
+            </div>
+          )}
         </form>
       )}
 
       {/* Funnels Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         {funnels.map((funnel) => {
           const stats = getFunnelStats(funnel);
+          const isExpanded = expandedFunnelId === funnel.id;
+          
+          // Parse metadata
+          const parsedType = funnel.description?.startsWith("[Type:")
+            ? funnel.description.split("]")[0].replace("[Type: ", "")
+            : "Інше";
+          const cleanDescription = funnel.description?.includes("]")
+            ? funnel.description.substring(funnel.description.indexOf("]") + 1).trim()
+            : funnel.description;
+
           return (
-            <div key={funnel.id} className="bg-neutral-900 border border-white/5 p-6 rounded-2xl space-y-4">
+            <div key={funnel.id} className="bg-neutral-900 border border-white/5 p-6 rounded-2xl space-y-4 text-xs text-white">
               <div className="flex justify-between items-start">
                 <div>
-                  <h4 className="font-black text-base text-white">{funnel.name}</h4>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-black text-base text-white">{funnel.name}</h4>
+                    <span className="text-[9px] bg-white/5 border border-white/10 px-2 py-0.5 rounded font-black text-white/50">{parsedType}</span>
+                  </div>
                   <p className="text-[10px] text-white/30 mt-0.5 flex items-center gap-1">
                     <Calendar className="w-3 h-3" />
                     Старт: {new Date(funnel.start_date).toLocaleDateString("uk-UA")}
                   </p>
                 </div>
-                <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${
-                  stats.roi >= 100 ? "bg-emerald-500/10 text-emerald-400" : "bg-purple-500/10 text-purple-400"
-                }`}>
-                  ROI: {Math.round(stats.roi)}%
-                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setExpandedFunnelId(isExpanded ? null : funnel.id)}
+                    className="px-2.5 py-1 rounded bg-white/5 border border-white/10 text-[10px] font-bold text-white hover:bg-white/15 cursor-pointer transition-all"
+                  >
+                    {isExpanded ? "Сховати" : "Деталі"}
+                  </button>
+                  <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${
+                    stats.roi >= 100 ? "bg-emerald-500/10 text-emerald-400" : "bg-purple-500/10 text-purple-400"
+                  }`}>
+                    ROI: {Math.round(stats.roi)}%
+                  </span>
+                </div>
               </div>
 
-              {funnel.description && (
+              {cleanDescription && (
                 <p className="text-xs text-white/60 line-clamp-2 italic bg-white/[0.01] p-2 rounded border border-white/5">
-                  {funnel.description}
+                  {cleanDescription}
                 </p>
               )}
 
-              {/* Stats Panel */}
-              <div className="grid grid-cols-3 gap-3 border-t border-white/5 pt-3">
-                <div className="bg-white/5 p-2.5 rounded-xl text-center">
-                  <span className="text-[9px] uppercase font-bold text-white/40 block">Ліди</span>
-                  <span className="text-sm font-black text-white">{stats.leadsCount}</span>
+              {/* Linear Funnel Pipeline Conveyor */}
+              <div className="flex flex-wrap md:flex-nowrap items-stretch border border-white/5 rounded-xl overflow-hidden text-xs">
+                <div className="flex-1 bg-white/5 p-3 text-center border-r border-white/5">
+                  <span className="text-[9px] uppercase font-bold text-white/40 block">Бюджет</span>
+                  <span className="text-sm font-black text-white">{stats.spend.toLocaleString("uk-UA")} ₴</span>
+                  {stats.manualSpend > 0 && <span className="text-[8px] text-white/30 block mt-0.5">(ручн: {stats.manualSpend} ₴)</span>}
                 </div>
-                <div className="bg-white/5 p-2.5 rounded-xl text-center">
+                <div className="flex-1 bg-white/5 p-3 text-center border-r border-white/5">
+                  <span className="text-[9px] uppercase font-bold text-white/40 block">Ліди (CPL)</span>
+                  <span className="text-sm font-black text-emerald-400 block mt-0.5">{stats.leadsCount}</span>
+                  <span className="text-[9px] font-bold text-white/50 block">CPL: {stats.leadsCount > 0 ? Math.round(stats.spend / stats.leadsCount) : 0} ₴</span>
+                </div>
+                <div className="flex-1 bg-white/5 p-3 text-center border-r border-white/5">
+                  <span className="text-[9px] uppercase font-bold text-white/40 block">Заявки</span>
+                  <span className="text-sm font-black text-amber-400 block mt-1">{stats.salesCount}</span>
+                </div>
+                <div className="flex-1 bg-white/5 p-3 text-center border-r border-white/5">
                   <span className="text-[9px] uppercase font-bold text-white/40 block">Продажі (CR)</span>
-                  <span className="text-sm font-black text-emerald-400">{stats.salesCount} ({stats.cr.toFixed(1)}%)</span>
+                  <span className="text-sm font-black text-white block mt-0.5">{stats.salesCount}</span>
+                  <span className="text-[9px] text-white/50 block font-semibold">CR: {stats.cr.toFixed(1)}%</span>
                 </div>
-                <div className="bg-white/5 p-2.5 rounded-xl text-center">
-                  <span className="text-[9px] uppercase font-bold text-white/40 block">Оборот</span>
-                  <span className="text-sm font-black text-white">{stats.revenue.toLocaleString("uk-UA")} ₴</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-white/5 p-2.5 rounded-xl text-center">
-                  <span className="text-[9px] uppercase font-bold text-white/40 block">Витрати</span>
-                  <span className="text-sm font-black text-red-400">{stats.spend.toLocaleString("uk-UA")} ₴</span>
-                </div>
-                <div className="bg-white/5 p-2.5 rounded-xl text-center">
-                  <span className="text-[9px] uppercase font-bold text-white/40 block">Прибуток</span>
-                  <span className="text-sm font-black text-emerald-500">{stats.profit.toLocaleString("uk-UA")} ₴</span>
+                <div className="flex-1 bg-emerald-500/10 p-3 text-center flex flex-col justify-between">
+                  <span className="text-[9px] uppercase font-bold text-emerald-400 block">Виручка</span>
+                  <div className="mt-auto">
+                    <span className="text-sm font-black text-emerald-400 block">{stats.revenue.toLocaleString("uk-UA")} ₴</span>
+                    {stats.manualIncome > 0 && <span className="text-[8px] text-emerald-400/60 block mt-0.5">(ручн: {stats.manualIncome} ₴)</span>}
+                  </div>
                 </div>
               </div>
 
-              {/* Metadata details */}
-              <div className="text-[10px] text-white/30 space-y-1 bg-white/[0.005] p-2 rounded-lg border border-white/5">
-                <p className="truncate"><b className="text-white/40">Кампанії:</b> {funnel.campaign_ids.join(", ") || "Всі"}</p>
-                <p className="truncate"><b className="text-white/40">Лендінги:</b> {funnel.landing_slugs.join(", ") || "Всі"}</p>
+              {/* Detailed view block (UTM campaigns list) */}
+              {isExpanded && (
+                <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-3 text-xs animate-in fade-in duration-200">
+                  <h5 className="font-bold text-[10px] text-white/50 uppercase tracking-wider">Аналітика по кампаніям</h5>
+                  <div className="space-y-1">
+                    <div className="flex justify-between py-1 border-b border-white/5 text-[10px] text-white/40">
+                      <span>Кампанія</span>
+                      <span>К-сть лідів</span>
+                    </div>
+                    {funnel.campaign_ids.map((cid) => {
+                      const count = leadsList.filter((l: any) => l.utm_campaign === cid).length;
+                      return (
+                        <div key={cid} className="flex justify-between py-1 border-b border-white/5">
+                          <span className="text-white/70">{cid}</span>
+                          <span className="font-bold">{count}</span>
+                        </div>
+                      );
+                    })}
+                    {funnel.campaign_ids.length === 0 && (
+                      <p className="text-[10px] text-white/30 italic">Кампанії не налаштовано</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Metadata tags footer */}
+              <div className="text-[10px] text-white/30 flex flex-wrap gap-2 pt-2 border-t border-white/5">
+                <span className="bg-white/5 px-2 py-0.5 rounded">Лендінги: {funnel.landing_slugs.join(", ") || "Всі"}</span>
               </div>
             </div>
           );
