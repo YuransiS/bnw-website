@@ -208,27 +208,32 @@ export default function SettingsForm({
     });
   };
 
-  const handleDelete = async (profileId: string) => {
+  const [userToDelete, setUserToDelete] = useState<string | null>(null);
+
+  const handleDelete = (profileId: string) => {
     if (profileId === currentUserId) {
       alert("Ви не можете видалити власний акаунт!");
       return;
     }
+    setError(null);
+    setSuccess(null);
+    setUserToDelete(profileId);
+  };
 
-    if (confirm("Ви впевнені, що хочете видалити цього співробітника?")) {
-      setError(null);
-      setSuccess(null);
-      startTransition(async () => {
-        const res = await deleteUserAction(profileId);
-        if (res.error) {
-          setError(res.error);
-        } else {
-          setSuccess(res.message || "Користувача успішно видалено.");
-          if (editingUser && editingUser.id === profileId) {
-            resetForm();
-          }
+  const confirmDeleteUser = () => {
+    if (!userToDelete) return;
+    startTransition(async () => {
+      const res = await deleteUserAction(userToDelete);
+      if (res.error) {
+        setError(res.error);
+      } else {
+        setSuccess(res.message || "Користувача успішно видалено.");
+        if (editingUser && editingUser.id === userToDelete) {
+          resetForm();
         }
-      });
-    }
+      }
+      setUserToDelete(null);
+    });
   };
 
   const handleToggleProjectActive = (projectId: string, currentStatus: boolean) => {
@@ -303,18 +308,24 @@ export default function SettingsForm({
     });
   };
 
+  const [cellToDelete, setCellToDelete] = useState<string | null>(null);
+
   const handleDeleteCell = (cellId: string) => {
-    if (!confirm("Ви впевнені, що хочете видалити цей осередок?")) return;
     setCellError("");
     setCellSuccess("");
+    setCellToDelete(cellId);
+  };
 
+  const confirmDeleteCell = () => {
+    if (!cellToDelete) return;
     startTransition(async () => {
-      const res = await deleteCellAction(cellId);
+      const res = await deleteCellAction(cellToDelete);
       if (res.error) {
         setCellError(res.error);
       } else {
-        setCellSuccess(res.message || "Осередок видалено!");
+        setCellSuccess(res.message || "Осередок успішно видалено!");
       }
+      setCellToDelete(null);
     });
   };
 
@@ -381,10 +392,10 @@ export default function SettingsForm({
   };
 
   return (
-    <div className="space-y-10 font-sans">
+    <div className="w-full space-y-10 font-sans">
       <div>
         <h1 className={`text-3xl font-black uppercase tracking-tight flex items-center gap-3 ${isLight ? "text-neutral-900" : "text-white"}`}>
-          Налаштування CRM
+          Керування доступом (Команда)
         </h1>
       </div>
 
@@ -1002,6 +1013,68 @@ export default function SettingsForm({
           </div>
         )}
       </div>
+
+      {/* User Deletion Modal */}
+      {userToDelete && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-md p-6 rounded-2xl shadow-2xl border ${isLight ? "bg-white border-neutral-200" : "bg-[#0C0C0F] border-white/10"}`}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-red-500" />
+              </div>
+              <div>
+                <h3 className={`text-lg font-black uppercase tracking-tight ${isLight ? "text-neutral-900" : "text-white"}`}>Видалити співробітника?</h3>
+                <p className={`text-xs ${isLight ? "text-neutral-500" : "text-white/40"}`}>Цю дію неможливо скасувати.</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 mt-6">
+              <button
+                onClick={() => setUserToDelete(null)}
+                className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${isLight ? "bg-neutral-100 text-neutral-700 hover:bg-neutral-200" : "bg-white/5 text-white hover:bg-white/10"}`}
+              >
+                Скасувати
+              </button>
+              <button
+                onClick={confirmDeleteUser}
+                className="px-4 py-2 rounded-xl text-sm font-bold bg-red-500 text-white hover:bg-red-600 transition-all shadow-lg shadow-red-500/20"
+              >
+                Так, видалити
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cell Deletion Modal */}
+      {cellToDelete && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-md p-6 rounded-2xl shadow-2xl border ${isLight ? "bg-white border-neutral-200" : "bg-[#0C0C0F] border-white/10"}`}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-red-500" />
+              </div>
+              <div>
+                <h3 className={`text-lg font-black uppercase tracking-tight ${isLight ? "text-neutral-900" : "text-white"}`}>Видалити осередок?</h3>
+                <p className={`text-xs ${isLight ? "text-neutral-500" : "text-white/40"}`}>Проекти, прив'язані до осередку, не будуть видалені, але втратять зв'язок.</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 mt-6">
+              <button
+                onClick={() => setCellToDelete(null)}
+                className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${isLight ? "bg-neutral-100 text-neutral-700 hover:bg-neutral-200" : "bg-white/5 text-white hover:bg-white/10"}`}
+              >
+                Скасувати
+              </button>
+              <button
+                onClick={confirmDeleteCell}
+                className="px-4 py-2 rounded-xl text-sm font-bold bg-red-500 text-white hover:bg-red-600 transition-all shadow-lg shadow-red-500/20"
+              >
+                Так, видалити
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

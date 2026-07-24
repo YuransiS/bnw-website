@@ -39,10 +39,10 @@ export default function FounderDashboardClient({
     // If currency state is USD, convert from UAH (conversion rate ~44)
     if (currency === "USD") {
       const usdVal = Math.round(safeVal / 44);
-      return "$" + usdVal.toLocaleString("uk-UA");
+      return "$" + (usdVal || 0).toLocaleString("uk-UA");
     }
     
-    return safeVal.toLocaleString("uk-UA") + " ₴";
+    return (safeVal || 0).toLocaleString("uk-UA") + " ₴";
   };
 
   // Sort Leaderboard
@@ -437,7 +437,7 @@ export default function FounderDashboardClient({
                   Причина зміни: <span className="text-amber-400/90 font-medium italic">{log.postponement_reason}</span>
                 </p>
                 <p className="text-[9px] text-white/30">
-                  Змінено: {log.profiles?.email || "Невідомий користувач"} • {new Date(log.created_at).toLocaleString("uk-UA")}
+                  Змінено: {log.profiles?.email || "Невідомий користувач"} • {log.created_at ? new Date(log.created_at).toLocaleString("uk-UA") : "Невідомо"}
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0 md:text-right">

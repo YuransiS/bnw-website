@@ -24,7 +24,8 @@ import {
   Loader2,
   AlertTriangle,
   Lightbulb,
-  Check
+  Check,
+  Users
 } from "lucide-react";
 import { signOutAction, submitCrmFeedbackAction, getCellsAction } from "../actions";
 import { useTheme } from "../ThemeProvider";
@@ -366,45 +367,7 @@ export default function Sidebar({
 
           {/* Primary & Navigation sections */}
           <nav className="space-y-6">
-            {/* Main Landing Page (B&W Main) section at the very top */}
-            {(() => {
-              const bwMainProj = allowedProjects.find((p) => p.slug === "bw_main");
-              if (!bwMainProj) return null;
-              return (
-                <div className="space-y-1">
-                  {!isCollapsed && (
-                    <p className={`text-[10px] font-bold uppercase tracking-widest px-4 mb-2 ${isLight ? "text-neutral-400" : "text-white/40"}`}>
-                      Головний лендінг
-                    </p>
-                  )}
-                  <div className="relative group">
-                    <Link
-                      href={`/admin/project/${bwMainProj.id}`}
-                      onClick={(e) => handleLinkClick(e, `/admin/project/${bwMainProj.id}`)}
-                      className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all font-semibold text-sm cursor-pointer ${
-                        activeMain
-                          ? isLight
-                            ? "bg-neutral-900 text-white border-neutral-900 shadow-md font-extrabold"
-                            : "bg-white text-black shadow-lg border-white font-extrabold"
-                          : isLight
-                          ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-neutral-700 hover:text-neutral-900"
-                          : "border-white/5 hover:border-white/10 bg-white/5 hover:bg-white/10 text-white"
-                      } ${isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : ""}`}
-                    >
-                      <Crown className="w-4 h-4 text-emerald-400 shrink-0" />
-                      {!isCollapsed && <span>B&W Main (Лендінг /)</span>}
-                    </Link>
-                    {isCollapsed && (
-                      <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl ${
-                        isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
-                      }`}>
-                        B&W Main (Лендінг /)
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
+            {/* Main Landing Page (B&W Main) removed as per user request */}
 
             {/* Projects list container */}
             <div className="space-y-2">
@@ -650,25 +613,52 @@ export default function Sidebar({
             </div>
           )}
 
-          {/* Relocated settings route link */}
+          {/* Relocated settings and users route link */}
           {isSuperman && (
-            <div className="relative group">
-              <Link
-                href="/admin/settings"
-                onClick={(e) => handleLinkClick(e, "/admin/settings")}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all font-semibold text-sm cursor-pointer ${
-                  isSettingsPage
-                    ? isLight
-                      ? "bg-neutral-900 text-white border-neutral-900 font-extrabold shadow-md"
-                      : "bg-white text-black shadow-lg border-white font-extrabold"
-                    : isLight
-                    ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-neutral-700 hover:text-neutral-900"
-                    : "border-white/5 hover:border-emerald-500/25 bg-white/5 hover:bg-white/10 text-white"
-                } ${isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : ""}`}
-              >
-                <Settings className="w-4 h-4 text-emerald-400 shrink-0" />
-                {!isCollapsed && <span>Налаштування</span>}
-              </Link>
+            <div className="space-y-1.5">
+              <div className="relative group">
+                <Link
+                  href="/admin/users"
+                  onClick={(e) => handleLinkClick(e, "/admin/users")}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all font-semibold text-sm cursor-pointer ${
+                    pathname === "/admin/users"
+                      ? isLight
+                        ? "bg-neutral-900 text-white border-neutral-900 font-extrabold shadow-md"
+                        : "bg-white text-black shadow-lg border-white font-extrabold"
+                      : isLight
+                      ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-neutral-700 hover:text-neutral-900"
+                      : "border-white/5 hover:border-emerald-500/25 bg-white/5 hover:bg-white/10 text-white"
+                  } ${isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : ""}`}
+                >
+                  <Users className="w-4 h-4 text-emerald-400 shrink-0" />
+                  {!isCollapsed && <span>Керування доступом</span>}
+                </Link>
+                {isCollapsed && (
+                  <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl ${
+                    isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
+                  }`}>
+                    Керування доступом
+                  </div>
+                )}
+              </div>
+
+              <div className="relative group">
+                <Link
+                  href="/admin/settings"
+                  onClick={(e) => handleLinkClick(e, "/admin/settings")}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all font-semibold text-sm cursor-pointer ${
+                    isSettingsPage
+                      ? isLight
+                        ? "bg-neutral-900 text-white border-neutral-900 font-extrabold shadow-md"
+                        : "bg-white text-black shadow-lg border-white font-extrabold"
+                      : isLight
+                      ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-neutral-700 hover:text-neutral-900"
+                      : "border-white/5 hover:border-emerald-500/25 bg-white/5 hover:bg-white/10 text-white"
+                  } ${isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : ""}`}
+                >
+                  <Settings className="w-4 h-4 text-emerald-400 shrink-0" />
+                  {!isCollapsed && <span>Налаштування</span>}
+                </Link>
               {isCollapsed && (
                 <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl ${
                   isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
@@ -676,6 +666,7 @@ export default function Sidebar({
                   Налаштування
                 </div>
               )}
+              </div>
             </div>
           )}
 
