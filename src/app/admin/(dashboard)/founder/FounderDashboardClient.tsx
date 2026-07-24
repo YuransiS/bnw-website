@@ -34,14 +34,15 @@ export default function FounderDashboardClient({
   // Helper converter
   const formatVal = (uahVal: number, isUAH: boolean = true) => {
     if (demoMode) return "•••";
+    const safeVal = Number(uahVal) || 0;
     
     // If currency state is USD, convert from UAH (conversion rate ~44)
     if (currency === "USD") {
-      const usdVal = Math.round(uahVal / 44);
+      const usdVal = Math.round(safeVal / 44);
       return "$" + usdVal.toLocaleString("uk-UA");
     }
     
-    return uahVal.toLocaleString("uk-UA") + " ₴";
+    return safeVal.toLocaleString("uk-UA") + " ₴";
   };
 
   // Sort Leaderboard
