@@ -28,11 +28,11 @@ export default async function ProjectDashboardPage({ params }: PageProps) {
     );
   }
 
-  // 2. Fetch project slug by UUID
+  // 2. Fetch project details and cell metadata by UUID
   const adminSupabase = createAdminClient();
   const { data: project } = await adminSupabase
     .from("projects")
-    .select("slug")
+    .select("id, name, slug, cell_id, cells(name)")
     .eq("id", projectId)
     .single();
 
@@ -49,10 +49,28 @@ export default async function ProjectDashboardPage({ params }: PageProps) {
     );
   }
 
-  // 3. Load unified CRM data on the server for the single project view
+  // 3. Load unified data for project slug
   const initialData = await getUnifiedCRMData(project.slug);
 
+  const cellName = (project.cells as any)?.name || "Проект";
+
   return (
-    <LeadsDashboard initialData={initialData} />
+    <div className="space-y-4">
+      {/* Prominent Project Workspace Header */}
+      <div className="bg-neutral-900 border border-white/10 p-4 rounded-2xl flex items-center justify-between gap-4 shadow-lg">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] font-black uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+              Ячейка: {cellName}
+            </span>
+          </div>
+          <h1 className="text-xl font-black text-white mt-1 flex items-center gap-2">
+            🚀 {project.name}
+          </h1>
+        </div>
+      </div>
+
+      <LeadsDashboard initialData={initialData} />
+    </div>
   );
 }

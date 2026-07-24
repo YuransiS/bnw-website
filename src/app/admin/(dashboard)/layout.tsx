@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient, createAdminClient } from "@/utils/supabase/server";
 import { cookies } from "next/headers";
-import Sidebar from "./Sidebar";
+import TopHeader from "./TopHeader";
 import { ThemeProvider } from "../ThemeProvider";
 
 export default async function AdminLayout({
@@ -106,7 +106,7 @@ export default async function AdminLayout({
       .filter((p: any) => p.is_active !== false);
   }
 
-  // Fetch profiles and mappings for the hierarchical Sidebar
+  // Fetch profiles and mappings for the hierarchical Header
   const { data: dbProfiles } = await adminSupabase
     .from("profiles")
     .select("id, email, role, full_name")
@@ -119,26 +119,28 @@ export default async function AdminLayout({
 
   return (
     <ThemeProvider>
-      {/* Background visual orb */}
-      <div className="fixed top-0 left-0 w-[500px] h-[500px] bg-emerald-500/[0.02] rounded-full blur-[150px] pointer-events-none" />
+      <div className="min-h-screen flex flex-col bg-[#0C0C0F]">
+        {/* Background visual orb */}
+        <div className="fixed top-0 left-0 w-[500px] h-[500px] bg-emerald-500/[0.02] rounded-full blur-[150px] pointer-events-none" />
 
-      {/* Sidebar navigation panel */}
-      <Sidebar
-        isSuperman={isSuperman}
-        allowedProjects={allowedProjects}
-        userRole={userRole}
-        userEmail={userEmail}
-        fullName={fullName}
-        isActualDev={isActualDev}
-        actualRole={profile?.role || "superman"}
-        profiles={profilesList}
-        profileProjects={profileProjectsList}
-      />
+        {/* Top Navigation Header */}
+        <TopHeader
+          isSuperman={isSuperman}
+          allowedProjects={allowedProjects}
+          userRole={userRole}
+          userEmail={userEmail}
+          fullName={fullName}
+          isActualDev={isActualDev}
+          actualRole={profile?.role || "superman"}
+          profiles={profilesList}
+          profileProjects={profileProjectsList}
+        />
 
-      {/* Main content grid */}
-      <main className="flex-grow p-6 md:p-10 relative z-10 overflow-x-hidden overflow-y-auto min-w-0">
-        {children}
-      </main>
+        {/* Main content grid */}
+        <main className="flex-grow p-4 md:p-8 relative z-10 overflow-x-hidden overflow-y-auto min-w-0">
+          {children}
+        </main>
+      </div>
     </ThemeProvider>
   );
 }

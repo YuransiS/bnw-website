@@ -176,56 +176,51 @@ export default async function ProducerPerformancePage({ params }: PageProps) {
               Проекти під керівництвом продюсера
             </h2>
 
-            <div className="overflow-x-auto border border-white/5 rounded-xl">
-              <table className="w-full border-collapse text-left text-xs">
-                <thead>
-                  <tr className="bg-white/[0.02] text-white/40 border-b border-white/5 uppercase tracking-widest font-black">
-                    <th className="p-4">Назва проекту</th>
-                    <th className="p-4 text-center">Витрати ($)</th>
-                    <th className="p-4 text-center">Виручка (₴)</th>
-                    <th className="p-4 text-center">ROI</th>
-                    <th className="p-4 text-right">Кабінет</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {producerProjects.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="p-6 text-center text-white/30 italic">
-                        За продюсером немає закріплених проектів
-                      </td>
-                    </tr>
-                  ) : (
-                    producerProjects.map((proj: any) => (
-                      <tr key={proj.project_id} className="hover:bg-white/[0.01] transition-all">
-                        <td className="p-4 font-black text-sm">{proj.project_name}</td>
-                        <td className="p-4 text-center font-bold text-red-400">
-                          ${Math.round(proj.expenses_usd || 0).toLocaleString("uk-UA")}
-                        </td>
-                        <td className="p-4 text-center font-bold text-emerald-400">
-                          {Math.round(proj.revenue_uah || 0).toLocaleString("uk-UA")} ₴
-                        </td>
-                        <td className="p-4 text-center">
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border ${
-                            Number(proj.roi || 0) >= 100
-                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                              : "bg-red-500/10 text-red-400 border-red-500/20"
-                          }`}>
-                            {Math.round(proj.roi || 0)}%
-                          </span>
-                        </td>
-                        <td className="p-4 text-right">
-                          <Link
-                            href={`/admin/project/${proj.project_id}`}
-                            className="inline-flex items-center gap-1 text-[11px] font-black uppercase text-emerald-400 hover:text-emerald-300 transition-colors"
-                          >
-                            Вхід <ArrowRight className="w-3.5 h-3.5" />
-                          </Link>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {producerProjects.length === 0 ? (
+                <p className="col-span-2 p-6 text-center text-white/30 italic">
+                  За продюсером немає закріплених проектів
+                </p>
+              ) : (
+                producerProjects.map((proj: any) => (
+                  <Link
+                    key={proj.project_id}
+                    href={`/admin/project/${proj.project_id}`}
+                    className="border border-white/10 hover:border-emerald-500/40 bg-white/[0.01] hover:bg-white/[0.03] rounded-2xl p-5 transition-all duration-200 hover:scale-[1.01] flex flex-col justify-between group shadow-lg"
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-black text-sm text-white group-hover:text-emerald-400 transition-colors">
+                          {proj.project_name}
+                        </h3>
+                        <span className={`px-2.5 py-0.5 rounded-lg text-[10px] font-black border ${
+                          Number(proj.roi || 0) >= 100
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                            : "bg-red-500/10 text-red-400 border-red-500/20"
+                        }`}>
+                          ROI: {Math.round(proj.roi || 0)}%
+                        </span>
+                      </div>
+
+                      <div className="mt-4 space-y-2 text-xs text-white/60">
+                        <div className="flex justify-between">
+                          <span>Виручка:</span>
+                          <span className="font-bold text-emerald-400">{Math.round(proj.revenue_uah || 0).toLocaleString("uk-UA")} ₴</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Витрати:</span>
+                          <span className="font-bold text-rose-400">${Math.round(proj.expenses_usd || 0).toLocaleString("uk-UA")}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-xs font-bold text-white/50 group-hover:text-emerald-400 transition-colors">
+                      <span>Відкрити проект</span>
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                    </div>
+                  </Link>
+                ))
+              )}
             </div>
           </div>
         </div>
