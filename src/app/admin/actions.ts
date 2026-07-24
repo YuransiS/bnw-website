@@ -252,7 +252,20 @@ export async function getUnifiedCRMData(
         adminSupabase.rpc("get_producers_leaderboard")
       ]);
 
-      let summary = summaryRes.data || [];
+      let rawSummary = summaryRes.data || [];
+      let summary = rawSummary.map((p: any) => ({
+        project_id: p.project_id,
+        project_name: p.project_name,
+        project_slug: p.project_slug,
+        cell_id: p.cell_id,
+        revenue_uah: Number(p.uah_revenue || 0),
+        expenses_uah: Number(p.spend || 0),
+        revenue_usd: Number(p.usd_revenue || 0),
+        revenue_eur: Number(p.eur_revenue || 0),
+        leads_count: Number(p.leads_count || 0),
+        cpl: Number(p.cpl || 0),
+        roi: Number(p.spend || 0) > 0 ? ((Number(p.uah_revenue || 0) - Number(p.spend || 0)) / Number(p.spend || 0)) * 100 : 0
+      }));
       let campaigns = campaignRes.data || [];
       let leaderboard = (leaderboardRes.data || []).map((l: any) => ({
         producerId: l.producer_id,

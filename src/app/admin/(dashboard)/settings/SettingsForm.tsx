@@ -93,6 +93,7 @@ export default function SettingsForm({
   const [editingCellLeader, setEditingCellLeader] = useState("");
   const [cellError, setCellError] = useState("");
   const [cellSuccess, setCellSuccess] = useState("");
+  const [openCellProjectDropdownId, setOpenCellProjectDropdownId] = useState<string | null>(null);
 
   // Hierarchy View Mode Toggle ("tree" | "table")
   const [activeViewTab, setActiveViewTab] = useState<"tree" | "table">("tree");
@@ -811,23 +812,82 @@ export default function SettingsForm({
                                   Проекти осередку ({cellProjects.length}):
                                 </p>
 
-                                {/* Quick Project Attacher Dropdown */}
-                                <select
-                                  onChange={(e) => {
-                                    if (e.target.value) {
-                                      handleQuickAssignProject(e.target.value, cell.id);
-                                      e.target.value = "";
-                                    }
-                                  }}
-                                  className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg text-[10px] font-black text-emerald-400 uppercase tracking-wider focus:outline-none cursor-pointer"
-                                >
-                                  <option value="" className="bg-[#0C0C0F] text-white/50">+ Прив'язати проект...</option>
-                                  {projects.map((proj) => (
-                                    <option key={proj.id} value={proj.id} className="bg-[#0C0C0F] text-white">
-                                      {proj.name} {proj.cell_id === cell.id ? "✓ (В цій ячейці)" : proj.cell_id ? "(В іншій ячейці)" : "(Вільний)"}
-                                    </option>
-                                  ))}
-                                </select>
+                                {/* Quick Project Attacher Custom Dropdown Popover */}
+                                <div className="relative">
+                                  <button
+                                    type="button"
+                                    onClick={() => setOpenCellProjectDropdownId(openCellProjectDropdownId === cell.id ? null : cell.id)}
+                                    className="px-2.5 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 hover:border-emerald-500/50 rounded-lg text-[10px] font-black text-emerald-400 uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Plus className="w-3.5 h-3.5" />
+                                    Прив'язати проект
+                                  </button>
+
+                                  {openCellProjectDropdownId === cell.id && (
+                                    <>
+                                      {/* Backdrop transparent mask to close on outside click */}
+                                      <div 
+                                        className="fixed inset-0 z-40 cursor-default" 
+                                        onClick={() => setOpenCellProjectDropdownId(null)}
+                                      />
+                                      
+                                      <div className="absolute right-0 mt-2 w-72 bg-[#0C0C0F] border border-white/10 rounded-xl p-2.5 shadow-2xl z-50 animate-in zoom-in-95 duration-100 space-y-2 max-h-80 overflow-y-auto custom-scrollbar">
+                                        <p className="text-[10px] font-black uppercase tracking-wider text-white/40 border-b border-white/5 pb-1.5 px-1.5">
+                                          Оберіть проект для прив'язки
+                                        </p>
+                                        <div className="space-y-1">
+                                          {projects.map((proj) => {
+                                            const isAlreadyHere = proj.cell_id === cell.id;
+                                            const isInOtherCell = proj.cell_id && proj.cell_id !== cell.id;
+                                            const isFree = !proj.cell_id;
+                                            const otherCell = cells.find(c => c.id === proj.cell_id);
+                                            const otherCellName = otherCell ? otherCell.name : "іншого осередку";
+
+                                            return (
+                                              <button
+                                                key={proj.id}
+                                                type="button"
+                                                disabled={isAlreadyHere}
+                                                onClick={() => {
+                                                  handleQuickAssignProject(proj.id, cell.id);
+                                                  setOpenCellProjectDropdownId(null);
+                                                }}
+                                                className={`w-full text-left p-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between border cursor-pointer ${
+                                                  isAlreadyHere
+                                                    ? "bg-white/[0.01] border-white/5 text-white/35 cursor-not-allowed"
+                                                    : isInOtherCell
+                                                      ? "bg-amber-500/5 hover:bg-amber-500/10 border-amber-500/20 hover:border-amber-500/40 text-amber-400"
+                                                      : "bg-emerald-500/5 hover:bg-emerald-500/10 border-emerald-500/10 hover:border-emerald-500/30 text-emerald-400"
+                                                }`}
+                                              >
+                                                <div className="min-w-0 pr-2">
+                                                  <p className="truncate text-xs text-white">{proj.name}</p>
+                                                  <span className={`text-[8px] font-extrabold uppercase tracking-wider block mt-0.5 ${
+                                                    isAlreadyHere 
+                                                      ? "text-white/30" 
+                                                      : isInOtherCell 
+                                                        ? "text-amber-400" 
+                                                        : "text-emerald-400"
+                                                  }`}>
+                                                    {isAlreadyHere 
+                                                      ? "Вже в цьому осередку" 
+                                                      : isInOtherCell 
+                                                        ? `Перенести з ${otherCellName}` 
+                                                        : "Вільний проект"}
+                                                  </span>
+                                                </div>
+                                                
+                                                {isAlreadyHere && <Check className="w-3.5 h-3.5 text-white/20 shrink-0" />}
+                                                {isInOtherCell && <Link2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                                                {isFree && <Plus className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
                               </div>
                               
                               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -899,22 +959,33 @@ export default function SettingsForm({
                 {/* Free / Standalone Users Branch */}
                 <div className="relative space-y-3">
                   <div className="absolute -left-[31px] top-6 w-3 h-3 rounded-full bg-purple-500 border-2 border-[#0C0C0F]" />
-                  <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/5 space-y-3">
-                    <h4 className="font-black text-xs uppercase tracking-wider text-white/60 flex items-center gap-2">
-                      <Users className="w-4 h-4 text-purple-400" />
-                      Співробітники та доступи команди ({profiles.length})
-                    </h4>
+                  <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/5 space-y-4">
+                    <div>
+                      <h4 className="font-black text-xs uppercase tracking-wider text-white/60 flex items-center gap-2">
+                        <Users className="w-4 h-4 text-purple-400" />
+                        Співробітники та доступи команди ({profiles.length})
+                      </h4>
+                      <p className="text-[10px] text-white/40 mt-1">
+                        Оберіть співробітника нижче, щоб відредагувати його права, роль та прив'язати до нього проекти у формі ліворуч.
+                      </p>
+                    </div>
+                    
                     <div className="flex flex-wrap gap-2">
                       {profiles.map((p) => (
                         <div
                           key={p.id}
                           onClick={() => handleEditClick(p)}
-                          className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-emerald-500/10 border border-white/10 hover:border-emerald-500/30 text-xs font-bold text-white transition-all cursor-pointer flex items-center gap-2 shadow-sm"
+                          className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-emerald-500/10 border border-white/10 hover:border-emerald-500/30 text-xs font-bold text-white transition-all cursor-pointer flex items-center justify-between gap-3 shadow-sm hover:scale-[1.01] active:scale-98 group"
                           title="Натисніть для редагування прав"
                         >
-                          <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                          <span>{p.full_name || p.email}</span>
-                          <span className="text-[9px] uppercase font-black px-2 py-0.5 rounded bg-white/10 text-white/60">{p.role}</span>
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                            <span className="truncate max-w-[120px]" title={p.full_name || p.email}>{p.full_name || p.email}</span>
+                            <span className="text-[9px] uppercase font-black px-1.5 py-0.5 rounded bg-white/10 text-white/60 shrink-0">
+                              {getRoleLabel(p.role)}
+                            </span>
+                          </div>
+                          <Edit3 className="w-3.5 h-3.5 text-white/20 group-hover:text-emerald-400 transition-colors shrink-0" />
                         </div>
                       ))}
                     </div>
