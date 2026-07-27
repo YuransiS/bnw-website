@@ -2045,6 +2045,119 @@ export async function getFunnelsAction(projectId: string) {
   }
 }
 
+export async function getDiscoveredPagesAction(projectId: string) {
+  try {
+    await checkProjectAccess(projectId);
+    const adminSupabase = createAdminClient();
+    const { data: pages, error } = await adminSupabase
+      .from("discovered_pages")
+      .select("*")
+      .eq("project_id", projectId)
+      .order("path", { ascending: true });
+
+    if (error) throw error;
+    return { success: true, pages: pages || [] };
+  } catch (err: any) {
+    return { error: err.message || "Failed to fetch discovered pages" };
+  }
+}
+
+const PROJECT_DOMAINS: Record<string, string> = {
+  victoria: 'https://victoria-mc.vercel.app',
+  sofia: 'https://sofifinsight.vercel.app',
+  valeria: 'https://pix-ai-ua.vercel.app',
+  svitlana: 'https://svitlanatape.vercel.app',
+  clean_klinom: 'https://clean-klinom.vercel.app',
+  vova_win: 'https://vova-win.club',
+};
+
+export async function syncProjectPagesAction(projectId: string) {
+  try {
+    await checkProjectAccess(projectId);
+    const adminSupabase = createAdminClient();
+
+    const { data: project, error: projErr } = await adminSupabase
+      .from("projects")
+      .select("slug, name, api_key_hash")
+      .eq("id", projectId)
+      .maybeSingle();
+
+    if (projErr || !project) {
+      throw new Error("Project not found");
+    }
+
+    const domain = PROJECT_DOMAINS[project.slug];
+    if (!domain) {
+      return { error: `No domain mapped for project slug: ${project.slug}` };
+    }
+
+    // Call the external pull endpoint with a short timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4500);
+
+    try {
+      const targetUrl = `${domain}/api/discovered-pages`;
+      const response = await fetch(targetUrl, {
+        method: "GET",
+        headers: {
+          "x-api-key": project.api_key_hash || "",
+          "Content-Type": "application/json"
+        },
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`External endpoint returned status: ${response.status}`);
+      }
+
+      const resBody = await response.json();
+      if (!resBody || !Array.isArray(resBody.pages)) {
+        throw new Error("Invalid response schema: pages array is required.");
+      }
+
+      if (resBody.pages.length === 0) {
+        return { success: true, count: 0, message: "No active pages returned from external site." };
+      }
+
+      const upsertRows = resBody.pages.map((p: any) => {
+        let pagePath = String(p.path || '').trim();
+        if (pagePath && !pagePath.startsWith('/')) {
+          pagePath = '/' + pagePath;
+        }
+        return {
+          project_id: projectId,
+          path: pagePath,
+          title: p.title ? String(p.title).trim() : null,
+          source: 'direct_register',
+          last_seen_at: new Date().toISOString()
+        };
+      }).filter((r: any) => r.path);
+
+      if (upsertRows.length > 0) {
+        const { error: upsertErr } = await adminSupabase
+          .from("discovered_pages")
+          .upsert(upsertRows, { onConflict: "project_id,path" });
+
+        if (upsertErr) {
+          throw new Error(`Failed to save pages: ${upsertErr.message}`);
+        }
+      }
+
+      return { success: true, count: upsertRows.length };
+
+    } catch (fetchErr: any) {
+      clearTimeout(timeoutId);
+      throw new Error(`Connection to ${domain} failed: ${fetchErr.message}`);
+    }
+
+  } catch (err: any) {
+    console.error(`Page discovery sync failed for project ${projectId}:`, err.message);
+    return { error: err.message || "Failed to synchronize pages" };
+  }
+}
+
 export async function createTaskAction(
   projectId: string,
   funnelId: string | null,

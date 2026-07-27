@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { getFunnelsAction, createFunnelAction } from "../../actions";
-import { Plus, Target, Calendar, Link as LinkIcon, RefreshCw, BarChart2, Layers, AlertCircle } from "lucide-react";
+import { getFunnelsAction, createFunnelAction, getDiscoveredPagesAction, syncProjectPagesAction } from "../../actions";
+import { Plus, Target, Calendar, Link as LinkIcon, RefreshCw, BarChart2, Layers, AlertCircle, Search, Sparkles } from "lucide-react";
 
 interface FunnelsTabProps {
   projectId: string;
@@ -26,6 +26,17 @@ export default function FunnelsTab({ projectId, campaignsList, leadsList, isLigh
   const [funnelTransactions, setFunnelTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Discovered Pages & Multiselect State
+  const [discoveredPages, setDiscoveredPages] = useState<any[]>([]);
+  const [selectedPages, setSelectedPages] = useState<string[]>([]);
+  const [searchPageQuery, setSearchPageQuery] = useState("");
+  const [manualPageInput, setManualPageInput] = useState("");
+
+  // Campaigns Multiselect State
+  const [selectedCampaigns, setSelectedCampaigns] = useState<string[]>([]);
+  const [searchCampaignQuery, setSearchCampaignQuery] = useState("");
+  const [manualCampaignInput, setManualCampaignInput] = useState("");
   
   // Creation Form State
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -46,18 +57,30 @@ export default function FunnelsTab({ projectId, campaignsList, leadsList, isLigh
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [expandedFunnelId, setExpandedFunnelId] = useState<string | null>(null);
 
-  // Load Funnels
+  // Load Funnels and Pages
   const loadFunnels = async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await getFunnelsAction(projectId);
-      if (res && "error" in res) {
-        setError(res.error as string);
+      const [funnelRes, _syncRes] = await Promise.all([
+        getFunnelsAction(projectId),
+        syncProjectPagesAction(projectId).catch((err) => {
+          console.warn("Domain pages sync failed, falling back to local DB:", err);
+          return { error: err.message };
+        })
+      ]);
+
+      if (funnelRes && "error" in funnelRes) {
+        setError(funnelRes.error as string);
       } else {
-        const data = res as { funnels: Funnel[]; transactions: any[] };
+        const data = funnelRes as { funnels: Funnel[]; transactions: any[] };
         setFunnels(data.funnels || []);
         setFunnelTransactions(data.transactions || []);
+      }
+
+      const pagesRes = await getDiscoveredPagesAction(projectId);
+      if (pagesRes && !("error" in pagesRes)) {
+        setDiscoveredPages(pagesRes.pages || []);
       }
     } catch (err: any) {
       setError(err.message || "Failed to load funnels");
@@ -80,15 +103,19 @@ export default function FunnelsTab({ projectId, campaignsList, leadsList, isLigh
 
     setIsSubmitting(true);
     try {
-      const campaignIds = campaignInput
+      const manualCampaigns = manualCampaignInput
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean);
       
-      const landingSlugs = landingInput
+      const campaignIds = Array.from(new Set([...selectedCampaigns, ...manualCampaigns]));
+      
+      const manualSlugs = manualPageInput
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean);
+      
+      const landingSlugs = Array.from(new Set([...selectedPages, ...manualSlugs]));
 
       const metaString = `[Type: ${funnelType}][Stages: ${Object.entries(selectedStages).filter(([_, v]) => v).map(([k]) => k).join(",")}]`;
       const finalDesc = `${metaString} ${description.trim()}`.trim();
@@ -105,6 +132,12 @@ export default function FunnelsTab({ projectId, campaignsList, leadsList, isLigh
         setStartDate("");
         setCampaignInput("");
         setLandingInput("");
+        setSelectedPages([]);
+        setManualPageInput("");
+        setSearchPageQuery("");
+        setSelectedCampaigns([]);
+        setManualCampaignInput("");
+        setSearchCampaignQuery("");
         setDescription("");
         loadFunnels();
       }
@@ -293,16 +326,132 @@ export default function FunnelsTab({ projectId, campaignsList, leadsList, isLigh
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-white/50">Лендінги / Сторінки (через кому)</label>
-                <input
-                  type="text"
-                  value={landingInput}
-                  onChange={(e) => setLandingInput(e.target.value)}
-                  placeholder="rozbir, marathon_landing, page_vsl"
-                  className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white"
-                />
-                <p className="text-[9px] text-white/30">Сюди потраплять ліди, які зареєструвалися на цих сторінках</p>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] uppercase font-bold text-white/50">Лендінги / Активні Сторінки сайту</label>
+                  <span className="text-[9px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <Sparkles className="w-2.5 h-2.5" />
+                    Автосинхронізація
+                  </span>
+                </div>
+                
+                {/* Search input for discovered pages */}
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-white/40">
+                    <Search className="w-3.5 h-3.5" />
+                  </span>
+                  <input
+                    type="text"
+                    value={searchPageQuery}
+                    onChange={(e) => setSearchPageQuery(e.target.value)}
+                    placeholder="Пошук по шляху сторінки (наприклад: /intensive)..."
+                    className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 rounded-xl text-xs focus:outline-none focus:border-emerald-500 text-white placeholder-white/30"
+                  />
+                </div>
+
+                {/* Scrolled list of discovered pages */}
+                <div className="border border-white/10 rounded-xl overflow-hidden bg-black/35">
+                  <div className="max-h-40 overflow-y-auto divide-y divide-white/5 custom-scrollbar text-xs">
+                    {discoveredPages
+                      .filter((p) =>
+                        String(p.path).toLowerCase().includes(searchPageQuery.toLowerCase()) ||
+                        String(p.title || "").toLowerCase().includes(searchPageQuery.toLowerCase())
+                      )
+                      .map((p) => {
+                        const isSelected = selectedPages.includes(p.path);
+                        const isDirect = p.source === "direct_register";
+                        
+                        // Hierarchical tree calculations
+                        const segments = p.path.split("/").filter(Boolean);
+                        const depth = segments.length;
+                        const lastSegment = segments[segments.length - 1] || "/";
+                        
+                        // Build hierarchical indentation label
+                        const displayLabel = depth <= 1 
+                          ? p.path 
+                          : `└─ /${lastSegment}`;
+
+                        return (
+                          <div
+                            key={p.id}
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedPages(selectedPages.filter((path) => path !== p.path));
+                              } else {
+                                setSelectedPages([...selectedPages, p.path]);
+                              }
+                            }}
+                            style={{ paddingLeft: depth > 1 ? `${(depth - 1) * 1.25 + 0.75}rem` : '0.75rem' }}
+                            className={`flex justify-between items-center pr-3 py-2 cursor-pointer transition-all hover:bg-white/5 ${
+                              isSelected ? "bg-emerald-500/5 hover:bg-emerald-500/10" : ""
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                readOnly
+                                className="rounded border-white/10 bg-white/5 text-emerald-500 focus:ring-emerald-500/20 w-3.5 h-3.5"
+                              />
+                              <span className={`font-bold ${isSelected ? "text-emerald-400" : "text-white"} ${depth > 1 ? "text-white/60 font-semibold" : ""}`}>
+                                {displayLabel}
+                              </span>
+                              {p.title && (
+                                <span className="text-[10px] text-white/40">
+                                  ({p.title})
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5 font-bold">
+                              {isDirect ? (
+                                <span className="text-[8px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded uppercase">
+                                  Виявлено
+                                </span>
+                              ) : (
+                                <span className="text-[8px] bg-purple-500/10 text-purple-400 border border-purple-500/20 px-1.5 py-0.5 rounded uppercase">
+                                  Трафік
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    {discoveredPages.length === 0 && (
+                      <div className="p-4 text-center text-[10px] text-white/30 italic">
+                        Сторінок не знайдено. Перевірте інтеграцію синхронізації або додайте сторінки вручну.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Selected tags overview */}
+                {selectedPages.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 p-2 bg-white/[0.02] border border-white/5 rounded-xl">
+                    <span className="text-[9px] uppercase font-bold text-white/40 block w-full mb-1">Обрані сторінки:</span>
+                    {selectedPages.map((path) => (
+                      <span
+                        key={path}
+                        onClick={() => setSelectedPages(selectedPages.filter((p) => p !== path))}
+                        className="bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-lg font-bold flex items-center gap-1 cursor-pointer transition-all text-[10px]"
+                      >
+                        {path} <span className="text-white/40">×</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Manual pages input */}
+                <div className="space-y-1 pt-1">
+                  <label className="text-[10px] uppercase font-bold text-white/50 block">Додати інші сторінки вручну (через кому)</label>
+                  <input
+                    type="text"
+                    value={manualPageInput}
+                    onChange={(e) => setManualPageInput(e.target.value)}
+                    placeholder="rozbir, marathon_landing, page_vsl"
+                    className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white text-xs placeholder-white/30"
+                  />
+                  <p className="text-[9px] text-white/30">Використовуйте цей рядок для мануального зв'язку, якщо сторінка ще не синхронізована</p>
+                </div>
               </div>
 
               <div className="flex justify-between pt-2">
@@ -328,16 +477,111 @@ export default function FunnelsTab({ projectId, campaignsList, leadsList, isLigh
           {/* STEP 3: Кампанії трафіку */}
           {wizardStep === 3 && (
             <div className="space-y-4 animate-in fade-in duration-200">
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-white/50">Рекламні кампанії UTM (через кому)</label>
-                <input
-                  type="text"
-                  value={campaignInput}
-                  onChange={(e) => setCampaignInput(e.target.value)}
-                  placeholder="utm_campaign_1, meta_ads_july, EUR"
-                  className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white"
-                />
-                <p className="text-[9px] text-white/30">Сюди потраплять рекламні витрати, що містять ці мітки в UTM</p>
+              <div className="space-y-3">
+                <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-[11px] text-purple-300 leading-relaxed">
+                  💡 <strong>Опція: Додати пізніше.</strong> Ви можете пропустити цей крок або обрати кампанії пізніше, якщо вони ще не створені в Facebook Ads Manager. Воронка все одно буде успішно створена та рахуватиме замовлення.
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-white/50 block">Рекламні Кампанії UTM</label>
+                  
+                  {/* Search input for campaigns */}
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-white/40">
+                      <Search className="w-3.5 h-3.5" />
+                    </span>
+                    <input
+                      type="text"
+                      value={searchCampaignQuery}
+                      onChange={(e) => setSearchCampaignQuery(e.target.value)}
+                      placeholder="Пошук рекламних кампаній..."
+                      className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 rounded-xl text-xs focus:outline-none focus:border-emerald-500 text-white placeholder-white/30"
+                    />
+                  </div>
+
+                  {/* Scrolled list of campaigns */}
+                  <div className="border border-white/10 rounded-xl overflow-hidden bg-black/35">
+                    <div className="max-h-40 overflow-y-auto divide-y divide-white/5 custom-scrollbar text-xs">
+                      {Array.from(new Set(campaignsList.map((c: any) => String(c.campaign_name || '').trim()).filter(Boolean)))
+                        .filter((campName) =>
+                          campName.toLowerCase().includes(searchCampaignQuery.toLowerCase())
+                        )
+                        .map((campName) => {
+                          const isSelected = selectedCampaigns.includes(campName);
+                          const stats = campaignsList.find((c) => c.campaign_name === campName);
+                          const spendUAH = stats ? Number(stats.spend || 0) : 0;
+                          const leadsCount = stats ? Number(stats.leads_count || 0) : 0;
+
+                          return (
+                            <div
+                              key={campName}
+                              onClick={() => {
+                                if (isSelected) {
+                                  setSelectedCampaigns(selectedCampaigns.filter((c) => c !== campName));
+                                } else {
+                                  setSelectedCampaigns([...selectedCampaigns, campName]);
+                                }
+                              }}
+                              className={`flex justify-between items-center px-3 py-2 cursor-pointer transition-all hover:bg-white/5 ${
+                                isSelected ? "bg-emerald-500/5 hover:bg-emerald-500/10" : ""
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  readOnly
+                                  className="rounded border-white/10 bg-white/5 text-emerald-500 focus:ring-emerald-500/20 w-3.5 h-3.5"
+                                />
+                                <span className={`font-bold ${isSelected ? "text-emerald-400" : "text-white"}`}>
+                                  {campName}
+                                </span>
+                              </div>
+                              {spendUAH > 0 && (
+                                <span className="text-[9px] bg-white/5 px-2 py-0.5 rounded font-black text-white/50">
+                                  Витрати: {Math.round(spendUAH).toLocaleString("uk-UA")} ₴ ({leadsCount} лід.)
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      {Array.from(new Set(campaignsList.map((c: any) => String(c.campaign_name || '').trim()).filter(Boolean))).length === 0 && (
+                        <div className="p-4 text-center text-[10px] text-white/30 italic">
+                          Кампаній не знайдено для цього проекту.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Selected campaigns list */}
+                  {selectedCampaigns.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 p-2 bg-white/[0.02] border border-white/5 rounded-xl">
+                      <span className="text-[9px] uppercase font-bold text-white/40 block w-full mb-1">Обрані кампанії:</span>
+                      {selectedCampaigns.map((camp) => (
+                        <span
+                          key={camp}
+                          onClick={() => setSelectedCampaigns(selectedCampaigns.filter((c) => c !== camp))}
+                          className="bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-lg font-bold flex items-center gap-1 cursor-pointer transition-all text-[10px]"
+                        >
+                          {camp} <span className="text-white/40">×</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Manual input fallback */}
+                  <div className="space-y-1 pt-1">
+                    <label className="text-[10px] uppercase font-bold text-white/50 block">Додати інші UTM-мітки кампаній вручну (через кому)</label>
+                    <input
+                      type="text"
+                      value={manualCampaignInput}
+                      onChange={(e) => setManualCampaignInput(e.target.value)}
+                      placeholder="utm_campaign_july, webinar_cold_audience"
+                      className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white text-xs placeholder-white/30"
+                    />
+                    <p className="text-[9px] text-white/30">Сюди потраплять рекламні витрати, що містять ці мітки в UTM</p>
+                  </div>
+                </div>
               </div>
 
               <div className="flex justify-between pt-2">
