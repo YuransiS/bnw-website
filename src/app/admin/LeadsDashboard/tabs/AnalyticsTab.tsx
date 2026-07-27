@@ -95,6 +95,81 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
     }));
   };
 
+  // Funnel Analytics Calculator
+  const getFunnelStats = (funnel: any) => {
+    const startDateTime = new Date(funnel.start_date).getTime();
+    
+    // Filter leads created after start date, and matching campaign or landing slugs
+    const matchedLeads = leadsList.filter((lead: any) => {
+      const leadTime = new Date(lead.created_at).getTime();
+      if (leadTime < startDateTime) return false;
+
+      const leadCampaign = String(lead.utm_campaign || "").trim().toLowerCase();
+      const leadLanding = String(lead.landing || lead.metadata?.target_sheet || "").trim().toLowerCase();
+
+      const campaignMatch = funnel.campaign_ids.some((id: string) => leadCampaign.includes(id.toLowerCase()));
+      const landingMatch = funnel.landing_slugs.some((slug: string) => leadLanding.includes(slug.toLowerCase()));
+
+      return campaignMatch || landingMatch;
+    });
+
+    // Sum revenue from these leads (orders)
+    let revenue = 0;
+    let salesCount = 0;
+    matchedLeads.forEach((lead: any) => {
+      if (lead.status === "Купив курс" || lead.status === "Купив(-ла) Трипвайер") {
+        revenue += Number(lead.amount || 0);
+        salesCount++;
+      }
+    });
+
+    // Sum Ad Spends from matched campaigns after funnel start date
+    let spend = 0;
+    campaignsList.forEach((c: any) => {
+      const isMatched = funnel.campaign_ids.some((id: string) => String(c.campaign_name || "").toLowerCase().includes(id.toLowerCase()));
+      if (isMatched) {
+        spend += Number(c.spend || 0);
+      }
+    });
+
+    // Sum manual transactions bound to this funnel
+    let manualSpendUAH = 0;
+    let manualIncomeUAH = 0;
+
+    funnelTransactions.forEach((tx: any) => {
+      if (tx.funnel_id === funnel.id) {
+        const amt = Number(tx.amount || 0);
+        const isUAH = tx.currency === "UAH";
+        const amtUAH = isUAH ? amt : amt * 44; // Conversion rate to UAH
+        if (tx.type === "expense") {
+          manualSpendUAH += amtUAH;
+        } else {
+          manualIncomeUAH += amtUAH;
+        }
+      }
+    });
+
+    revenue += manualIncomeUAH;
+    spend += manualSpendUAH;
+
+    const leadsCount = matchedLeads.length;
+    const profit = revenue - spend;
+    const roi = spend > 0 ? (profit / spend) * 100 : 0;
+    const cr = leadsCount > 0 ? (salesCount / leadsCount) * 100 : 0;
+
+    return {
+      leadsCount,
+      salesCount,
+      revenue,
+      spend,
+      profit,
+      roi,
+      cr,
+      manualSpend: manualSpendUAH,
+      manualIncome: manualIncomeUAH
+    };
+  };
+
   // Isolated states for QA Diagnostics panel
   const [isQaPanelExpanded, setIsQaPanelExpanded] = useState(false);
   const [traceQuery, setTraceQuery] = useState("");
@@ -179,299 +254,298 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
-      {/* Detailed Analytics Premium Date Filter Preset Switcher */}
-      <div
-        className={`flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 p-4 rounded-2xl shadow-xl backdrop-blur-md ${
-          isLight ? "bg-white border border-neutral-200" : "bg-[#0C0C0F]/45 border border-white/5"
-        }`}
-      >
-        <div className="space-y-1">
-          <h3 className="text-sm font-black uppercase tracking-widest text-white">Сквозна аналітика проекту</h3>
-          <p className="text-[11px] text-white/30 font-semibold">
-            Фільтрація та аналіз рекламного бюджету, конверсій та окупності
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto">
-          {/* Presets Segmented Selector */}
-          <div className="flex items-center gap-1 bg-[#050507] border border-white/5 p-1 rounded-xl w-full sm:w-auto">
-            {[
-              { id: "all", label: "Все время" },
-              { id: "30d", label: "30 днів" },
-              { id: "7d", label: "7 днів" },
-              { id: "1d", label: "1 день" }
-            ].map((preset) => {
-              const isActive = dateRangePreset === preset.id;
-              return (
-                <button
-                  key={preset.id}
-                  onClick={() => applyPreset(preset.id as any)}
-                  className={`flex-1 sm:flex-none px-3.5 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-150 cursor-pointer text-center ${
-                    isActive ? "bg-white text-black shadow-lg" : "text-white/40 hover:text-white hover:bg-white/5"
-                  }`}
-                >
-                  {preset.label}
-                </button>
-              );
-            })}
+      
+      {/* 2-Column Split Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-7 gap-6">
+        
+        {/* Left Side: Summary KPI Metrics (col-span-4) */}
+        <div className="lg:col-span-4 space-y-4">
+          <div className="flex items-center justify-between border-b border-white/5 pb-2">
+            <h3 className="text-xs font-black uppercase tracking-widest text-emerald-400">Сводні показники проекту</h3>
+            <span className="text-[10px] text-white/30 font-mono">Оновлено</span>
           </div>
 
-          {/* Custom Range Date Pickers */}
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => {
-                setStartDate(e.target.value);
-                setDateRangePreset("custom");
-              }}
-              className={`px-3 py-2 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 w-full sm:w-36 ${
-                isLight ? "bg-neutral-100 border border-neutral-300 text-neutral-900" : "bg-[#050507] border border-white/5 text-white"
-              }`}
-              placeholder="Від"
-            />
-            <span className="text-white/20 text-xs font-bold">—</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => {
-                setEndDate(e.target.value);
-                setDateRangePreset("custom");
-              }}
-              className={`px-3 py-2 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 w-full sm:w-36 ${
-                isLight ? "bg-neutral-100 border border-neutral-300 text-neutral-900" : "bg-[#050507] border border-white/5 text-white"
-              }`}
-              placeholder="До"
-            />
-            {(startDate || endDate) && (
-              <button
-                onClick={() => applyPreset("all")}
-                className={`p-2 rounded-xl border transition-all cursor-pointer ${
-                  isLight
-                    ? "border-neutral-200 hover:bg-neutral-100 text-neutral-600"
-                    : "border-white/10 hover:bg-white/5 text-white/60 hover:text-white"
-                }`}
-                title="Скинути період"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Spend card */}
+            <div className={`${cardClass} p-4 rounded-xl shadow-md backdrop-blur-md`}>
+              <p className={`text-[9px] ${textMutedClass} font-black uppercase tracking-widest`}>Витрати на рекламу ($)</p>
+              <p className="text-2xl font-black text-red-400 mt-2">${singleProjectStats?.totalSpend?.toFixed(2) || "0.00"}</p>
+              <p className={`text-[10px] ${textMutedClass} mt-0.5 font-semibold`}>Сумарний бюджет усього періоду</p>
+            </div>
+
+            {/* Course Revenue Card */}
+            <div className={`${cardClass} p-4 rounded-xl shadow-md backdrop-blur-md`}>
+              <p className={`text-[9px] ${textMutedClass} font-black uppercase tracking-widest`}>Виручка за курс</p>
+              <div className="mt-2 space-y-0.5">
+                {singleProjectStats && singleProjectStats.uahCourseRevenue > 0 && (
+                  <p className="text-xl font-black text-emerald-455">
+                    {formatLocaleNumber(singleProjectStats.uahCourseRevenue)} ₴
+                  </p>
+                )}
+                {singleProjectStats && singleProjectStats.eurCourseRevenue > 0 && (
+                  <p className="text-xl font-black text-emerald-455">
+                    {formatLocaleNumber(singleProjectStats.eurCourseRevenue)} €
+                  </p>
+                )}
+                {singleProjectStats && singleProjectStats.usdCourseRevenue > 0 && (
+                  <p className="text-xl font-black text-emerald-455">
+                    ${formatLocaleNumber(singleProjectStats.usdCourseRevenue)}
+                  </p>
+                )}
+                {(!singleProjectStats ||
+                  (singleProjectStats.uahCourseRevenue === 0 &&
+                    singleProjectStats.usdCourseRevenue === 0 &&
+                    singleProjectStats.eurCourseRevenue === 0)) && (
+                  <p className={`text-xl font-black ${textMutedLightClass}`}>0 ₴</p>
+                )}
+              </div>
+              <p className={`text-[10px] ${textMutedClass} mt-1 font-semibold`}>Виручка тільки від продажу основного курсу</p>
+            </div>
+
+            {/* Tripwire Revenue Card */}
+            <div className={`${cardClass} p-4 rounded-xl shadow-md backdrop-blur-md`}>
+              <p className={`text-[9px] ${textMutedClass} font-black uppercase tracking-widest`}>Виручка за трипвайєри</p>
+              <div className="mt-2 space-y-0.5">
+                {singleProjectStats && singleProjectStats.uahTripwireRevenue > 0 && (
+                  <p className="text-xl font-black text-indigo-400">
+                    {formatLocaleNumber(singleProjectStats.uahTripwireRevenue)} ₴
+                  </p>
+                )}
+                {singleProjectStats && singleProjectStats.eurTripwireRevenue > 0 && (
+                  <p className="text-xl font-black text-indigo-400">
+                    {formatLocaleNumber(singleProjectStats.eurTripwireRevenue)} €
+                  </p>
+                )}
+                {singleProjectStats && singleProjectStats.usdTripwireRevenue > 0 && (
+                  <p className="text-xl font-black text-indigo-400">
+                    ${formatLocaleNumber(singleProjectStats.usdTripwireRevenue)}
+                  </p>
+                )}
+                {(!singleProjectStats ||
+                  (singleProjectStats.uahTripwireRevenue === 0 &&
+                    singleProjectStats.usdTripwireRevenue === 0 &&
+                    singleProjectStats.eurTripwireRevenue === 0)) && (
+                  <p className={`text-xl font-black ${textMutedLightClass}`}>0 ₴</p>
+                )}
+              </div>
+              <p className={`text-[10px] ${textMutedClass} mt-1 font-semibold`}>Виручка від міні-продуктів та практикуму</p>
+            </div>
+
+            {/* Clean Profit & ROI Card */}
+            <div className={`${cardClass} p-4 rounded-xl shadow-md backdrop-blur-md`}>
+              <p className={`text-[9px] ${textMutedClass} font-black uppercase tracking-widest`}>
+                Чистий Прибуток (Маржа)
+              </p>
+              <div className="mt-2 space-y-0.5">
+                {singleProjectStats && (
+                  <>
+                    {singleProjectStats.uahRevenue > 0 && (
+                      <p className="text-lg font-black text-emerald-455">
+                        {formatLocaleNumber(singleProjectStats.uahRevenue)} ₴
+                      </p>
+                    )}
+                    {singleProjectStats.eurRevenue > 0 && (
+                      <p className="text-lg font-black text-emerald-455">
+                        {formatLocaleNumber(singleProjectStats.eurRevenue)} €
+                      </p>
+                    )}
+                    {(singleProjectStats.usdRevenue > 0 || singleProjectStats.totalSpend > 0) && (
+                      <p
+                        className={`text-lg font-black ${
+                          singleProjectStats.netProfitUsd >= 0 ? "text-emerald-455" : "text-red-400"
+                        }`}
+                      >
+                        {singleProjectStats.netProfitUsd >= 0 ? "" : "-"}$
+                        {formatLocaleNumber(Math.abs(singleProjectStats.netProfitUsd))}
+                      </p>
+                    )}
+                    {singleProjectStats.uahRevenue === 0 &&
+                      singleProjectStats.eurRevenue === 0 &&
+                      singleProjectStats.usdRevenue === 0 &&
+                      singleProjectStats.totalSpend === 0 && (
+                        <p className="text-lg font-black text-emerald-455">0 ₴</p>
+                      )}
+                  </>
+                )}
+                <span className="text-[9px] font-black uppercase text-yellow-400 block mt-1 tracking-wider">
+                  ROI за курс: {singleProjectStats?.roi?.toFixed(1) || "0.0"}%
+                </span>
+              </div>
+            </div>
+
+            {/* Clicks card */}
+            <div className={`${cardClass} p-4 rounded-xl shadow-md backdrop-blur-md`}>
+              <p className={`text-[9px] ${textMutedClass} font-black uppercase tracking-widest`}>Трафік (Кліки)</p>
+              <p className={`text-2xl font-black ${isLight ? "text-neutral-900" : "text-white"} mt-2`}>
+                {singleProjectStats?.totalClicks || 0}
+              </p>
+              <p className={`text-[10px] ${textMutedClass} mt-0.5 font-semibold`}>Загальна кількість переходів на сайт</p>
+            </div>
+
+            {/* Leads Card */}
+            <div className={`${cardClass} p-4 rounded-xl shadow-md backdrop-blur-md`}>
+              <p className={`text-[9px] ${textMutedClass} font-black uppercase tracking-widest`}>Реєстрації (Ліди)</p>
+              <p className={`text-2xl font-black ${isLight ? "text-neutral-900" : "text-white"} mt-2`}>
+                {singleProjectStats?.totalLeads || 0}
+              </p>
+              <p className={`text-[10px] ${textMutedClass} mt-0.5 font-semibold`}>
+                Конверсія клік-лід: {singleProjectStats?.conversionRate?.toFixed(1) || "0.0"}%
+              </p>
+            </div>
+
+            {/* Sales Card */}
+            <div className={`${cardClass} p-4 rounded-xl shadow-md backdrop-blur-md`}>
+              <p className={`text-[9px] ${textMutedClass} font-black uppercase tracking-widest`}>Успішні Оплати</p>
+              <p className="text-2xl font-black text-emerald-400 mt-2">{singleProjectStats?.totalSales || 0}</p>
+              <p className={`text-[10px] ${textMutedClass} mt-0.5 font-semibold`}>Кількість зафіксованих продажів</p>
+            </div>
+
+            {/* Conversion & AOV Card */}
+            <div className={`${cardClass} p-4 rounded-xl shadow-md backdrop-blur-md`}>
+              <p className={`text-[9px] ${textMutedClass} font-black uppercase tracking-widest`}>CR & Середній Чек</p>
+              <div className="mt-2 space-y-1.5">
+                {singleProjectStats && (singleProjectStats.aovUah > 0 || singleProjectStats.leadToSaleConvUah > 0) && (
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-white/50">UAH:</span>
+                    <span className="font-bold text-emerald-400">{formatLocaleNumber(singleProjectStats.aovUah)} ₴ (CR: {singleProjectStats.leadToSaleConvUah.toFixed(1)}%)</span>
+                  </div>
+                )}
+                {singleProjectStats && (singleProjectStats.aovUsd > 0 || singleProjectStats.leadToSaleConvUsd > 0) && (
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-white/50">USD:</span>
+                    <span className="font-bold text-emerald-400">${formatLocaleNumber(singleProjectStats.aovUsd)} (CR: {singleProjectStats.leadToSaleConvUsd.toFixed(1)}%)</span>
+                  </div>
+                )}
+                {(!singleProjectStats || (singleProjectStats.aovUah === 0 && singleProjectStats.aovUsd === 0)) && (
+                  <p className="text-[10px] text-white/30 italic">Немає оплат за період</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Side: Funnel events configuration & overview (col-span-3) */}
+        <div className="lg:col-span-3 space-y-4">
+          <div className="flex items-center justify-between border-b border-white/5 pb-2">
+            <h3 className="text-xs font-black uppercase tracking-widest text-indigo-400">Інтелектуальні події</h3>
+            <button
+              onClick={() => setActiveTab("funnels")}
+              className="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-black text-[10px] font-black rounded-lg cursor-pointer flex items-center gap-1 transition-all"
+            >
+              <Plus className="w-3 h-3" /> Створити воронку
+            </button>
+          </div>
+
+          <div className={`${cardClass} p-4 rounded-xl flex flex-col justify-between min-h-[300px] h-[340px]`}>
+            <div className="space-y-3 flex-1 flex flex-col">
+              <span className="text-[10px] text-white/40 block font-semibold leading-normal">
+                Перелік налаштованих маркетингових воронок для відстеження конверсії окупності в реальному часі.
+              </span>
+              
+              <div className="space-y-2 overflow-y-auto custom-scrollbar flex-1 pr-1">
+                {funnels.map((funnel) => {
+                  const parsedType = funnel.description?.startsWith("[Type:")
+                    ? funnel.description.split("]")[0].replace("[Type: ", "")
+                    : "Інше";
+                  return (
+                    <div
+                      key={funnel.id}
+                      className="flex justify-between items-center p-2.5 rounded-lg bg-white/5 border border-white/5 hover:border-white/10 transition-all text-[11px] cursor-pointer"
+                      onClick={() => setActiveTab("funnels")}
+                    >
+                      <div>
+                        <span className="font-extrabold text-white block truncate max-w-[150px]">{funnel.name}</span>
+                        <span className="text-[9px] text-white/30 block mt-0.5">{parsedType} • {new Date(funnel.start_date).toLocaleDateString("uk-UA")}</span>
+                      </div>
+                      <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20 font-bold shrink-0">
+                        {parsedType}
+                      </span>
+                    </div>
+                  );
+                })}
+                {funnels.length === 0 && (
+                  <div className="text-center py-16 text-white/20 italic">
+                    Воронки для цього проекту ще не створені. Натисніть "+ Створити воронку".
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Scoped Project KPI Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        {/* Spend card */}
-        <div className={`${cardClass} p-6 rounded-2xl shadow-2xl backdrop-blur-md`}>
-          <p className={`text-[10px] ${textMutedClass} font-black uppercase tracking-widest`}>Витрати на рекламу ($)</p>
-          <p className="text-3xl font-black text-red-400 mt-4">${singleProjectStats?.totalSpend.toFixed(2)}</p>
-          <p className={`text-[11px] ${textMutedClass} mt-1 font-semibold`}>Сумарний бюджет усього періоду</p>
+      {/* Large Funnels Summary Tiles (Плитки подій воронок) */}
+      <div className="space-y-4 pt-4 border-t border-white/5">
+        <div className="flex justify-between items-center">
+          <h3 className="text-xs font-black uppercase tracking-widest text-indigo-400">Аналіз окупності активних воронок</h3>
+          <span className="text-[10px] text-white/30">Сводні показники конверсії</span>
         </div>
 
-        {/* Course Revenue Card */}
-        <div className={`${cardClass} p-6 rounded-2xl shadow-2xl backdrop-blur-md`}>
-          <p className={`text-[10px] ${textMutedClass} font-black uppercase tracking-widest`}>Виручка за курс</p>
-          <div className="mt-4 space-y-1">
-            {singleProjectStats && singleProjectStats.uahCourseRevenue > 0 && (
-              <p className="text-2xl font-black text-emerald-450">
-                {formatLocaleNumber(singleProjectStats.uahCourseRevenue)} ₴
-              </p>
-            )}
-            {singleProjectStats && singleProjectStats.eurCourseRevenue > 0 && (
-              <p className="text-2xl font-black text-emerald-455">
-                {formatLocaleNumber(singleProjectStats.eurCourseRevenue)} €
-              </p>
-            )}
-            {singleProjectStats && singleProjectStats.usdCourseRevenue > 0 && (
-              <p className="text-2xl font-black text-emerald-455">
-                ${formatLocaleNumber(singleProjectStats.usdCourseRevenue)}
-              </p>
-            )}
-            {(!singleProjectStats ||
-              (singleProjectStats.uahCourseRevenue === 0 &&
-                singleProjectStats.usdCourseRevenue === 0 &&
-                singleProjectStats.eurCourseRevenue === 0)) && (
-              <p className={`text-2xl font-black ${textMutedLightClass}`}>0 ₴</p>
-            )}
-          </div>
-          <p className={`text-[11px] ${textMutedClass} mt-2 font-semibold`}>Виручка тільки від продажу основного курсу</p>
-        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {funnels.map((funnel) => {
+            const stats = getFunnelStats(funnel);
+            const parsedType = funnel.description?.startsWith("[Type:")
+              ? funnel.description.split("]")[0].replace("[Type: ", "")
+              : "Інше";
+            const cleanDescription = funnel.description?.includes("]")
+              ? funnel.description.substring(funnel.description.indexOf("]") + 1).trim()
+              : funnel.description;
 
-        {/* Tripwire Revenue Card */}
-        <div className={`${cardClass} p-6 rounded-2xl shadow-2xl backdrop-blur-md`}>
-          <p className={`text-[10px] ${textMutedClass} font-black uppercase tracking-widest`}>Виручка за трипвайєри</p>
-          <div className="mt-4 space-y-1">
-            {singleProjectStats && singleProjectStats.uahTripwireRevenue > 0 && (
-              <p className="text-2xl font-black text-indigo-400">
-                {formatLocaleNumber(singleProjectStats.uahTripwireRevenue)} ₴
-              </p>
-            )}
-            {singleProjectStats && singleProjectStats.eurTripwireRevenue > 0 && (
-              <p className="text-2xl font-black text-indigo-400">
-                {formatLocaleNumber(singleProjectStats.eurTripwireRevenue)} €
-              </p>
-            )}
-            {singleProjectStats && singleProjectStats.usdTripwireRevenue > 0 && (
-              <p className="text-2xl font-black text-indigo-400">
-                ${formatLocaleNumber(singleProjectStats.usdTripwireRevenue)}
-              </p>
-            )}
-            {(!singleProjectStats ||
-              (singleProjectStats.uahTripwireRevenue === 0 &&
-                singleProjectStats.usdTripwireRevenue === 0 &&
-                singleProjectStats.eurTripwireRevenue === 0)) && (
-              <p className={`text-2xl font-black ${textMutedLightClass}`}>0 ₴</p>
-            )}
-          </div>
-          <p className={`text-[11px] ${textMutedClass} mt-2 font-semibold`}>Виручка від міні-продуктів та практикуму</p>
-        </div>
-
-        {/* Clean Profit & ROI Card */}
-        <div className={`${cardClass} p-6 rounded-2xl shadow-2xl backdrop-blur-md`}>
-          <p className={`text-[10px] ${textMutedClass} font-black uppercase tracking-widest`}>
-            Чистий Прибуток (Маржа)
-          </p>
-          <div className="mt-4 space-y-1">
-            {singleProjectStats && (
-              <>
-                {singleProjectStats.uahRevenue > 0 && (
-                  <p className="text-xl font-black text-emerald-455">
-                    {formatLocaleNumber(singleProjectStats.uahRevenue)} ₴
-                  </p>
-                )}
-                {singleProjectStats.eurRevenue > 0 && (
-                  <p className="text-xl font-black text-emerald-455">
-                    {formatLocaleNumber(singleProjectStats.eurRevenue)} €
-                  </p>
-                )}
-                {(singleProjectStats.usdRevenue > 0 || singleProjectStats.totalSpend > 0) && (
-                  <p
-                    className={`text-xl font-black ${
-                      singleProjectStats.netProfitUsd >= 0 ? "text-emerald-455" : "text-red-400"
-                    }`}
-                  >
-                    {singleProjectStats.netProfitUsd >= 0 ? "" : "-"}$
-                    {formatLocaleNumber(Math.abs(singleProjectStats.netProfitUsd))}
-                  </p>
-                )}
-                {singleProjectStats.uahRevenue === 0 &&
-                  singleProjectStats.eurRevenue === 0 &&
-                  singleProjectStats.usdRevenue === 0 &&
-                  singleProjectStats.totalSpend === 0 && (
-                    <p className="text-xl font-black text-emerald-455">0 ₴</p>
-                  )}
-              </>
-            )}
-            <span className="text-[10px] font-black uppercase text-yellow-400 block mt-2 tracking-wider">
-              ROI за курс: {singleProjectStats?.roi.toFixed(1)}%
-            </span>
-          </div>
-        </div>
-
-        {/* Row 2 */}
-        <div className={`${cardClass} p-6 rounded-2xl shadow-2xl backdrop-blur-md`}>
-          <p className={`text-[10px] ${textMutedClass} font-black uppercase tracking-widest`}>Трафік (Кліки)</p>
-          <p className={`text-3xl font-black ${isLight ? "text-neutral-900" : "text-white"} mt-4`}>
-            {singleProjectStats?.totalClicks}
-          </p>
-          <p className={`text-[11px] ${textMutedClass} mt-1 font-semibold`}>Загальна кількість переходів на сайт</p>
-        </div>
-        <div className={`${cardClass} p-6 rounded-2xl shadow-2xl backdrop-blur-md`}>
-          <p className={`text-[10px] ${textMutedClass} font-black uppercase tracking-widest`}>Реєстрації (Ліди)</p>
-          <p className={`text-3xl font-black ${isLight ? "text-neutral-900" : "text-white"} mt-4`}>
-            {singleProjectStats?.totalLeads}
-          </p>
-          <p className={`text-[11px] ${textMutedClass} mt-1 font-semibold`}>
-            Конверсія клік-лід: {singleProjectStats?.conversionRate.toFixed(1)}%
-          </p>
-        </div>
-        <div className={`${cardClass} p-6 rounded-2xl shadow-2xl backdrop-blur-md`}>
-          <p className={`text-[10px] ${textMutedClass} font-black uppercase tracking-widest`}>Успішні Оплати (Кількість)</p>
-          <p className="text-3xl font-black text-emerald-400 mt-4">{singleProjectStats?.totalSales}</p>
-          <p className={`text-[11px] ${textMutedClass} mt-1 font-semibold`}>Кількість зафіксованих продажів</p>
-        </div>
-        <div className={`${cardClass} p-6 rounded-2xl shadow-2xl backdrop-blur-md`}>
-          <p className={`text-[10px] ${textMutedClass} font-black uppercase tracking-widest`}>Конверсія & Середній Чек</p>
-          <div className="mt-4 space-y-3">
-            {singleProjectStats && (singleProjectStats.aovUah > 0 || singleProjectStats.leadToSaleConvUah > 0) && (
+            return (
               <div
-                className={`space-y-0.5 ${
-                  singleProjectStats.aovUsd > 0 ||
-                  singleProjectStats.leadToSaleConvUsd > 0 ||
-                  singleProjectStats.aovEur > 0 ||
-                  singleProjectStats.leadToSaleConvEur > 0
-                    ? `border-b ${borderClass} pb-2`
-                    : ""
-                }`}
+                key={funnel.id}
+                className={`${cardClass} p-5 rounded-2xl space-y-4 text-xs text-white hover:border-emerald-500/20 transition-all cursor-pointer`}
+                onClick={() => setActiveTab("funnels")}
               >
-                <span className={`text-[9px] ${textMutedClass} font-black uppercase tracking-wider block`}>
-                  Гривневі замовлення (UAH)
-                </span>
-                <div className="flex justify-between items-baseline gap-2 mt-1">
-                  <p className="text-lg font-black text-emerald-450">
-                    {singleProjectStats.aovUah > 0 ? `${formatLocaleNumber(singleProjectStats.aovUah)} ₴` : "—"}
-                  </p>
-                  <span className="text-[10px] font-black uppercase text-yellow-400 tracking-wider">
-                    CR: {singleProjectStats.leadToSaleConvUah.toFixed(1)}%
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="font-black text-sm text-white">{funnel.name}</h4>
+                    <p className="text-[9px] text-white/30 mt-0.5">
+                      Тип: {parsedType} • Старт: {new Date(funnel.start_date).toLocaleDateString("uk-UA")}
+                    </p>
+                  </div>
+                  <span className={`text-[10px] px-2.5 py-0.5 rounded border font-bold ${
+                    stats.roi >= 100
+                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                      : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                  }`}>
+                    ROI: {Math.round(stats.roi)}%
                   </span>
                 </div>
-              </div>
-            )}
 
-            {singleProjectStats && (singleProjectStats.aovUsd > 0 || singleProjectStats.leadToSaleConvUsd > 0) && (
-              <div
-                className={`space-y-0.5 ${
-                  singleProjectStats.aovEur > 0 || singleProjectStats.leadToSaleConvEur > 0
-                    ? `border-b ${borderClass} pb-2`
-                    : ""
-                }`}
-              >
-                <span className={`text-[9px] ${textMutedClass} font-black uppercase tracking-wider block`}>
-                  Доларові замовлення (USD)
-                </span>
-                <div className="flex justify-between items-baseline gap-2 mt-1">
-                  <p className="text-lg font-black text-emerald-450">
-                    {singleProjectStats.aovUsd > 0 ? `$${formatLocaleNumber(singleProjectStats.aovUsd)}` : "—"}
+                {cleanDescription && (
+                  <p className="text-[11px] text-white/60 bg-white/[0.01] p-2 rounded border border-white/5 italic">
+                    {cleanDescription}
                   </p>
-                  <span className="text-[10px] font-black uppercase text-yellow-400 tracking-wider">
-                    CR: {singleProjectStats.leadToSaleConvUsd.toFixed(1)}%
-                  </span>
-                </div>
-              </div>
-            )}
+                )}
 
-            {singleProjectStats && (singleProjectStats.aovEur > 0 || singleProjectStats.leadToSaleConvEur > 0) && (
-              <div className="space-y-0.5">
-                <span className={`text-[9px] ${textMutedClass} font-black uppercase tracking-wider block`}>
-                  Єврові замовлення (EUR)
-                </span>
-                <div className="flex justify-between items-baseline gap-2 mt-1">
-                  <p className="text-lg font-black text-emerald-450">
-                    {singleProjectStats.aovEur > 0 ? `${formatLocaleNumber(singleProjectStats.aovEur)} €` : "—"}
-                  </p>
-                  <span className="text-[10px] font-black uppercase text-yellow-400 tracking-wider">
-                    CR: {singleProjectStats.leadToSaleConvEur.toFixed(1)}%
-                  </span>
+                <div className="grid grid-cols-3 gap-2 bg-[#050507]/40 p-3 rounded-xl border border-white/5 text-center leading-normal">
+                  <div>
+                    <span className="text-[9px] uppercase font-bold text-white/40 block">Бюджет</span>
+                    <span className="text-xs font-black text-white">{stats.spend.toLocaleString("uk-UA")} ₴</span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] uppercase font-bold text-white/40 block">Ліди</span>
+                    <span className="text-xs font-black text-emerald-450 block">{stats.leadsCount}</span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] uppercase font-bold text-white/40 block">Продажі</span>
+                    <span className="text-xs font-black text-amber-400 block">{stats.salesCount}</span>
+                  </div>
                 </div>
-              </div>
-            )}
 
-            {(!singleProjectStats ||
-              (singleProjectStats.aovUah === 0 &&
-                singleProjectStats.aovUsd === 0 &&
-                singleProjectStats.aovEur === 0)) && (
-              <div className="space-y-0.5">
-                <span className={`text-[9px] ${textMutedClass} font-black uppercase tracking-wider block`}>
-                  Гривневі замовлення (UAH)
-                </span>
-                <div className="flex justify-between items-baseline gap-2 mt-1">
-                  <p className="text-lg font-black text-emerald-450">0 ₴</p>
-                  <span className="text-[10px] font-black uppercase text-yellow-400 tracking-wider">CR: 0.0%</span>
+                <div className="flex justify-between items-center text-[10px] border-t border-white/5 pt-2 text-white/50">
+                  <span>Конверсія CR: <b>{stats.cr.toFixed(1)}%</b></span>
+                  <span>Виручка: <b className="text-emerald-455">{stats.revenue.toLocaleString("uk-UA")} ₴</b></span>
                 </div>
               </div>
-            )}
-          </div>
+            );
+          })}
+          {funnels.length === 0 && (
+            <div className={`col-span-2 ${cardClass} p-8 text-center text-white/30 italic rounded-2xl`}>
+              Не знайдено воронок для відображення детальної аналітики. Створіть нову воронку за допомогою кнопки вище.
+            </div>
+          )}
         </div>
       </div>
 
