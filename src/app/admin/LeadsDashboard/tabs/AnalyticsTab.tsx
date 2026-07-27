@@ -16,7 +16,10 @@ import {
   ChevronDown,
   ChevronRight,
   Shield,
-  Activity
+  Activity,
+  Plus,
+  Target,
+  Layers
 } from "lucide-react";
 import { useTheme } from "../../ThemeProvider";
 import { formatLocaleNumber, formatDualCurrency, formatDualProfit } from "@/app/admin/utils";
@@ -36,10 +39,15 @@ interface AnalyticsTabProps {
   dateRangePreset: string;
   startDate: string;
   endDate: string;
-  applyPreset: (preset: "all" | "30d" | "7d" | "1d") => void;
+  applyPreset: (preset: "all" | "30d" | "7d" | "1d" | "month") => void;
   setStartDate: (val: string) => void;
   setEndDate: (val: string) => void;
   setDateRangePreset: (val: any) => void;
+  funnels: any[];
+  funnelTransactions: any[];
+  campaignsList: any[];
+  leadsList: any[];
+  setActiveTab: (val: string) => void;
 }
 
 export const AnalyticsTab = React.memo(function AnalyticsTab({
@@ -59,7 +67,12 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
   applyPreset,
   setStartDate,
   setEndDate,
-  setDateRangePreset
+  setDateRangePreset,
+  funnels,
+  funnelTransactions,
+  campaignsList,
+  leadsList,
+  setActiveTab
 }: AnalyticsTabProps) {
   const { theme } = useTheme();
   const isLight = theme === "light";

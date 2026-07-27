@@ -85,6 +85,19 @@ const DEFAULT_DATA_HEALTH = {
   unparseableMetadataDatesCount: 0
 };
 
+const getCurrentMonthDates = () => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth();
+  const start = new Date(year, month, 1);
+  const end = new Date(year, month + 1, 0);
+  const formatDate = (d: Date) => d.toISOString().split("T")[0];
+  return {
+    startDate: formatDate(start),
+    endDate: formatDate(end)
+  };
+};
+
 export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const router = useRouter();
 
@@ -131,8 +144,9 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       }
 
       prevSlugRef.current = currentSlug;
-      setStartDate("");
-      setEndDate("");
+      const monthDates = getCurrentMonthDates();
+      setStartDate(monthDates.startDate);
+      setEndDate(monthDates.endDate);
       setStatusFilter("all");
       setTouchCountFilter("all");
       setSourceFilter("all");
@@ -140,7 +154,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       setCurrentPage(1);
       setSelectedLanding("all");
       setSearchQuery("");
-      setDateRangePreset("all");
+      setDateRangePreset("month");
     }
 
     setDashboardData(initialData);
@@ -230,9 +244,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const [touchCountFilter, setTouchCountFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [unpaidIntentOnly, setUnpaidIntentOnly] = useState(false);
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [dateRangePreset, setDateRangePreset] = useState<"all" | "30d" | "7d" | "1d" | "custom">("all");
+  const monthDates = getCurrentMonthDates();
+  const [startDate, setStartDate] = useState(monthDates.startDate);
+  const [endDate, setEndDate] = useState(monthDates.endDate);
+  const [dateRangePreset, setDateRangePreset] = useState<"all" | "30d" | "7d" | "1d" | "month" | "custom">("month");
   const [globalCurrency, setGlobalCurrency] = useState<"USD" | "UAH">("UAH");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedLanding, setSelectedLanding] = useState<string>("all");
@@ -244,6 +259,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const [showAddTransaction, setShowAddTransaction] = useState(false);
   const [isFinanceLoading, setIsFinanceLoading] = useState(false);
   const [funnelsList, setFunnelsList] = useState<any[]>([]);
+  const [funnelTransactionsList, setFunnelTransactionsList] = useState<any[]>([]);
 
   const fetchFinanceData = useCallback(async () => {
     if (!activeProject || activeTab !== "finance") return;
@@ -265,20 +281,27 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   }, [fetchFinanceData]);
 
   useEffect(() => {
-    if (activeProject && activeTab === "finance") {
+    if (activeProject) {
       getFunnelsAction(activeProject.id).then((res: any) => {
         if (res && !res.error && Array.isArray(res.funnels)) {
           setFunnelsList(res.funnels);
+          setFunnelTransactionsList(res.transactions || []);
         }
       });
     }
-  }, [activeProject, activeTab]);
+  }, [activeProject]);
 
-  const applyPreset = useCallback((preset: "all" | "30d" | "7d" | "1d") => {
+  const applyPreset = useCallback((preset: "all" | "30d" | "7d" | "1d" | "month") => {
     setDateRangePreset(preset);
     if (preset === "all") {
       setStartDate("");
       setEndDate("");
+      return;
+    }
+    if (preset === "month") {
+      const monthDates = getCurrentMonthDates();
+      setStartDate(monthDates.startDate);
+      setEndDate(monthDates.endDate);
       return;
     }
     const today = new Date();
@@ -700,92 +723,81 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       `}} />
 
       {/* Main Container Header */}
-      <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 border-b pb-6 ${borderClass}`}>
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-3">
-            <span
-              className={`text-xs font-black uppercase px-2.5 py-0.5 rounded tracking-widest ${
-                role === "admin" || role === "superman"
-                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+      {viewType === "all" && (
+        <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 border-b pb-6 ${borderClass}`}>
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-3">
+              <span
+                className={`text-xs font-black uppercase px-2.5 py-0.5 rounded tracking-widest ${
+                  role === "admin" || role === "superman"
+                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                    : role === "producer"
+                    ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                    : role === "rop"
+                    ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
+                    : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                }`}
+              >
+                {role === "admin" || role === "superman"
+                  ? "Супермен"
                   : role === "producer"
-                  ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                  ? "Продюсер"
                   : role === "rop"
-                  ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
-                  : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-              }`}
-            >
-              {role === "admin" || role === "superman"
-                ? "Супермен"
-                : role === "producer"
-                ? "Продюсер"
-                : role === "rop"
-                ? "Керівник ВП (РОП)"
-                : "Відділ продажів"}
-            </span>
-            <div className={`flex items-center gap-1.5 text-xs ${textMutedClass}`}>
-              <Activity className="w-4 h-4 text-emerald-500 animate-pulse" />
-              <span>Платформа активна</span>
+                  ? "Керівник ВП (РОП)"
+                  : "Відділ продажів"}
+              </span>
+              <div className={`flex items-center gap-1.5 text-xs ${textMutedClass}`}>
+                <Activity className="w-4 h-4 text-emerald-500 animate-pulse" />
+                <span>Платформа активна</span>
+              </div>
             </div>
-          </div>
-          <h1 className="text-3xl font-black uppercase tracking-tight flex items-center gap-2">B&W Analytics CRM</h1>
-        </div>
-
-        {/* Global Controls */}
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          {unresolvedOrders.length > 0 && (
-            <button
-              onClick={() => setShowUnresolvedModal(true)}
-              className="px-4 py-2.5 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 text-xs font-black transition-all hover:bg-red-500/20 cursor-pointer flex items-center gap-2 animate-pulse"
-              title="Є транзакції без валюти"
-            >
-              <AlertCircle className="w-4 h-4" />
-              <span>Помилка: {unresolvedOrders.length}</span>
-            </button>
-          )}
-
-          {/* Project Switcher Dropdown */}
-          <div className="relative flex-grow md:flex-grow-0">
-            <select
-              value={activeSlug}
-              onChange={handleScopeChange}
-              className={`w-full md:w-64 appearance-none pl-4 pr-10 py-3 rounded-xl focus:outline-none text-xs font-black cursor-pointer ${selectClass}`}
-            >
-              {viewType === "all" && <option value="all">🌐 Весь холдинг (Зведений вид)</option>}
-              {allowedProjects.map((p: any) => (
-                <option key={p.slug} value={p.slug}>
-                  📂 {p.name}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none text-crm-muted" />
+            <h1 className="text-3xl font-black uppercase tracking-tight flex items-center gap-2">B&W Analytics CRM</h1>
           </div>
 
-          {/* Developer Mode Toggle */}
-          {(role === "admin" || role === "superman") && (
-            <button
-              onClick={toggleDevMode}
-              className={`px-4 py-3 rounded-xl border transition-all cursor-pointer flex items-center gap-2 text-xs font-black ${
-                isDevMode ? "bg-red-500/10 border-red-500/30 text-red-400" : "bg-white/5 border-white/10 text-white/50"
-              }`}
-            >
-              <span>🐞 Dev Mode</span>
-            </button>
-          )}
+          {/* Global Controls */}
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            {unresolvedOrders.length > 0 && (
+              <button
+                onClick={() => setShowUnresolvedModal(true)}
+                className="px-4 py-2.5 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 text-xs font-black transition-all hover:bg-red-500/20 cursor-pointer flex items-center gap-2 animate-pulse"
+                title="Є транзакції без валюти"
+              >
+                <AlertCircle className="w-4 h-4" />
+                <span>Помилка: {unresolvedOrders.length}</span>
+              </button>
+            )}
 
-          {/* Theme Toggle */}
-          <button
-            onClick={handleToggleTheme}
-            className={`p-3 rounded-xl border transition-all cursor-pointer ${
-              isLight
-                ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-300 text-neutral-800"
-                : "bg-white/5 hover:bg-white/10 border-white/10 text-white"
-            }`}
-            aria-label="Переключити тему"
-          >
-            {isLight ? "🌙" : "☀️"}
-          </button>
+            {/* Project Switcher Dropdown */}
+            <div className="relative flex-grow md:flex-grow-0">
+              <select
+                value={activeSlug}
+                onChange={handleScopeChange}
+                className={`w-full md:w-64 appearance-none pl-4 pr-10 py-3 rounded-xl focus:outline-none text-xs font-black cursor-pointer ${selectClass}`}
+              >
+                {viewType === "all" && <option value="all">🌐 Весь холдинг (Зведений вид)</option>}
+                {allowedProjects.map((p: any) => (
+                  <option key={p.slug} value={p.slug}>
+                    📂 {p.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none text-crm-muted" />
+            </div>
+
+            {/* Developer Mode Toggle */}
+            {(role === "admin" || role === "superman") && (
+              <button
+                onClick={toggleDevMode}
+                className={`px-4 py-3 rounded-xl border transition-all cursor-pointer flex items-center gap-2 text-xs font-black ${
+                  isDevMode ? "bg-red-500/10 border-red-500/30 text-red-400" : "bg-white/5 border-white/10 text-white/50"
+                }`}
+              >
+                <span>🐞 Dev Mode</span>
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Sticky Global Filter Bar */}
       <div className={`sticky top-0 z-40 backdrop-blur-md border p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 mb-6 shadow-xl ${isLight ? 'bg-white/80 border-neutral-250' : 'bg-[#0c0c0f]/80 border-white/5'}`}>
@@ -817,6 +829,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             <div className="flex bg-white/5 p-0.5 rounded-xl border border-white/5 shrink-0">
               {[
                 { key: "all", label: "Все время" },
+                { key: "month", label: "Поточний місяць" },
                 { key: "30d", label: "30 днів" },
                 { key: "7d", label: "7 днів" },
                 { key: "1d", label: "Сьогодні" }
@@ -914,7 +927,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             }`}
           >
             <BarChart4 className="w-4 h-4" />
-            Сквозна аналітика
+            Зведений огляд
           </button>
         )}
 
@@ -950,7 +963,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                 : "text-white/40 hover:text-white"
             }`}
           >
-            <ClipboardCheck className="w-4 h-4 text-emerald-455" />📋 Анкети
+            <ClipboardCheck className="w-4 h-4 text-emerald-455" />📋 Заявки
           </button>
         )}
 
@@ -969,7 +982,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             }`}
           >
             <Grid className="w-4 h-4" />
-            База лідів
+            📂 Всі ліди
           </button>
         )}
 
@@ -1137,7 +1150,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             role={role}
             isDevMode={isDevMode}
             activeSlug={activeSlug}
-            activeProjectId={activeProject?.id}
+            activeProjectId={activeProject?.id || ""}
             dateRangePreset={dateRangePreset}
             startDate={startDate}
             endDate={endDate}
@@ -1145,6 +1158,11 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             setStartDate={setStartDate}
             setEndDate={setEndDate}
             setDateRangePreset={setDateRangePreset}
+            funnels={funnelsList}
+            funnelTransactions={funnelTransactionsList}
+            campaignsList={dashboardData.campaignsData || []}
+            leadsList={processedLeads}
+            setActiveTab={setActiveTab}
           />
         )}
 

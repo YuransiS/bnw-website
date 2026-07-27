@@ -356,29 +356,6 @@ export const fetchWithPostTunnel = async (slug: string, params: any) => {
 };
 
 export const fetchCRMLeads = async (slug: string, params: any) => {
-  try {
-    const res = await fetch("/api/crm/leads", {
-      method: "QUERY",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ slug, filters: params })
-    });
-    
-    if (res.ok) {
-      return await res.json();
-    }
-    
-    if (res.status === 405 || res.status === 403 || res.status === 400) {
-      console.warn("QUERY method rejected by server, retrying with POST tunnel override...");
-      return await fetchWithPostTunnel(slug, params);
-    }
-    
-    const errData = await res.json().catch(() => ({}));
-    throw new Error(errData.error || `HTTP error! Status: ${res.status}`);
-  } catch (err: any) {
-    console.warn("QUERY request failed (network/browser boundary), retrying with POST tunnel override:", err);
-    return await fetchWithPostTunnel(slug, params);
-  }
+  return fetchWithPostTunnel(slug, params);
 };
 

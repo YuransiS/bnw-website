@@ -67,18 +67,6 @@ export default function FounderDashboardClient({
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Demo Mode Toggle */}
-          <button
-            onClick={() => setDemoMode(!demoMode)}
-            className={`px-3 py-1.5 rounded-xl border text-[10px] font-black transition-all flex items-center gap-1.5 cursor-pointer ${
-              demoMode ? "bg-amber-500/10 border-amber-500/30 text-amber-400" : "bg-white/5 border-white/10 text-white/50 hover:text-white"
-            }`}
-            title="Приховати цифри для показу екрану"
-          >
-            {demoMode ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-            Демо-режим
-          </button>
-
           {/* Currency Toggle */}
           <div className="flex bg-white/5 p-0.5 rounded-xl border border-white/5 shrink-0">
             <button
@@ -399,16 +387,16 @@ export default function FounderDashboardClient({
             <div className="space-y-2 text-xs bg-white/5 p-3 rounded-xl border border-white/5">
               <div className="flex justify-between items-center">
                 <span>Сповіщення про дедлайни</span>
-                <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-bold">Активно</span>
+                <span className="text-[9px] bg-neutral-500/10 text-neutral-400 px-2 py-0.5 rounded font-bold">Неактивно</span>
               </div>
               <div className="flex justify-between items-center border-t border-white/5 pt-2 mt-2">
                 <span>Фінансові звіти (тижневі)</span>
-                <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-bold">Активно</span>
+                <span className="text-[9px] bg-neutral-500/10 text-neutral-400 px-2 py-0.5 rounded font-bold">Неактивно</span>
               </div>
             </div>
 
             <button
-              onClick={() => alert("Тестове сповіщення надіслано в Telegram-чат фаундерів!")}
+              onClick={() => alert("Помилка: Telegram-інтеграція для автоматичних звітів фаундерів не налаштована. Будь ласка, вкажіть відповідні токени в налаштуваннях.")}
               className="w-full py-2 bg-white hover:bg-neutral-100 text-black font-extrabold rounded-xl text-xs transition-all cursor-pointer shadow-lg active:scale-98"
             >
               Надіслати тест в TG

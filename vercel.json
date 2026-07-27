@@ -2,11 +2,11 @@
   "crons": [
     {
       "path": "/api/cron/sync-spend",
-      "schedule": "0 3 * * *"
+      "schedule": "0 5-18 * * *"
     },
     {
       "path": "/api/cron/trigger-all-rebuilds",
-      "schedule": "0 3 * * *"
+      "schedule": "0 5-18 * * *"
     }
   ]
 }

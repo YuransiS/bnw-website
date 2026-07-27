@@ -181,7 +181,7 @@ ON daily_traffic_and_costs (project_id, date, utm_source, campaign_id, COALESCE(
 
 Универсальный эндпоинт для отправки лидов с сайтов/конструкторов или других CRM.
 
-*   **URL:** `https://victoria-mc.vercel.app/api/v1/leads/register`
+*   **URL:** `https://bnw-prod.vercel.app/api/v1/leads/register`
 *   **Метод:** `POST`
 *   **Headers:** `Content-Type: application/json`
 

@@ -65,6 +65,52 @@ export default function TopHeader({
   }, []);
 
   // Close account dropdown on outside click
+  const [timeRemaining, setTimeRemaining] = useState("");
+
+  useEffect(() => {
+    const updateTimer = () => {
+      const now = new Date();
+      const currentHour = now.getHours(); // Local hour
+      
+      let target = new Date(now);
+      target.setMinutes(0);
+      target.setSeconds(0);
+      target.setMilliseconds(0);
+      
+      if (currentHour >= 8 && currentHour < 20) {
+        target.setHours(currentHour + 1);
+      } else if (currentHour >= 20) {
+        target.setDate(now.getDate() + 1);
+        target.setHours(8);
+      } else {
+        target.setHours(8);
+      }
+      
+      const diffMs = target.getTime() - now.getTime();
+      if (diffMs <= 0) {
+        setTimeRemaining("00:00");
+        return;
+      }
+      
+      const diffSecs = Math.floor(diffMs / 1000);
+      const hrs = Math.floor(diffSecs / 3600);
+      const mins = Math.floor((diffSecs % 3600) / 60);
+      const secs = diffSecs % 60;
+      
+      if (hrs > 0) {
+        setTimeRemaining(`${hrs}г ${mins}хв`);
+      } else {
+        const minStr = String(mins).padStart(2, "0");
+        const secStr = String(secs).padStart(2, "0");
+        setTimeRemaining(`${minStr}:${secStr}`);
+      }
+    };
+    
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (accountRef.current && !accountRef.current.contains(event.target as Node)) {
@@ -191,75 +237,91 @@ export default function TopHeader({
           )}
         </nav>
 
-        {/* Right: SendPulse-Style Account Menu Popover */}
-        <div className="relative shrink-0" ref={accountRef}>
-          <button
-            onClick={() => setIsAccountOpen(!isAccountOpen)}
-            className="flex items-center gap-2.5 p-1.5 pr-3 rounded-2xl bg-white/5 border border-white/10 hover:border-emerald-500/30 transition-all cursor-pointer group"
-          >
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-black font-black text-xs flex items-center justify-center shadow-md">
-              {userInitials}
-            </div>
-            <div className="hidden sm:block text-left">
-              <span className="text-xs font-black text-white block truncate max-w-[120px]">
-                {displayName}
+        {/* Right Area: Control & Account Popover */}
+        <div className="flex items-center gap-3 shrink-0">
+          {/* Spend Sync Timer Countdown */}
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-white/5 border border-white/10 select-none">
+            <span className={`w-1.5 h-1.5 rounded-full ${new Date().getHours() >= 8 && new Date().getHours() < 20 ? "bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-white/20"}`} />
+            <div className="text-left leading-none">
+              <span className="text-[8px] text-white/40 block font-bold uppercase tracking-wider">
+                Оновлення витрат
               </span>
-              <span className="text-[9px] text-emerald-400/80 font-bold uppercase tracking-wider block">
-                {userRole}
+              <span className="text-[10px] font-black text-emerald-400 font-mono mt-0.5 block">
+                {timeRemaining || "--:--"}
               </span>
             </div>
-            <ChevronDown className={`w-3.5 h-3.5 text-white/40 group-hover:text-white transition-transform ${isAccountOpen ? "rotate-180" : ""}`} />
-          </button>
+          </div>
 
-          {/* SendPulse-style Dropdown Popover */}
-          {isAccountOpen && (
-            <div className="absolute right-0 mt-2 w-64 bg-[#0C0C0F] border border-white/10 rounded-2xl p-3 shadow-2xl z-50 animate-in slide-in-from-top-2 duration-150 space-y-2">
-              
-              {/* Account summary header */}
-              <div className="p-3 bg-white/5 rounded-xl border border-white/5">
-                <p className="text-xs font-black text-white truncate">{displayName}</p>
-                <p className="text-[10px] text-white/40 truncate mt-0.5">{userEmail}</p>
-                <div className="mt-2 inline-block px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  Роль: {userRole}
-                </div>
+          {/* Right: SendPulse-Style Account Menu Popover */}
+          <div className="relative shrink-0" ref={accountRef}>
+            <button
+              onClick={() => setIsAccountOpen(!isAccountOpen)}
+              className="flex items-center gap-2.5 p-1.5 pr-3 rounded-2xl bg-white/5 border border-white/10 hover:border-emerald-500/30 transition-all cursor-pointer group"
+            >
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-black font-black text-xs flex items-center justify-center shadow-md">
+                {userInitials}
               </div>
+              <div className="hidden sm:block text-left">
+                <span className="text-xs font-black text-white block truncate max-w-[120px]">
+                  {displayName}
+                </span>
+                <span className="text-[9px] text-emerald-400/80 font-bold uppercase tracking-wider block">
+                  {userRole}
+                </span>
+              </div>
+              <ChevronDown className={`w-3.5 h-3.5 text-white/40 group-hover:text-white transition-transform ${isAccountOpen ? "rotate-180" : ""}`} />
+            </button>
 
-              {/* Navigation links inside popover */}
-              <div className="space-y-1 pt-1">
-                <Link
-                  href="/admin/settings"
-                  onClick={() => setIsAccountOpen(false)}
-                  className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-white/70 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
-                >
-                  <Settings className="w-4 h-4 text-emerald-400" />
-                  Налаштування аккаунта
-                </Link>
+            {/* SendPulse-style Dropdown Popover */}
+            {isAccountOpen && (
+              <div className="absolute right-0 mt-2 w-64 bg-[#0C0C0F] border border-white/10 rounded-2xl p-3 shadow-2xl z-50 animate-in slide-in-from-top-2 duration-150 space-y-2">
                 
-                {isFounderOrAdmin && (
+                {/* Account summary header */}
+                <div className="p-3 bg-white/5 rounded-xl border border-white/5">
+                  <p className="text-xs font-black text-white truncate">{displayName}</p>
+                  <p className="text-[10px] text-white/40 truncate mt-0.5">{userEmail}</p>
+                  <div className="mt-2 inline-block px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    Роль: {userRole}
+                  </div>
+                </div>
+
+                {/* Navigation links inside popover */}
+                <div className="space-y-1 pt-1">
                   <Link
-                    href="/admin/users"
+                    href="/admin/settings"
                     onClick={() => setIsAccountOpen(false)}
                     className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-white/70 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
                   >
-                    <User className="w-4 h-4 text-purple-400" />
-                    Керування доступами
+                    <Settings className="w-4 h-4 text-emerald-400" />
+                    Налаштування аккаунта
                   </Link>
-                )}
-              </div>
+                  
+                  {isFounderOrAdmin && (
+                    <Link
+                      href="/admin/users"
+                      onClick={() => setIsAccountOpen(false)}
+                      className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-white/70 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
+                    >
+                      <User className="w-4 h-4 text-purple-400" />
+                      Керування доступами
+                    </Link>
+                  )}
+                </div>
 
-              {/* Logout action button */}
-              <div className="border-t border-white/5 pt-2">
-                <button
-                  onClick={handleLogout}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors cursor-pointer"
-                >
-                  <LogOut className="w-4 h-4 text-rose-400" />
-                  Вийти з системи
-                </button>
-              </div>
+                {/* Logout action button */}
+                <div className="border-t border-white/5 pt-2">
+                  <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors cursor-pointer"
+                  >
+                    <LogOut className="w-4 h-4 text-rose-400" />
+                    Вийти з системи
+                  </button>
+                </div>
 
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </div>
 
       </div>

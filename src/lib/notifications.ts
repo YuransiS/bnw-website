@@ -91,4 +91,66 @@ export class NotificationService {
       );
     }
   }
+
+  static async sendErrorToTelegram(errorMessage: string, activeSlug?: string, projectId?: string): Promise<void> {
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = process.env.TELEGRAM_CHAT_ID;
+    const threadId = process.env.TELEGRAM_THREAD_ID;
+
+    if (!token || !chatId) {
+      console.warn(
+        "[NotificationService] Telegram error notifications are disabled (missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID)."
+      );
+      return;
+    }
+
+    const text = [
+      `⚠️ <b>[Помилка] Збій оновлення кешу CRM!</b>`,
+      `• <b>Проект:</b> ${activeSlug || "Невідомий"} (${projectId || "Невідомий"})`,
+      `• <b>Помилка:</b> <code>${errorMessage}</code>`,
+      `• <b>Час:</b> <code>${new Date().toISOString()}</code>`
+    ].join("\n");
+
+    try {
+      const url = `https://api.telegram.org/bot${token}/sendMessage`;
+      const payload: {
+        chat_id: string;
+        text: string;
+        parse_mode: string;
+        disable_web_page_preview: boolean;
+        message_thread_id?: number;
+      } = {
+        chat_id: chatId,
+        text: text,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+      };
+
+      if (threadId) {
+        const parsedThreadId = parseInt(threadId, 10);
+        if (!isNaN(parsedThreadId)) {
+          payload.message_thread_id = parsedThreadId;
+        }
+      }
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          `[NotificationService] Telegram Error API responded with status ${response.status}: ${errorText}`
+        );
+      }
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error(
+        "[NotificationService] Failed to send Telegram error notification:",
+        error.message || error
+      );
+    }
+  }
 }
