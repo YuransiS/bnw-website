@@ -61,7 +61,7 @@ export async function getFinanceSummaryAction(
     // Fetch Project baseline configurations
     const { data: project, error: projErr } = await adminSupabase
       .from("projects")
-      .select("id, name, contract_model, target_currency, traffic_budget_plan, expert_share_percentage, cell_id")
+      .select("id, name, contract_model, target_currency, traffic_budget_plan, expert_share_percent, fixed_fee_amount, financial_goal_plan_usd, acquiring_fee_percent, cell_id")
       .eq("id", projectId)
       .single();
 
@@ -77,8 +77,8 @@ export async function getFinanceSummaryAction(
     // Fetch Custom Categories
     const { data: customCategories } = await adminSupabase
       .from("project_categories")
-      .select("name, type")
-      .eq("project_id", projectId);
+      .select("name, type, parent_section, is_system")
+      .or(`project_id.eq.${projectId},is_system.eq.true`);
 
     // Fetch Transactions Query Builder
     let query = adminSupabase
@@ -120,16 +120,17 @@ export async function getFinanceSummaryAction(
 
     // P&L item arrays
     const opexBreakdown = {
-      traffic: 0,
-      commissions: 0,
+      marketing: 0,
       services: 0,
       team: 0,
+      commissions: 0,
       other: 0
     };
 
     const revenueBreakdown = {
       product: 0,
-      upsells: 0,
+      tripwires: 0,
+      club: 0,
       installments: 0,
       other: 0,
       refunds: 0
@@ -152,22 +153,29 @@ export async function getFinanceSummaryAction(
       }
 
       // Group by categories
-      const cleanCategory = tx.category.toLowerCase().trim();
+      const cleanCategory = (tx.category || "").toLowerCase().trim();
+      const parentSec = tx.parent_section || "";
 
       if (tx.type === "income") {
         totalIncomeUSD += amountUSD;
         if (isUAH) totalIncomeUAH += amount;
-        else totalIncomeUAH += amountUSD * 44; // Fallback conversion for visual UAH summary
+        else totalIncomeUAH += amountUSD * 44;
 
-        if (cleanCategory.includes("дебіторка") || cleanCategory.includes("receivable") || cleanCategory.includes("дебиторка")) {
+        if (cleanCategory.includes("дебіторка") || cleanCategory.includes("receivable") || cleanCategory.includes("дебиторка") || cleanCategory.includes("бронь")) {
           totalReceivablesUSD += amountUSD;
           if (isUAH) totalReceivablesUAH += amount;
-        } else if (cleanCategory.includes("допродаж") || cleanCategory.includes("upsell")) {
-          revenueBreakdown.upsells += amountUSD;
-        } else if (cleanCategory.includes("розстроч") || cleanCategory.includes("installment")) {
-          revenueBreakdown.installments += amountUSD;
-        } else if (cleanCategory.includes("продукт")) {
+        }
+
+        if (parentSec === "revenue_product" || cleanCategory.includes("основний курс") || cleanCategory.includes("продукт")) {
           revenueBreakdown.product += amountUSD;
+        } else if (parentSec === "revenue_tripwire" || cleanCategory.includes("трипваєр") || cleanCategory.includes("міні-продукт") || cleanCategory.includes("допродаж")) {
+          revenueBreakdown.tripwires += amountUSD;
+        } else if (parentSec === "revenue_club" || cleanCategory.includes("клуб") || cleanCategory.includes("ltv") || cleanCategory.includes("підписка")) {
+          revenueBreakdown.club += amountUSD;
+        } else if (parentSec === "revenue_installments" || cleanCategory.includes("рассроч") || cleanCategory.includes("розстроч")) {
+          revenueBreakdown.installments += amountUSD;
+        } else if (parentSec === "revenue_refunds" || cleanCategory.includes("повернен") || cleanCategory.includes("refund")) {
+          revenueBreakdown.refunds += amountUSD;
         } else {
           revenueBreakdown.other += amountUSD;
         }
@@ -176,43 +184,68 @@ export async function getFinanceSummaryAction(
         if (isUAH) totalExpenseUAH += amount;
         else totalExpenseUAH += amountUSD * 44;
 
-        if (cleanCategory.includes("трафік") || cleanCategory.includes("реклам") || cleanCategory.includes("traffic")) {
+        if (parentSec === "opex_marketing" || cleanCategory.includes("трафік") || cleanCategory.includes("реклам") || cleanCategory.includes("traffic") || cleanCategory.includes("ad spend")) {
           totalTrafficUSD += amountUSD;
-          opexBreakdown.traffic += amountUSD;
-        } else if (cleanCategory.includes("комісі") || cleanCategory.includes("комисси") || cleanCategory.includes("w4p")) {
+          opexBreakdown.marketing += amountUSD;
+        } else if (parentSec === "opex_commissions" || cleanCategory.includes("комісі") || cleanCategory.includes("комисси") || cleanCategory.includes("w4p") || cleanCategory.includes("еквайринг")) {
           opexBreakdown.commissions += amountUSD;
-        } else if (cleanCategory.includes("сервіс") || cleanCategory.includes("sendpulse")) {
+        } else if (parentSec === "opex_services" || cleanCategory.includes("сервіс") || cleanCategory.includes("sendpulse") || cleanCategory.includes("хостинг")) {
           opexBreakdown.services += amountUSD;
-        } else if (cleanCategory.includes("команд") || cleanCategory.includes("підряд") || cleanCategory.includes("зп")) {
+        } else if (parentSec === "opex_team" || cleanCategory.includes("команд") || cleanCategory.includes("підряд") || cleanCategory.includes("зп") || cleanCategory.includes("зарплата")) {
           opexBreakdown.team += amountUSD;
-        } else if (cleanCategory.includes("виплата експерту") || cleanCategory.includes("доля експерта")) {
+        } else if (cleanCategory.includes("виплата експерту") || cleanCategory.includes("доля експерта") || cleanCategory.includes("аванс експерту")) {
           totalPaidToExpertUSD += amountUSD;
           if (isUAH) totalPaidToExpertUAH += amount;
-        } else if (cleanCategory.includes("повернен") || cleanCategory.includes("refund")) {
-          revenueBreakdown.refunds += amountUSD;
+          opexBreakdown.team += amountUSD;
         } else {
           opexBreakdown.other += amountUSD;
         }
       }
     });
 
-    const operatingProfitUSD = totalIncomeUSD - totalExpenseUSD;
+    const netRevenueUSD = revenueBreakdown.product + revenueBreakdown.tripwires + revenueBreakdown.club + revenueBreakdown.installments + revenueBreakdown.other - revenueBreakdown.refunds;
+    const totalOpExUSD = opexBreakdown.marketing + opexBreakdown.services + opexBreakdown.team + opexBreakdown.commissions + opexBreakdown.other;
+    const operatingProfitUSD = netRevenueUSD - totalOpExUSD;
     const operatingProfitUAH = totalIncomeUAH - totalExpenseUAH;
     const marginPercent = totalIncomeUSD > 0 ? (operatingProfitUSD / totalIncomeUSD) * 100 : 0;
 
-    // Split calculations
-    const expertSharePercentage = Number(project.expert_share_percentage || 50);
-    const expertShareUSD = operatingProfitUSD * (expertSharePercentage / 100);
-    const expertShareUAH = operatingProfitUAH * (expertSharePercentage / 100);
-    const pcShareUSD = operatingProfitUSD * ((100 - expertSharePercentage) / 100);
-    const pcShareUAH = operatingProfitUAH * ((100 - expertSharePercentage) / 100);
+    // Monthly Target Goal Math
+    const goalPlanUSD = Number(project.financial_goal_plan_usd || project.traffic_budget_plan || 0);
+    const goalProgressPercent = goalPlanUSD > 0 ? Math.min((totalIncomeUSD / goalPlanUSD) * 100, 999) : 0;
 
+    // Mathematical Profit Models Calculation
+    const contractModel = project.contract_model || "50/50 Profit Split";
+    const expertSharePercentage = Number(project.expert_share_percent || (project as any).expert_share_percentage || 50);
+    const fixedFeeUSD = Number(project.fixed_fee_amount || 0);
+
+    let expertShareUSD = 0;
+    let pcShareUSD = 0;
+
+    if (contractModel.includes("70/30") || contractModel.includes("80/20") || contractModel.includes("gross")) {
+      // Model 2: % from Gross Revenue (after acquiring fees), OpEx paid by Expert
+      const grossAfterAcquiring = netRevenueUSD - opexBreakdown.commissions;
+      expertShareUSD = grossAfterAcquiring * (expertSharePercentage / 100);
+      pcShareUSD = grossAfterAcquiring * ((100 - expertSharePercentage) / 100);
+    } else if (contractModel.includes("fixed") || contractModel.includes("фикс")) {
+      // Model 3: Fixed Fee + Bonus % over Plan target
+      const bonusUSD = totalIncomeUSD > goalPlanUSD && goalPlanUSD > 0 ? (totalIncomeUSD - goalPlanUSD) * (expertSharePercentage / 100) : 0;
+      expertShareUSD = fixedFeeUSD + bonusUSD;
+      pcShareUSD = operatingProfitUSD - expertShareUSD;
+    } else {
+      // Model 1: 50/50 Net Operating Profit Split
+      expertShareUSD = operatingProfitUSD > 0 ? operatingProfitUSD * (expertSharePercentage / 100) : 0;
+      pcShareUSD = operatingProfitUSD > 0 ? operatingProfitUSD * ((100 - expertSharePercentage) / 100) : 0;
+    }
+
+    const expertShareUAH = expertShareUSD * 44;
+    const pcShareUAH = pcShareUSD * 44;
     const remainingExpertUSD = expertShareUSD - totalPaidToExpertUSD;
 
     // Format list of accounts
     const formattedAccounts = Object.values(accountBalances).map((acc: any) => ({
       id: acc.id,
       name: acc.name,
+      type: acc.type || "card",
       currency: acc.currency,
       starting_balance: acc.starting_balance,
       current_balance: Number(acc.current_balance.toFixed(2)),
@@ -223,6 +256,7 @@ export async function getFinanceSummaryAction(
       summary: {
         totalIncomeUSD: Number(totalIncomeUSD.toFixed(2)),
         totalExpenseUSD: Number(totalExpenseUSD.toFixed(2)),
+        netRevenueUSD: Number(netRevenueUSD.toFixed(2)),
         operatingProfitUSD: Number(operatingProfitUSD.toFixed(2)),
         totalIncomeUAH: Number(totalIncomeUAH.toFixed(2)),
         totalExpenseUAH: Number(totalExpenseUAH.toFixed(2)),
@@ -237,30 +271,35 @@ export async function getFinanceSummaryAction(
         totalPaidToExpertUSD: Number(totalPaidToExpertUSD.toFixed(2)),
         remainingExpertUSD: Number(remainingExpertUSD.toFixed(2)),
         totalTrafficUSD: Number(totalTrafficUSD.toFixed(2)),
+        goalPlanUSD,
+        goalProgressPercent: Number(goalProgressPercent.toFixed(1)),
         trafficBudgetPlan: Number(project.traffic_budget_plan || 0),
       },
       accounts: formattedAccounts,
       categories: {
         custom: customCategories || [],
         default: {
-          income: ["Продаж продукту", "Доплата", "Дебіторка", "Інше"],
-          expense: ["Трафік / Реклама", "Команда / Підряд", "Сервіси", "Комісія платёжных систем", "Прочі витрати"]
+          income: ["Продаж основного курсу", "Продаж трипваєра / міні-продукту", "Клубні підписки (LTV)", "Рассрочка (Банківське поступлення)", "Прочий приход", "Повернення клієнту (Refund)"],
+          expense: ["Трафік та Реклама (Ad Spend)", "Сервіси та інфраструктура", "Оплата команди та підрядників", "Банківські комісії та Еквайринг", "Виплата авансу експерту", "Прочі операційні витрати"]
         }
       },
       pnl: {
         revenue: {
           product: Number(revenueBreakdown.product.toFixed(2)),
-          upsells: Number(revenueBreakdown.upsells.toFixed(2)),
+          tripwires: Number(revenueBreakdown.tripwires.toFixed(2)),
+          club: Number(revenueBreakdown.club.toFixed(2)),
           installments: Number(revenueBreakdown.installments.toFixed(2)),
           other: Number(revenueBreakdown.other.toFixed(2)),
           refunds: Number(revenueBreakdown.refunds.toFixed(2)),
+          totalNetRevenue: Number(netRevenueUSD.toFixed(2))
         },
         opex: {
-          traffic: Number(opexBreakdown.traffic.toFixed(2)),
-          commissions: Number(opexBreakdown.commissions.toFixed(2)),
+          marketing: Number(opexBreakdown.marketing.toFixed(2)),
           services: Number(opexBreakdown.services.toFixed(2)),
           team: Number(opexBreakdown.team.toFixed(2)),
+          commissions: Number(opexBreakdown.commissions.toFixed(2)),
           other: Number(opexBreakdown.other.toFixed(2)),
+          totalOpEx: Number(totalOpExUSD.toFixed(2))
         }
       },
       transactions: allTransactions.slice(0, limit),
@@ -279,11 +318,13 @@ export async function createTransactionAction(payload: {
   date: string;
   type: "income" | "expense";
   category: string;
+  parentSection?: string;
   description?: string;
   accountId: string;
   currency: string;
   amount: number;
   exchangeRate: number;
+  acquiringFeeAmount?: number;
 }) {
   try {
     const userId = await verifyProjectAccess(payload.projectId, true);
@@ -299,12 +340,14 @@ export async function createTransactionAction(payload: {
         date: payload.date,
         type: payload.type,
         category: payload.category,
+        parent_section: payload.parentSection || null,
         description: payload.description || "",
         account_id: payload.accountId,
         currency: payload.currency,
         amount: payload.amount,
         exchange_rate: payload.exchangeRate,
         amount_usd: amountUSD,
+        acquiring_fee_amount: payload.acquiringFeeAmount || 0,
         created_by: userId,
       });
 
@@ -341,7 +384,7 @@ export async function deleteTransactionAction(projectId: string, transactionId: 
 }
 
 // 5. Create Custom Category
-export async function createCustomCategoryAction(projectId: string, name: string, type: "income" | "expense") {
+export async function createCustomCategoryAction(projectId: string, name: string, type: "income" | "expense", parentSection?: string) {
   try {
     await verifyProjectAccess(projectId, true);
     const adminSupabase = createAdminClient();
@@ -352,6 +395,8 @@ export async function createCustomCategoryAction(projectId: string, name: string
         project_id: projectId,
         name: name.trim(),
         type,
+        parent_section: parentSection || null,
+        is_system: false
       });
 
     if (error && !error.message.includes("unique_violation")) {
@@ -372,19 +417,34 @@ export async function saveFinanceSettingsAction(projectId: string, settings: {
   targetCurrency: string;
   trafficBudgetPlan: number;
   expertSharePercentage: number;
+  financialGoalPlanUSD?: number;
+  fixedFeeAmount?: number;
+  acquiringFeePercent?: number;
 }) {
   try {
     await verifyProjectAccess(projectId, true);
     const adminSupabase = createAdminClient();
 
+    const updatePayload: any = {
+      contract_model: settings.contractModel,
+      target_currency: settings.targetCurrency,
+      traffic_budget_plan: settings.trafficBudgetPlan,
+      expert_share_percent: settings.expertSharePercentage,
+    };
+
+    if (settings.financialGoalPlanUSD !== undefined) {
+      updatePayload.financial_goal_plan_usd = settings.financialGoalPlanUSD;
+    }
+    if (settings.fixedFeeAmount !== undefined) {
+      updatePayload.fixed_fee_amount = settings.fixedFeeAmount;
+    }
+    if (settings.acquiringFeePercent !== undefined) {
+      updatePayload.acquiring_fee_percent = settings.acquiringFeePercent;
+    }
+
     const { error } = await adminSupabase
       .from("projects")
-      .update({
-        contract_model: settings.contractModel,
-        target_currency: settings.targetCurrency,
-        traffic_budget_plan: settings.trafficBudgetPlan,
-        expert_share_percentage: settings.expertSharePercentage,
-      })
+      .update(updatePayload)
       .eq("id", projectId);
 
     if (error) throw new Error(error.message);
@@ -402,6 +462,7 @@ export async function createAccountAction(projectId: string, account: {
   name: string;
   currency: string;
   startingBalance: number;
+  type?: string;
 }) {
   try {
     await verifyProjectAccess(projectId, true);
@@ -414,6 +475,7 @@ export async function createAccountAction(projectId: string, account: {
         name: account.name.trim(),
         currency: account.currency,
         starting_balance: account.startingBalance,
+        type: account.type || "card",
       });
 
     if (error) throw new Error(error.message);
@@ -423,5 +485,34 @@ export async function createAccountAction(projectId: string, account: {
   } catch (error: any) {
     console.error("Error creating account:", error);
     return { error: error.message || "Failed to create account" };
+  }
+}
+
+// 8. Generate 1-Click P&L Act Report
+export async function generatePnlReportAction(
+  projectId: string,
+  startDateStr?: string,
+  endDateStr?: string
+) {
+  try {
+    const data = await getFinanceSummaryAction(projectId, startDateStr, endDateStr, 1000);
+    if ("error" in data) throw new Error(data.error as string);
+
+    return {
+      success: true,
+      report: {
+        generatedAt: new Date().toISOString(),
+        startDate: startDateStr || "Початок періоду",
+        endDate: endDateStr || "Кінець періоду",
+        project: data.project,
+        summary: data.summary,
+        pnl: data.pnl,
+        accounts: data.accounts,
+        transactionCount: data.transactions.length
+      }
+    };
+  } catch (error: any) {
+    console.error("Error generating PnL Report:", error);
+    return { error: error.message || "Failed to generate PnL report" };
   }
 }

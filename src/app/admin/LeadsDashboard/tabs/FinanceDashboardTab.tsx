@@ -1,13 +1,15 @@
 "use client";
 
 import React, { useState, useTransition } from "react";
-import { TrendingUp, TrendingDown, Wallet, DollarSign, Activity, Percent, ArrowUpRight, ArrowDownRight, Settings, Plus, Loader2, Save } from "lucide-react";
-import { saveFinanceSettingsAction, createAccountAction, createCustomCategoryAction } from "../../(dashboard)/project/financeActions";
+import { TrendingUp, TrendingDown, Wallet, DollarSign, Activity, Percent, ArrowUpRight, ArrowDownRight, Settings, Plus, Loader2, Save, FileText, Target, CheckCircle2 } from "lucide-react";
+import { saveFinanceSettingsAction, createAccountAction, createCustomCategoryAction, generatePnlReportAction } from "../../(dashboard)/project/financeActions";
+import PnlReportModal from "../components/PnlReportModal";
 
 interface FinanceDashboardTabProps {
   summary: {
     totalIncomeUSD: number;
     totalExpenseUSD: number;
+    netRevenueUSD?: number;
     operatingProfitUSD: number;
     totalIncomeUAH: number;
     totalExpenseUAH: number;
@@ -22,6 +24,8 @@ interface FinanceDashboardTabProps {
     totalPaidToExpertUSD: number;
     remainingExpertUSD: number;
     totalTrafficUSD: number;
+    goalPlanUSD?: number;
+    goalProgressPercent?: number;
     trafficBudgetPlan: number;
   };
   accounts: {
@@ -34,13 +38,16 @@ interface FinanceDashboardTabProps {
   pnl: {
     revenue: {
       product: number;
-      upsells: number;
+      tripwires?: number;
+      upsells?: number;
+      club?: number;
       installments: number;
       other: number;
       refunds: number;
     };
     opex: {
-      traffic: number;
+      marketing?: number;
+      traffic?: number;
       commissions: number;
       services: number;
       team: number;
@@ -76,11 +83,20 @@ export default function FinanceDashboardTab({
 
   const [isPending, startTransition] = useTransition();
 
+  // PnL Report Modal States
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [pnlReportData, setPnlReportData] = useState<any>(null);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+
   // Baseline Settings States
   const [contractModel, setContractModel] = useState(project.contract_model || "50/50 Profit Split");
   const [targetCurrency, setTargetCurrency] = useState(project.target_currency || "USD");
   const [trafficBudgetPlan, setTrafficBudgetPlan] = useState(String(project.traffic_budget_plan || 0));
-  const [expertSharePercentage, setExpertSharePercentage] = useState(String(project.expert_share_percentage || 50));
+  const [expertSharePercentage, setExpertSharePercentage] = useState(String(project.expert_share_percent || project.expert_share_percentage || 50));
+  const [financialGoalPlanUSD, setFinancialGoalPlanUSD] = useState(String(project.financial_goal_plan_usd || summary.goalPlanUSD || 0));
+  const [fixedFeeAmount, setFixedFeeAmount] = useState(String(project.fixed_fee_amount || 0));
+  const [acquiringFeePercent, setAcquiringFeePercent] = useState(String(project.acquiring_fee_percent || 2.0));
+
   const [settingsSuccess, setSettingsSuccess] = useState("");
   const [settingsError, setSettingsError] = useState("");
 
@@ -108,7 +124,10 @@ export default function FinanceDashboardTab({
         contractModel,
         targetCurrency,
         trafficBudgetPlan: Number(trafficBudgetPlan),
-        expertSharePercentage: Number(expertSharePercentage)
+        expertSharePercentage: Number(expertSharePercentage),
+        financialGoalPlanUSD: Number(financialGoalPlanUSD),
+        fixedFeeAmount: Number(fixedFeeAmount),
+        acquiringFeePercent: Number(acquiringFeePercent)
       });
       if (res.error) {
         setSettingsError(res.error);
@@ -117,6 +136,23 @@ export default function FinanceDashboardTab({
         onRefresh();
       }
     });
+  };
+
+  const handleGenerateReport = async () => {
+    setIsGeneratingReport(true);
+    try {
+      const res = await generatePnlReportAction(projectId);
+      if (res.success && res.report) {
+        setPnlReportData(res.report);
+        setShowReportModal(true);
+      } else {
+        alert(res.error || "Не вдалося згенерувати звіт");
+      }
+    } catch (e) {
+      alert("Помилка генерації звіту");
+    } finally {
+      setIsGeneratingReport(false);
+    }
   };
 
   const handleAddAccount = (e: React.FormEvent) => {
@@ -172,7 +208,7 @@ export default function FinanceDashboardTab({
     const formatted = new Intl.NumberFormat("ru-RU", {
       minimumFractionDigits: 0,
       maximumFractionDigits: 2
-    }).format(val);
+    }).format(val || 0);
     return isUAH ? `${formatted} ₴` : `$${formatted}`;
   };
 
@@ -188,8 +224,9 @@ export default function FinanceDashboardTab({
   const cardClass = isLight ? "bg-white border border-neutral-200 text-neutral-900 shadow-sm" : "bg-[#0C0C0F] border border-white/5 text-white";
   const textMutedClass = isLight ? "text-neutral-500" : "text-white/40";
   const borderClass = isLight ? "border-neutral-200" : "border-white/5";
-  const tableHeaderClass = isLight ? "bg-neutral-100 text-neutral-500 border-neutral-200" : "bg-white/[0.02] text-white/40 border-white/5";
-  const tableRowClass = isLight ? "hover:bg-neutral-50 border-neutral-200 text-neutral-800" : "hover:bg-white/[0.01] border-white/5 text-white/80";
+
+  const goalPlan = summary.goalPlanUSD || Number(financialGoalPlanUSD) || 0;
+  const goalProgress = summary.goalProgressPercent || (goalPlan > 0 ? (summary.totalIncomeUSD / goalPlan) * 100 : 0);
 
   // Calculate Traffic Radial Progress values
   const trafficPercent = summary.trafficBudgetPlan > 0
@@ -198,9 +235,31 @@ export default function FinanceDashboardTab({
   const radius = 42;
   const strokeDashoffset = 2 * Math.PI * radius * (1 - trafficPercent / 100);
 
+  const productRev = pnl.revenue?.product || 0;
+  const tripwireRev = pnl.revenue?.tripwires || pnl.revenue?.upsells || 0;
+  const clubRev = pnl.revenue?.club || 0;
+  const installmentRev = pnl.revenue?.installments || 0;
+  const otherRev = pnl.revenue?.other || 0;
+  const refundRev = pnl.revenue?.refunds || 0;
+
+  const marketingOpex = pnl.opex?.marketing || pnl.opex?.traffic || 0;
+  const servicesOpex = pnl.opex?.services || 0;
+  const teamOpex = pnl.opex?.team || 0;
+  const commissionsOpex = pnl.opex?.commissions || 0;
+  const otherOpex = pnl.opex?.other || 0;
+
   return (
     <div className="space-y-6 font-sans">
       
+      {/* 1-Click P&L Act Report Modal */}
+      {showReportModal && pnlReportData && (
+        <PnlReportModal
+          report={pnlReportData}
+          onClose={() => setShowReportModal(false)}
+          isLight={isLight}
+        />
+      )}
+
       {/* Top Segment Controls */}
       <div className="flex justify-between items-center">
         <div className="flex bg-white/5 p-1 rounded-xl border border-white/5">
@@ -237,7 +296,45 @@ export default function FinanceDashboardTab({
             </button>
           )}
         </div>
+
+        {/* 1-Click Act Report Generator */}
+        <button
+          onClick={handleGenerateReport}
+          disabled={isGeneratingReport}
+          className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black text-xs font-extrabold rounded-xl transition-all shadow-lg flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+        >
+          {isGeneratingReport ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+          Сформувати Звіт / Акт
+        </button>
       </div>
+
+      {/* LEVEL 1: Monthly Goal Target Progress Bar */}
+      {goalPlan > 0 && activeSegment === "dashboard" && (
+        <div className={`p-5 rounded-2xl border ${cardClass} space-y-3 bg-gradient-to-r from-emerald-500/5 via-teal-500/5 to-transparent`}>
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <Target className="w-4 h-4 text-emerald-400" />
+              <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-400">Місячний План по Виручці</span>
+            </div>
+            <span className="text-xs font-black text-emerald-400">
+              {goalProgress.toFixed(1)}% виконано
+            </span>
+          </div>
+
+          {/* Progress bar */}
+          <div className="h-3.5 w-full bg-white/5 rounded-full overflow-hidden p-0.5 border border-white/10">
+            <div
+              className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-500"
+              style={{ width: `${Math.min(goalProgress, 100)}%` }}
+            />
+          </div>
+
+          <div className="flex justify-between items-center text-xs">
+            <span className="text-neutral-400">Факт: <strong className="text-white">{formatMoney(summary.totalIncomeUSD)}</strong> ({formatMoney(summary.totalIncomeUAH, true)})</span>
+            <span className="text-neutral-400">Ціль: <strong className="text-emerald-400">{formatMoney(goalPlan)}</strong></span>
+          </div>
+        </div>
+      )}
 
       {activeSegment === "dashboard" && (
         <>
@@ -347,23 +444,23 @@ export default function FinanceDashboardTab({
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-xs">
                     <div className="bg-white/5 p-3 rounded-xl">
                       <span className="text-neutral-400 text-[10px] uppercase font-bold">Продажі продукту</span>
-                      <span className="block text-sm font-bold mt-1 text-white">{displayMoney(pnl.revenue.product, pnl.revenue.product * 44)}</span>
+                      <span className="block text-sm font-bold mt-1 text-white">{displayMoney(productRev, productRev * 44)}</span>
                     </div>
                     <div className="bg-white/5 p-3 rounded-xl">
                       <span className="text-neutral-400 text-[10px] uppercase font-bold">Допродажі / Апселли</span>
-                      <span className="block text-sm font-bold mt-1 text-white">{displayMoney(pnl.revenue.upsells, pnl.revenue.upsells * 44)}</span>
+                      <span className="block text-sm font-bold mt-1 text-white">{displayMoney(tripwireRev, tripwireRev * 44)}</span>
                     </div>
                     <div className="bg-white/5 p-3 rounded-xl">
                       <span className="text-neutral-400 text-[10px] uppercase font-bold">Розстрочки</span>
-                      <span className="block text-sm font-bold mt-1 text-white">{displayMoney(pnl.revenue.installments, pnl.revenue.installments * 44)}</span>
+                      <span className="block text-sm font-bold mt-1 text-white">{displayMoney(installmentRev, installmentRev * 44)}</span>
                     </div>
                     <div className="bg-white/5 p-3 rounded-xl">
                       <span className="text-neutral-400 text-[10px] uppercase font-bold">Інший прихід</span>
-                      <span className="block text-sm font-bold mt-1 text-white">{displayMoney(pnl.revenue.other, pnl.revenue.other * 44)}</span>
+                      <span className="block text-sm font-bold mt-1 text-white">{displayMoney(otherRev, otherRev * 44)}</span>
                     </div>
                     <div className="bg-white/5 p-3 rounded-xl border border-red-500/20 bg-red-500/5">
                       <span className="text-red-400 text-[10px] uppercase font-bold">Повернення</span>
-                      <span className="block text-sm font-bold mt-1 text-red-400">-{displayMoney(pnl.revenue.refunds, pnl.revenue.refunds * 44)}</span>
+                      <span className="block text-sm font-bold mt-1 text-red-400">-{displayMoney(refundRev, refundRev * 44)}</span>
                     </div>
                   </div>
                 </div>
@@ -375,7 +472,7 @@ export default function FinanceDashboardTab({
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-xs">
                     <div className="bg-white/5 p-3 rounded-xl">
                       <span className="text-neutral-400 text-[10px] uppercase font-bold">Реклама / Трафік</span>
-                      <span className="block text-sm font-bold mt-1 text-white">{displayMoney(pnl.opex.traffic, pnl.opex.traffic * 44)}</span>
+                      <span className="block text-sm font-bold mt-1 text-white">{displayMoney(marketingOpex, marketingOpex * 44)}</span>
                     </div>
                     <div className="bg-white/5 p-3 rounded-xl">
                       <span className="text-neutral-400 text-[10px] uppercase font-bold">Комісії платформ</span>
@@ -575,23 +672,23 @@ export default function FinanceDashboardTab({
               <div className="space-y-1.5 text-xs">
                 <div className="flex justify-between">
                   <span className="text-neutral-400">Продажі продукту</span>
-                  <span>{displayMoney(pnl.revenue.product, pnl.revenue.product * 44)}</span>
+                  <span>{displayMoney(productRev, productRev * 44)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-neutral-400">Допродажі / Апселли</span>
-                  <span>{displayMoney(pnl.revenue.upsells, pnl.revenue.upsells * 44)}</span>
+                  <span>{displayMoney(tripwireRev, tripwireRev * 44)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-neutral-400">Розстрочки / Доплати</span>
-                  <span>{displayMoney(pnl.revenue.installments, pnl.revenue.installments * 44)}</span>
+                  <span>{displayMoney(installmentRev, installmentRev * 44)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-neutral-400">Повернення клієнтам</span>
-                  <span className="text-rose-400">-{displayMoney(pnl.revenue.refunds, pnl.revenue.refunds * 44)}</span>
+                  <span className="text-rose-400">-{displayMoney(refundRev, refundRev * 44)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-neutral-400">Інший прихід</span>
-                  <span>{displayMoney(pnl.revenue.other, pnl.revenue.other * 44)}</span>
+                  <span>{displayMoney(otherRev, otherRev * 44)}</span>
                 </div>
                 <div className="flex justify-between font-bold text-white border-t border-white/5 pt-1 mt-1 text-sm">
                   <span>Всього виручка</span>
@@ -609,7 +706,7 @@ export default function FinanceDashboardTab({
               <div className="space-y-1.5 text-xs">
                 <div className="flex justify-between">
                   <span className="text-neutral-400">Трафік / Реклама</span>
-                  <span>{displayMoney(pnl.opex.traffic, pnl.opex.traffic * 44)}</span>
+                  <span>{displayMoney(marketingOpex, marketingOpex * 44)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-neutral-400">Комісія платіжних систем</span>
@@ -664,45 +761,88 @@ export default function FinanceDashboardTab({
               <form onSubmit={handleSaveSettings} className="space-y-4 text-xs text-white">
                 <div className="space-y-1">
                   <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">Модель контракту</label>
-                  <input
-                    type="text"
+                  <select
                     value={contractModel}
                     onChange={(e) => setContractModel(e.target.value)}
-                    placeholder="Наприклад: 50/50 Profit Split"
-                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white focus:border-emerald-500 focus:outline-none"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">Валюта проекту</label>
-                  <select
-                    value={targetCurrency}
-                    onChange={(e) => setTargetCurrency(e.target.value)}
                     className="w-full px-3 py-2 bg-[#0C0C0F] border border-white/10 rounded-xl text-white focus:border-emerald-500 focus:outline-none cursor-pointer"
                   >
-                    <option value="USD">USD ($)</option>
-                    <option value="UAH">UAH (₴)</option>
-                    <option value="EUR">EUR (€)</option>
+                    <option value="50_50_net_profit">50/50 від Чистого прибутку (Net Profit Split)</option>
+                    <option value="70_30_gross_revenue">70/30 від Виручки (Gross Revenue)</option>
+                    <option value="80_20_gross_revenue">80/20 від Виручки (Gross Revenue)</option>
+                    <option value="fixed_plus_percent">Фіксований оклад + % від перевиконання плану</option>
                   </select>
                 </div>
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">План на трафік ($)</label>
-                  <input
-                    type="number"
-                    value={trafficBudgetPlan}
-                    onChange={(e) => setTrafficBudgetPlan(e.target.value)}
-                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white focus:border-emerald-500 focus:outline-none"
-                  />
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">Місячний План ($)</label>
+                    <input
+                      type="number"
+                      value={financialGoalPlanUSD}
+                      onChange={(e) => setFinancialGoalPlanUSD(e.target.value)}
+                      placeholder="50000"
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">План на трафік ($)</label>
+                    <input
+                      type="number"
+                      value={trafficBudgetPlan}
+                      onChange={(e) => setTrafficBudgetPlan(e.target.value)}
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">Частка експерта (%)</label>
-                  <input
-                    type="number"
-                    max="100"
-                    min="0"
-                    value={expertSharePercentage}
-                    onChange={(e) => setExpertSharePercentage(e.target.value)}
-                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white focus:border-emerald-500 focus:outline-none"
-                  />
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">Частка експерта (%)</label>
+                    <input
+                      type="number"
+                      max="100"
+                      min="0"
+                      value={expertSharePercentage}
+                      onChange={(e) => setExpertSharePercentage(e.target.value)}
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">Фікс. Оклад ($)</label>
+                    <input
+                      type="number"
+                      value={fixedFeeAmount}
+                      onChange={(e) => setFixedFeeAmount(e.target.value)}
+                      placeholder="1000"
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">Еквайринг комісія (%)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={acquiringFeePercent}
+                      onChange={(e) => setAcquiringFeePercent(e.target.value)}
+                      placeholder="2.0"
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">Валюта проекту</label>
+                    <select
+                      value={targetCurrency}
+                      onChange={(e) => setTargetCurrency(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#0C0C0F] border border-white/10 rounded-xl text-white focus:border-emerald-500 focus:outline-none cursor-pointer"
+                    >
+                      <option value="USD">USD ($)</option>
+                      <option value="UAH">UAH (₴)</option>
+                      <option value="EUR">EUR (€)</option>
+                    </select>
+                  </div>
                 </div>
                 
                 <button

@@ -354,10 +354,16 @@ export default function AddTransactionModal({
                     type="text"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Наприклад: ЗП таргетолог"
+                    placeholder="Наприклад: ЗП таргетолог / WFP комісія"
                     className={`w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs ${inputClass}`}
                   />
                 </div>
+              </div>
+
+              {/* Informational badge */}
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl text-[10px] flex items-center justify-between font-medium">
+                <span>Еквівалент у базі USD ($):</span>
+                <strong className="text-sm font-extrabold">${(Number(amount || 0) * Number(exchangeRate || 1)).toFixed(2)}</strong>
               </div>
             </div>
           )}
