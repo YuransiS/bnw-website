@@ -1138,6 +1138,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             processedLeads={processedLeads}
             paginatedLeads={paginatedLeads}
             uniqueSources={uniqueSources}
+            funnels={funnelsList}
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
             statusFilter={statusFilter}

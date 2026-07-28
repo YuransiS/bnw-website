@@ -124,7 +124,7 @@ export default function CashflowFeed({
           </div>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1.5 scrollbar-thin scrollbar-thumb-white/10">
           {transactions.map((tx) => (
             <div 
               key={tx.id} 

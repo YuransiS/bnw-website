@@ -87,6 +87,8 @@ export default function FinanceDashboardTab({
   const [showReportModal, setShowReportModal] = useState(false);
   const [pnlReportData, setPnlReportData] = useState<any>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [reportStartDate, setReportStartDate] = useState("");
+  const [reportEndDate, setReportEndDate] = useState("");
 
   // Baseline Settings States
   const [contractModel, setContractModel] = useState(project.contract_model || "50/50 Profit Split");
@@ -141,7 +143,11 @@ export default function FinanceDashboardTab({
   const handleGenerateReport = async () => {
     setIsGeneratingReport(true);
     try {
-      const res = await generatePnlReportAction(projectId);
+      const res = await generatePnlReportAction(
+        projectId,
+        reportStartDate || undefined,
+        reportEndDate || undefined
+      );
       if (res.success && res.report) {
         setPnlReportData(res.report);
         setShowReportModal(true);
@@ -297,15 +303,35 @@ export default function FinanceDashboardTab({
           )}
         </div>
 
-        {/* 1-Click Act Report Generator */}
-        <button
-          onClick={handleGenerateReport}
-          disabled={isGeneratingReport}
-          className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black text-xs font-extrabold rounded-xl transition-all shadow-lg flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-        >
-          {isGeneratingReport ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
-          Сформувати Звіт / Акт
-        </button>
+        {/* 1-Click Act Report Generator with Period Selection */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-xl border border-white/5">
+            <span className="text-[10px] text-neutral-400 font-bold uppercase">Період:</span>
+            <input
+              type="date"
+              value={reportStartDate}
+              onChange={(e) => setReportStartDate(e.target.value)}
+              className="bg-transparent border-none text-[10px] font-bold text-white focus:outline-none focus:ring-0 w-24 cursor-pointer"
+              title="Початок періоду"
+            />
+            <span className="text-white/20 text-[10px]">—</span>
+            <input
+              type="date"
+              value={reportEndDate}
+              onChange={(e) => setReportEndDate(e.target.value)}
+              className="bg-transparent border-none text-[10px] font-bold text-white focus:outline-none focus:ring-0 w-24 cursor-pointer"
+              title="Кінець періоду"
+            />
+          </div>
+          <button
+            onClick={handleGenerateReport}
+            disabled={isGeneratingReport}
+            className="px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black text-xs font-extrabold rounded-xl transition-all shadow-lg flex items-center gap-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
+          >
+            {isGeneratingReport ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+            Сформувати Звіт / Акт
+          </button>
+        </div>
       </div>
 
       {/* LEVEL 1: Monthly Goal Target Progress Bar */}
@@ -697,16 +723,12 @@ export default function FinanceDashboardTab({
                   <span>{displayMoney(installmentRev, installmentRev * 44)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-neutral-400">Повернення клієнтам</span>
-                  <span className="text-rose-400">-{displayMoney(refundRev, refundRev * 44)}</span>
-                </div>
-                <div className="flex justify-between">
                   <span className="text-neutral-400">Інший прихід</span>
                   <span>{displayMoney(otherRev, otherRev * 44)}</span>
                 </div>
                 <div className="flex justify-between font-bold text-white border-t border-white/5 pt-1 mt-1 text-sm">
                   <span>Всього виручка</span>
-                  <span>{displayMoney(summary.totalIncomeUSD, summary.totalIncomeUAH)}</span>
+                  <span>{displayMoney(productRev + tripwireRev + installmentRev + otherRev, (productRev + tripwireRev + installmentRev + otherRev) * 44)}</span>
                 </div>
               </div>
             </div>
@@ -724,23 +746,27 @@ export default function FinanceDashboardTab({
                 </div>
                 <div className="flex justify-between">
                   <span className="text-neutral-400">Комісія платіжних систем</span>
-                  <span>{displayMoney(pnl.opex.commissions, pnl.opex.commissions * 44)}</span>
+                  <span>{displayMoney( commissionsOpex, commissionsOpex * 44)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-neutral-400">Сервіси (SendPulse тощо)</span>
-                  <span>{displayMoney(pnl.opex.services, pnl.opex.services * 44)}</span>
+                  <span>{displayMoney(servicesOpex, servicesOpex * 44)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-neutral-400">Команда / Підряд</span>
-                  <span>{displayMoney(pnl.opex.team, pnl.opex.team * 44)}</span>
+                  <span>{displayMoney(teamOpex, teamOpex * 44)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-neutral-400">Повернення клієнтам (Refunds)</span>
+                  <span className="text-rose-400">{displayMoney(refundRev, refundRev * 44)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-neutral-400">Прочі витрати</span>
-                  <span>{displayMoney(pnl.opex.other, pnl.opex.other * 44)}</span>
+                  <span>{displayMoney(otherOpex, otherOpex * 44)}</span>
                 </div>
                 <div className="flex justify-between font-bold text-white border-t border-white/5 pt-1 mt-1 text-sm">
                   <span>Всього операційні витрати</span>
-                  <span>{displayMoney(summary.totalExpenseUSD, summary.totalExpenseUAH)}</span>
+                  <span>{displayMoney(marketingOpex + commissionsOpex + servicesOpex + teamOpex + refundRev + otherOpex, (marketingOpex + commissionsOpex + servicesOpex + teamOpex + refundRev + otherOpex) * 44)}</span>
                 </div>
               </div>
             </div>

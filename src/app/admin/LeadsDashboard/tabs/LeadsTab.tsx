@@ -50,6 +50,7 @@ interface LeadsTabProps {
   openLeadModal: (lead: any) => void;
   setShowAddLead: (val: boolean) => void;
   isDevMode: boolean;
+  funnels?: any[];
 }
 
 export const LeadsTab = React.memo(function LeadsTab({
@@ -81,7 +82,8 @@ export const LeadsTab = React.memo(function LeadsTab({
   setCurrentPage,
   openLeadModal,
   setShowAddLead,
-  isDevMode
+  isDevMode,
+  funnels
 }: LeadsTabProps) {
   const [localSearch, setLocalSearch] = React.useState(searchQuery);
 
@@ -224,7 +226,7 @@ export const LeadsTab = React.memo(function LeadsTab({
             />
           </div>
 
-          {/* Source sheet select */}
+          {/* Source sheet select (Funnel filter) */}
           <div className="relative">
             <select
               value={sourceFilter}
@@ -234,9 +236,12 @@ export const LeadsTab = React.memo(function LeadsTab({
               <option value="all" className={optionClass}>
                 📊 Фільтр: Всі воронки
               </option>
-              {uniqueSources.map((source: string) => (
-                <option key={source} value={source} className={optionClass}>
-                  {source}
+              <option value="unassigned" className={`${optionClass} text-yellow-500`}>
+                ⚠️ Без воронки / Невідомо
+              </option>
+              {(funnels || []).map((f: any) => (
+                <option key={f.id} value={f.id} className={optionClass}>
+                  {f.name}
                 </option>
               ))}
             </select>
@@ -339,6 +344,46 @@ export const LeadsTab = React.memo(function LeadsTab({
         </div>
       </div>
 
+      {/* Funnels Tab Bar */}
+      {funnels && funnels.length > 0 && (
+        <div className={`flex flex-wrap gap-2 border-b ${isLight ? 'border-neutral-200' : 'border-white/5'} pb-3`}>
+          <button
+            onClick={() => setSourceFilter("all")}
+            className={`px-4 py-2 text-xs font-black rounded-xl transition-all cursor-pointer ${
+              sourceFilter === "all"
+                ? isLight ? "bg-neutral-900 text-white" : "bg-white text-black"
+                : isLight ? "text-neutral-500 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 border border-neutral-300" : "text-white/40 hover:text-white bg-white/5 border border-white/5"
+            }`}
+          >
+            Всі ліди
+          </button>
+          <button
+            onClick={() => setSourceFilter("unassigned")}
+            className={`px-4 py-2 text-xs font-black rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+              sourceFilter === "unassigned"
+                ? "bg-yellow-500 text-black"
+                : isLight ? "text-yellow-600 bg-yellow-50 hover:bg-yellow-100 border border-yellow-200" : "text-yellow-500/70 hover:text-yellow-500 bg-yellow-500/10 border border-yellow-500/20"
+            }`}
+          >
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            ⚠️ Без воронки
+          </button>
+          {funnels.map((funnel: any) => (
+            <button
+              key={funnel.id}
+              onClick={() => setSourceFilter(funnel.id)}
+              className={`px-4 py-2 text-xs font-black rounded-xl transition-all cursor-pointer ${
+                sourceFilter === funnel.id
+                  ? isLight ? "bg-emerald-600 text-white" : "bg-emerald-500 text-black"
+                  : isLight ? "text-neutral-500 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 border border-neutral-300" : "text-white/40 hover:text-white bg-white/5 border border-white/5"
+              }`}
+            >
+              {funnel.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* CRM Clustered grid table */}
       <div className={`${cardClass} rounded-2xl overflow-hidden shadow-xl`}>
         {/* Desktop Table View */}
@@ -408,6 +453,23 @@ export const LeadsTab = React.memo(function LeadsTab({
                             >
                               Без імені
                             </span>
+                          )}
+                          {funnels && funnels.length > 0 && (
+                            (lead as any).funnelName ? (
+                              <span 
+                                className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-emerald-500/10 text-emerald-450 border border-emerald-500/20"
+                                title={`Воронка: ${(lead as any).funnelName}`}
+                              >
+                                {(lead as any).funnelName}
+                              </span>
+                            ) : (
+                              <span 
+                                className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-yellow-500/10 text-yellow-500 border border-yellow-500/20"
+                                title="Цей лід не прикріплений до жодної воронки (Tracking Error)"
+                              >
+                                ⚠️ Без воронки
+                              </span>
+                            )
                           )}
                         </div>
                         <div

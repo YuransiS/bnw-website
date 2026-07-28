@@ -180,6 +180,41 @@ export async function checkProjectAccess(projectId: string) {
   return true;
 }
 
+// Helper to match lead to funnel in actions.ts
+function matchLeadToFunnel(lead: any, funnels: any[]) {
+  const campaign = String(lead.utm_campaign || lead.utmCampaign || "").trim().toLowerCase();
+  const path = String(lead.page_path || "").trim().toLowerCase();
+  const url = String(lead.page_url || "").trim().toLowerCase();
+  const landings = lead.visited_landings || lead.visitedLandings || [];
+  const targetSheet = String(lead.target_sheet || lead.targetSheet || "").trim().toLowerCase();
+
+  for (const funnel of funnels) {
+    const campaignIds = (funnel.campaign_ids || []).map((c: string) => c.trim().toLowerCase());
+    const landingSlugs = (funnel.landing_slugs || []).map((s: string) => s.trim().toLowerCase());
+    const funnelName = String(funnel.name || "").trim().toLowerCase();
+
+    // 1. Match by campaign
+    if (campaign && campaignIds.some((cid: string) => campaign.includes(cid))) {
+      return funnel;
+    }
+
+    // 2. Match by landing slug
+    if (landingSlugs.some((slug: string) => {
+      if (!slug) return false;
+      return path.includes(slug) || url.includes(slug) || landings.some((l: string) => l.toLowerCase().includes(slug));
+    })) {
+      return funnel;
+    }
+
+    // 3. Match by target sheet name
+    if (targetSheet && (targetSheet.includes(funnelName) || funnelName.includes(targetSheet))) {
+      return funnel;
+    }
+  }
+
+  return null;
+}
+
 export async function getUnifiedCRMData(
   selectedProjectSlug?: string,
   filters?: {
@@ -512,8 +547,77 @@ export async function getUnifiedCRMData(
       }
     }
     if (sourceFilter !== "all") {
-      query = query.eq("target_sheet", sourceFilter);
-      aggQuery = aggQuery.eq("target_sheet", sourceFilter);
+      if (sourceFilter === "unassigned") {
+        const { data: projectFunnels } = await adminSupabase
+          .from("funnels")
+          .select("*")
+          .eq("project_id", activeProject.id);
+        const funnels = projectFunnels || [];
+        
+        let q = query;
+        let aq = aggQuery;
+        funnels.forEach(funnel => {
+          const campaignIds = funnel.campaign_ids || [];
+          const landingSlugs = funnel.landing_slugs || [];
+          campaignIds.forEach((c: string) => {
+            if (c.trim()) {
+              q = q.not("utm_campaign", "ilike", `%${c.trim()}%`);
+              aq = aq.not("utm_campaign", "ilike", `%${c.trim()}%`);
+            }
+          });
+          landingSlugs.forEach((s: string) => {
+            if (s.trim()) {
+              q = q.not("page_path", "ilike", `%${s.trim()}%`);
+              q = q.not("page_url", "ilike", `%${s.trim()}%`);
+              aq = aq.not("page_path", "ilike", `%${s.trim()}%`);
+              aq = aq.not("page_url", "ilike", `%${s.trim()}%`);
+            }
+          });
+        });
+        query = q;
+        aggQuery = aq;
+      } else {
+        const { data: funnel } = await adminSupabase
+          .from("funnels")
+          .select("*")
+          .eq("id", sourceFilter)
+          .maybeSingle();
+
+        if (funnel) {
+          const campaignIds = funnel.campaign_ids || [];
+          const landingSlugs = funnel.landing_slugs || [];
+
+          const orConditions: string[] = [];
+          
+          campaignIds.forEach((c: string) => {
+            if (c.trim()) orConditions.push(`utm_campaign.ilike.%${c.trim()}%`);
+          });
+
+          landingSlugs.forEach((s: string) => {
+            if (s.trim()) {
+              orConditions.push(`page_path.ilike.%${s.trim()}%`);
+              orConditions.push(`page_url.ilike.%${s.trim()}%`);
+            }
+          });
+
+          const funnelName = funnel.name ? funnel.name.trim() : "";
+          if (funnelName) {
+            orConditions.push(`target_sheet.ilike.%${funnelName}%`);
+          }
+
+          if (orConditions.length > 0) {
+            query = query.or(orConditions.join(","));
+            aggQuery = aggQuery.or(orConditions.join(","));
+          } else {
+            query = query.eq("id", "00000000-0000-0000-0000-000000000000");
+            aggQuery = aggQuery.eq("id", "00000000-0000-0000-0000-000000000000");
+          }
+        } else {
+          // Fallback to legacy target_sheet filter
+          query = query.eq("target_sheet", sourceFilter);
+          aggQuery = aggQuery.eq("target_sheet", sourceFilter);
+        }
+      }
     }
     if (unpaidIntentOnly) {
       query = query.eq("is_unpaid_intent", true);
@@ -540,20 +644,9 @@ export async function getUnifiedCRMData(
     const to = from + pageSize - 1;
 
     const dbQueryStart = performance.now();
-    const [leadsRes, metricsRes, trafficSummaryRes, costsRes, allProfilesRes, utmLeadsSummaryRes] = await Promise.all([
+    const [leadsRes, aggLeadsRes, trafficSummaryRes, costsRes, allProfilesRes, utmLeadsSummaryRes, funnelsRes] = await Promise.all([
       query.order("created_at", { ascending: false }).range(from, to),
-      adminSupabase.rpc("get_crm_metrics", {
-        p_project_id: activeProject.id,
-        p_search_query: searchQuery,
-        p_status_filter: statusFilter,
-        p_touch_count_filter: touchCountFilter,
-        p_source_filter: sourceFilter,
-        p_unpaid_intent_only: unpaidIntentOnly,
-        p_start_date: startDate ? parseClientDateRange(startDate, false).toISOString() : null,
-        p_end_date: endDate ? parseClientDateRange(endDate, true).toISOString() : null,
-        p_selected_landing: selectedLanding,
-        p_assigned_manager_id: isSalesFiltered ? user.id : null
-      }),
+      aggQuery,
       (() => {
         if (filters?.skipTraffic) return Promise.resolve({ data: [], error: null } as any);
         return adminSupabase.rpc("get_traffic_clicks_summary", {
@@ -587,52 +680,68 @@ export async function getUnifiedCRMData(
         p_end_date: endDate ? parseClientDateRange(endDate, true).toISOString() : null,
         p_selected_landing: selectedLanding,
         p_assigned_manager_id: isSalesFiltered ? user.id : null
-      })
+      }),
+      adminSupabase.from("funnels").select("*").eq("project_id", activeProject.id)
     ]);
     const dbQueryEnd = performance.now();
     const dbQueryMs = dbQueryEnd - dbQueryStart;
 
     if (leadsRes.error) throw leadsRes.error;
-    if (metricsRes.error) throw metricsRes.error;
 
-    const paginatedLeads = leadsRes.data || [];
+    const funnelsList = funnelsRes.data || [];
+    const rawPaginatedLeads = leadsRes.data || [];
+    const paginatedLeads = rawPaginatedLeads.map((lead: any) => {
+      const matchedFunnel = matchLeadToFunnel(lead, funnelsList);
+      return {
+        ...lead,
+        funnelId: matchedFunnel ? matchedFunnel.id : null,
+        funnelName: matchedFunnel ? matchedFunnel.name : null
+      };
+    });
     const totalCount = leadsRes.count || 0;
     const costs = costsRes.data || [];
     const profilesList = allProfilesRes.data || [];
 
-    // Extract metrics row
-    const metricsRow = metricsRes.data?.[0] || {
-      total_leads: 0,
-      total_applications: 0,
-      usd_course_revenue: 0,
-      uah_course_revenue: 0,
-      eur_course_revenue: 0,
-      usd_tripwire_revenue: 0,
-      uah_tripwire_revenue: 0,
-      eur_tripwire_revenue: 0,
-      usd_course_count: 0,
-      uah_course_count: 0,
-      eur_course_count: 0,
-      usd_tripwire_count: 0,
-      uah_tripwire_count: 0,
-      eur_tripwire_count: 0
-    };
+    const aggLeads = aggLeadsRes.data || [];
 
-    const totalLeads = Number(metricsRow.total_leads || 0);
-    const totalApplications = Number(metricsRow.total_applications || 0);
-    const usdCourseRevenue = Number(metricsRow.usd_course_revenue || 0);
-    const uahCourseRevenue = Number(metricsRow.uah_course_revenue || 0);
-    const eurCourseRevenue = Number(metricsRow.eur_course_revenue || 0);
-    const usdTripwireRevenue = Number(metricsRow.usd_tripwire_revenue || 0);
-    const uahTripwireRevenue = Number(metricsRow.uah_tripwire_revenue || 0);
-    const eurTripwireRevenue = Number(metricsRow.eur_tripwire_revenue || 0);
+    // Calculate aggregated metrics from aggLeads
+    let totalLeads = aggLeads.length;
+    let totalApplications = 0;
+    let usdCourseRevenue = 0;
+    let uahCourseRevenue = 0;
+    let eurCourseRevenue = 0;
+    let usdTripwireRevenue = 0;
+    let uahTripwireRevenue = 0;
+    let eurTripwireRevenue = 0;
 
-    const usdCourseCount = Number(metricsRow.usd_course_count || 0);
-    const uahCourseCount = Number(metricsRow.uah_course_count || 0);
-    const eurCourseCount = Number(metricsRow.eur_course_count || 0);
-    const usdTripwireCount = Number(metricsRow.usd_tripwire_count || 0);
-    const uahTripwireCount = Number(metricsRow.uah_tripwire_count || 0);
-    const eurTripwireCount = Number(metricsRow.eur_tripwire_count || 0);
+    let usdCourseCount = 0;
+    let uahCourseCount = 0;
+    let eurCourseCount = 0;
+    let usdTripwireCount = 0;
+    let uahTripwireCount = 0;
+    let eurTripwireCount = 0;
+
+    aggLeads.forEach((l: any) => {
+      // Calculate applications (leads that filled form or paid)
+      if (l.status !== "Клик" && l.status !== "КликФормы") {
+        totalApplications++;
+      }
+
+      usdCourseRevenue += Number(l.usd_paid || 0);
+      uahCourseRevenue += Number(l.uah_paid || 0);
+      eurCourseRevenue += Number(l.eur_paid || 0);
+      
+      usdTripwireRevenue += Number(l.usd_tripwire_paid || 0);
+      uahTripwireRevenue += Number(l.uah_tripwire_paid || 0);
+      eurTripwireRevenue += Number(l.eur_tripwire_paid || 0);
+
+      usdCourseCount += Number(l.usd_course_count || 0);
+      uahCourseCount += Number(l.uah_course_count || 0);
+      eurCourseCount += Number(l.eur_course_count || 0);
+      usdTripwireCount += Number(l.usd_tripwire_count || 0);
+      uahTripwireCount += Number(l.uah_tripwire_count || 0);
+      eurTripwireCount += Number(l.eur_tripwire_count || 0);
+    });
 
     const paidLeadsCount = usdCourseCount + uahCourseCount + eurCourseCount;
     const paidTripwiresCount = usdTripwireCount + uahTripwireCount + eurTripwireCount;

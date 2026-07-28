@@ -96,12 +96,28 @@ export async function getFinanceSummaryAction(
     const { data: allTransactions, error: txErr } = await query.order("date", { ascending: false }).order("created_at", { ascending: false });
     if (txErr || !allTransactions) throw new Error("Failed to fetch transactions");
 
+    // Fetch traffic spend from daily_traffic_and_costs
+    let trafficQuery = adminSupabase
+      .from("daily_traffic_and_costs")
+      .select("spend_usd")
+      .eq("project_id", projectId);
+
+    if (startDateStr) {
+      trafficQuery = trafficQuery.gte("date", startDateStr);
+    }
+    if (endDateStr) {
+      trafficQuery = trafficQuery.lte("date", endDateStr);
+    }
+
+    const { data: dbTraffic } = await trafficQuery;
+    const totalTrafficFromDbUSD = (dbTraffic || []).reduce((sum: number, t: any) => sum + Number(t.spend_usd || 0), 0);
+
     // Calculate aggregated metrics
     let totalIncomeUSD = 0;
     let totalExpenseUSD = 0;
     let totalIncomeUAH = 0;
     let totalExpenseUAH = 0;
-    let totalTrafficUSD = 0;
+    let totalTrafficUSD = totalTrafficFromDbUSD;
     let totalPaidToExpertUSD = 0;
     let totalPaidToExpertUAH = 0;
     let totalReceivablesUSD = 0;
@@ -120,7 +136,7 @@ export async function getFinanceSummaryAction(
 
     // P&L item arrays
     const opexBreakdown = {
-      marketing: 0,
+      marketing: totalTrafficFromDbUSD,
       services: 0,
       team: 0,
       commissions: 0,
@@ -141,7 +157,7 @@ export async function getFinanceSummaryAction(
       const amountUSD = Number(tx.amount_usd || 0);
       const isUAH = tx.currency === "UAH";
 
-      // Calculate account adjustments
+      // Calculate account adjustments (all physical money flow is tracked here)
       if (accountBalances[tx.account_id]) {
         if (tx.type === "income") {
           accountBalances[tx.account_id].inflow += amountUSD;
@@ -180,28 +196,51 @@ export async function getFinanceSummaryAction(
           revenueBreakdown.other += amountUSD;
         }
       } else {
-        totalExpenseUSD += amountUSD;
-        if (isUAH) totalExpenseUAH += amount;
-        else totalExpenseUAH += amountUSD * 44;
+        // This is an expense
+        const isPayout = 
+          cleanCategory.includes("виплата") || 
+          cleanCategory.includes("выплата") || 
+          cleanCategory.includes("доля") || 
+          cleanCategory.includes("розподіл") || 
+          cleanCategory.includes("распредел");
 
-        if (parentSec === "opex_marketing" || cleanCategory.includes("трафік") || cleanCategory.includes("реклам") || cleanCategory.includes("traffic") || cleanCategory.includes("ad spend")) {
-          totalTrafficUSD += amountUSD;
-          opexBreakdown.marketing += amountUSD;
-        } else if (parentSec === "opex_commissions" || cleanCategory.includes("комісі") || cleanCategory.includes("комисси") || cleanCategory.includes("w4p") || cleanCategory.includes("еквайринг")) {
-          opexBreakdown.commissions += amountUSD;
-        } else if (parentSec === "opex_services" || cleanCategory.includes("сервіс") || cleanCategory.includes("sendpulse") || cleanCategory.includes("хостинг")) {
-          opexBreakdown.services += amountUSD;
-        } else if (parentSec === "opex_team" || cleanCategory.includes("команд") || cleanCategory.includes("підряд") || cleanCategory.includes("зп") || cleanCategory.includes("зарплата")) {
-          opexBreakdown.team += amountUSD;
-        } else if (cleanCategory.includes("виплата експерту") || cleanCategory.includes("доля експерта") || cleanCategory.includes("аванс експерту")) {
-          totalPaidToExpertUSD += amountUSD;
-          if (isUAH) totalPaidToExpertUAH += amount;
-          opexBreakdown.team += amountUSD;
+        if (isPayout) {
+          // Exclude payouts to expert and producer from operational expenses (OPEX)
+          if (cleanCategory.includes("експерт") || cleanCategory.includes("эксперт") || cleanCategory.includes("sony")) {
+            totalPaidToExpertUSD += amountUSD;
+            if (isUAH) totalPaidToExpertUAH += amount;
+          }
         } else {
-          opexBreakdown.other += amountUSD;
+          // Check if manual traffic cost to ignore it in OPEX (we take it exclusively from Meta ad spend!)
+          const isTrafficCategory = 
+            parentSec === "opex_marketing" || 
+            cleanCategory.includes("трафік") || 
+            cleanCategory.includes("реклам") || 
+            cleanCategory.includes("traffic") || 
+            cleanCategory.includes("ad spend");
+
+          if (!isTrafficCategory) {
+            totalExpenseUSD += amountUSD;
+            if (isUAH) totalExpenseUAH += amount;
+            else totalExpenseUAH += amountUSD * 44;
+
+            if (parentSec === "opex_commissions" || cleanCategory.includes("комісі") || cleanCategory.includes("комисси") || cleanCategory.includes("w4p") || cleanCategory.includes("еквайринг")) {
+              opexBreakdown.commissions += amountUSD;
+            } else if (parentSec === "opex_services" || cleanCategory.includes("сервіс") || cleanCategory.includes("sendpulse") || cleanCategory.includes("хостинг")) {
+              opexBreakdown.services += amountUSD;
+            } else if (parentSec === "opex_team" || cleanCategory.includes("команд") || cleanCategory.includes("підряд") || cleanCategory.includes("зп") || cleanCategory.includes("зарплата")) {
+              opexBreakdown.team += amountUSD;
+            } else {
+              opexBreakdown.other += amountUSD;
+            }
+          }
         }
       }
     });
+
+    // Add Meta Ads traffic spend to total opex and expenses
+    totalExpenseUSD += totalTrafficFromDbUSD;
+    totalExpenseUAH += totalTrafficFromDbUSD * 44;
 
     const netRevenueUSD = revenueBreakdown.product + revenueBreakdown.tripwires + revenueBreakdown.club + revenueBreakdown.installments + revenueBreakdown.other - revenueBreakdown.refunds;
     const totalOpExUSD = opexBreakdown.marketing + opexBreakdown.services + opexBreakdown.team + opexBreakdown.commissions + opexBreakdown.other;

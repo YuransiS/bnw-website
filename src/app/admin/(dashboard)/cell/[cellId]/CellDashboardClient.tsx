@@ -39,6 +39,28 @@ export default function CellDashboardClient({
   cellRoi
 }: CellDashboardClientProps) {
   const router = useRouter();
+  const [selectedCurrency, setSelectedCurrency] = useState<"UAH" | "USD" | "EUR">("UAH");
+
+  // CRM conversion rates: 1 USD = 41 UAH, 1 EUR = 44 UAH
+  const convertAmount = (uahAmount: number) => {
+    const val = Number(uahAmount || 0);
+    if (selectedCurrency === "USD") {
+      return { val: val / 41, symbol: "$" };
+    }
+    if (selectedCurrency === "EUR") {
+      return { val: val / 44, symbol: "€" };
+    }
+    return { val: val, symbol: "₴" };
+  };
+
+  const formatConverted = (uahAmount: number) => {
+    const { val, symbol } = convertAmount(uahAmount);
+    const formatted = new Intl.NumberFormat("ru-RU", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(val);
+    return symbol === "$" || symbol === "€" ? `${symbol}${formatted}` : `${formatted} ${symbol}`;
+  };
 
   // Helper to handle Producer Tile Click
   const handleProducerClick = (producer: any) => {
@@ -65,7 +87,24 @@ export default function CellDashboardClient({
           <p className="text-white/40 text-xs mt-0.5">Керівник ячейки: {cell.profiles?.email || "Не призначено"}</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Currency Switcher */}
+          <div className="flex bg-white/5 p-1 rounded-xl border border-white/5 mr-2">
+            {(["UAH", "USD", "EUR"] as const).map((curr) => (
+              <button
+                key={curr}
+                onClick={() => setSelectedCurrency(curr)}
+                className={`px-3 py-1.5 text-[10px] font-black rounded-lg cursor-pointer transition-all ${
+                  selectedCurrency === curr
+                    ? "bg-white text-black font-black"
+                    : "text-white/40 hover:text-white font-bold"
+                }`}
+              >
+                {curr}
+              </button>
+            ))}
+          </div>
+
           <span className="text-xs bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl font-extrabold text-white/70">
             {cellProjects.length} Проектів
           </span>
@@ -79,31 +118,31 @@ export default function CellDashboardClient({
       <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
         <div className="bg-neutral-900 border border-white/5 p-6 rounded-2xl">
           <p className="text-xs text-white/40 uppercase font-bold tracking-wider">Виручка ячейки</p>
-          <p className="text-2xl font-black mt-2 text-emerald-400">
-            {cellRevenue.toLocaleString("uk-UA")} ₴
+          <p className="text-2xl font-black mt-2 text-emerald-400 font-mono">
+            {formatConverted(cellRevenue)}
           </p>
           <p className="text-[10px] text-white/30 mt-1">Оборот усіх проектів ячейки</p>
         </div>
 
         <div className="bg-neutral-900 border border-white/5 p-6 rounded-2xl">
           <p className="text-xs text-white/40 uppercase font-bold tracking-wider">Витрати ячейки</p>
-          <p className="text-2xl font-black mt-2 text-rose-400">
-            {cellSpend.toLocaleString("uk-UA")} ₴
+          <p className="text-2xl font-black mt-2 text-rose-400 font-mono">
+            {formatConverted(cellSpend)}
           </p>
           <p className="text-[10px] text-white/30 mt-1">Трафік та опекс</p>
         </div>
 
         <div className="bg-neutral-900 border border-white/5 p-6 rounded-2xl">
           <p className="text-xs text-white/40 uppercase font-bold tracking-wider">Прибуток ячейки</p>
-          <p className="text-2xl font-black mt-2 text-emerald-500">
-            {cellProfit.toLocaleString("uk-UA")} ₴
+          <p className="text-2xl font-black mt-2 text-emerald-500 font-mono">
+            {formatConverted(cellProfit)}
           </p>
           <p className="text-[10px] text-white/30 mt-1">Маржинальність осередку</p>
         </div>
 
         <div className="bg-neutral-900 border border-white/5 p-6 rounded-2xl">
           <p className="text-xs text-white/40 uppercase font-bold tracking-wider">ROI ячейки</p>
-          <p className="text-2xl font-black mt-2 text-purple-400">
+          <p className="text-2xl font-black mt-2 text-purple-400 font-mono">
             {cellRoi.toFixed(2)} %
           </p>
           <p className="text-[10px] text-white/30 mt-1">Окупність вкладень</p>
@@ -175,7 +214,7 @@ export default function CellDashboardClient({
                   <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-xs">
                     <div>
                       <span className="text-[10px] text-white/40 block">Прибуток:</span>
-                      <span className="font-black text-emerald-400">{prod.profitUah.toLocaleString("uk-UA")} ₴</span>
+                      <span className="font-black text-emerald-400">{formatConverted(prod.profitUah)}</span>
                     </div>
 
                     <div className="flex items-center gap-1 text-[11px] font-bold text-white/60 group-hover:text-emerald-400 transition-colors">
@@ -221,15 +260,15 @@ export default function CellDashboardClient({
                     <div className="mt-4 space-y-2 text-xs text-white/60">
                       <div className="flex justify-between">
                         <span>Виручка:</span>
-                        <span className="font-bold text-white">{Number(proj.revenue_uah || 0).toLocaleString("uk-UA")} ₴</span>
+                        <span className="font-bold text-white font-mono">{formatConverted(proj.revenue_uah || 0)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Витрати:</span>
-                        <span className="font-bold text-red-400">{Number(proj.expenses_uah || 0).toLocaleString("uk-UA")} ₴</span>
+                        <span className="font-bold text-red-400 font-mono">{formatConverted(proj.expenses_uah || 0)}</span>
                       </div>
                       <div className="flex justify-between border-t border-white/5 pt-1 mt-1 text-[11px]">
                         <span>Прибуток:</span>
-                        <span className="font-black text-emerald-400">{(Number(proj.revenue_uah || 0) - Number(proj.expenses_uah || 0)).toLocaleString("uk-UA")} ₴</span>
+                        <span className="font-black text-emerald-400 font-mono">{formatConverted(Number(proj.revenue_uah || 0) - Number(proj.expenses_uah || 0))}</span>
                       </div>
                     </div>
                   </div>
