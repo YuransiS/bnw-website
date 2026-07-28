@@ -266,11 +266,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     setIsFinanceLoading(true);
     try {
       const data = await getFinanceSummaryAction(activeProject.id, startDate, endDate, financeLimit);
-      if (data && !("error" in data)) {
+      if (data) {
         setFinanceData(data);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Failed to load finance data", e);
+      setFinanceData({ error: e.message || "Failed to load finance data" });
     } finally {
       setIsFinanceLoading(false);
     }
@@ -722,83 +723,6 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         }
       `}} />
 
-      {/* Main Container Header */}
-      {viewType === "all" && (
-        <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 border-b pb-6 ${borderClass}`}>
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-3">
-              <span
-                className={`text-xs font-black uppercase px-2.5 py-0.5 rounded tracking-widest ${
-                  role === "admin" || role === "superman"
-                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                    : role === "producer"
-                    ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
-                    : role === "rop"
-                    ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
-                    : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                }`}
-              >
-                {role === "admin" || role === "superman"
-                  ? "Супермен"
-                  : role === "producer"
-                  ? "Продюсер"
-                  : role === "rop"
-                  ? "Керівник ВП (РОП)"
-                  : "Відділ продажів"}
-              </span>
-              <div className={`flex items-center gap-1.5 text-xs ${textMutedClass}`}>
-                <Activity className="w-4 h-4 text-emerald-500 animate-pulse" />
-                <span>Платформа активна</span>
-              </div>
-            </div>
-            <h1 className="text-3xl font-black uppercase tracking-tight flex items-center gap-2">B&W Analytics CRM</h1>
-          </div>
-
-          {/* Global Controls */}
-          <div className="flex items-center gap-3 w-full md:w-auto">
-            {unresolvedOrders.length > 0 && (
-              <button
-                onClick={() => setShowUnresolvedModal(true)}
-                className="px-4 py-2.5 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 text-xs font-black transition-all hover:bg-red-500/20 cursor-pointer flex items-center gap-2 animate-pulse"
-                title="Є транзакції без валюти"
-              >
-                <AlertCircle className="w-4 h-4" />
-                <span>Помилка: {unresolvedOrders.length}</span>
-              </button>
-            )}
-
-            {/* Project Switcher Dropdown */}
-            <div className="relative flex-grow md:flex-grow-0">
-              <select
-                value={activeSlug}
-                onChange={handleScopeChange}
-                className={`w-full md:w-64 appearance-none pl-4 pr-10 py-3 rounded-xl focus:outline-none text-xs font-black cursor-pointer ${selectClass}`}
-              >
-                {viewType === "all" && <option value="all">🌐 Весь холдинг (Зведений вид)</option>}
-                {allowedProjects.map((p: any) => (
-                  <option key={p.slug} value={p.slug}>
-                    📂 {p.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none text-crm-muted" />
-            </div>
-
-            {/* Developer Mode Toggle */}
-            {(role === "admin" || role === "superman") && (
-              <button
-                onClick={toggleDevMode}
-                className={`px-4 py-3 rounded-xl border transition-all cursor-pointer flex items-center gap-2 text-xs font-black ${
-                  isDevMode ? "bg-red-500/10 border-red-500/30 text-red-400" : "bg-white/5 border-white/10 text-white/50"
-                }`}
-              >
-                <span>🐞 Dev Mode</span>
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Sticky Global Filter Bar */}
       <div className={`sticky top-0 z-40 backdrop-blur-md border p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 mb-6 shadow-xl ${isLight ? 'bg-white/80 border-neutral-250' : 'bg-[#0c0c0f]/80 border-white/5'}`}>
         <div className="flex items-center gap-3">
@@ -821,6 +745,16 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
               $ USD
             </button>
           </div>
+          {unresolvedOrders.length > 0 && (
+            <button
+              onClick={() => setShowUnresolvedModal(true)}
+              className="px-4 py-2 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 text-[10px] font-black transition-all hover:bg-red-500/20 cursor-pointer flex items-center gap-2 animate-pulse"
+              title="Є транзакції без валюти"
+            >
+              <AlertCircle className="w-3.5 h-3.5" />
+              <span>Помилка: {unresolvedOrders.length}</span>
+            </button>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-4">
@@ -1052,11 +986,11 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         )}
 
         {activeTab === "hub" && viewType === "all" && (
-          <HubTab summaryData={summaryData} campaignsData={campaignsData} />
+          <HubTab summaryData={summaryData} campaignsData={campaignsData} globalCurrency={globalCurrency} />
         )}
 
         {activeTab === "leaderboard" && viewType === "all" && (
-          <LeaderboardTab producersLeaderboard={producersLeaderboard} />
+          <LeaderboardTab producersLeaderboard={producersLeaderboard} globalCurrency={globalCurrency} />
         )}
 
         {activeTab === "funnels" && viewType === "single" && (
@@ -1088,40 +1022,70 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
               <div className="flex h-[200px] items-center justify-center">
                 <RefreshCw className="w-6 h-6 animate-spin text-emerald-500" />
               </div>
-            ) : (
-              financeData && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start animate-in fade-in duration-300">
-                  {/* Left Column: Visual Dashboard / P&L Details */}
-                  <div className="lg:col-span-2">
-                    <FinanceDashboardTab
-                      summary={financeData.summary}
-                      accounts={financeData.accounts}
-                      pnl={financeData.pnl}
-                      isLight={isLight}
-                      userRole={role}
-                      projectId={activeProject.id}
-                      onRefresh={fetchFinanceData}
-                      categories={financeData.categories}
-                      project={financeData.project}
-                      globalCurrency={globalCurrency}
-                    />
-                  </div>
-
-                  {/* Right Column: Recent Activity Feed */}
-                  <div>
-                    <CashflowFeed
-                      projectId={activeProject.id}
-                      transactions={financeData.transactions}
-                      hasMore={financeData.hasMore}
-                      onLoadMore={() => setFinanceLimit(prev => prev + 20)}
-                      onDeleteSuccess={fetchFinanceData}
-                      accounts={financeData.accounts}
-                      isLight={isLight}
-                      userRole={role}
-                    />
-                  </div>
+            ) : financeData?.error ? (
+              <div className={`p-8 rounded-2xl border text-center ${cardClass} ${borderClass} flex flex-col items-center justify-center gap-3 animate-in fade-in duration-300`}>
+                <AlertCircle className="w-8 h-8 text-rose-500 animate-pulse" />
+                <span className="text-xs text-rose-400 font-bold uppercase tracking-widest">Помилка завантаження даних</span>
+                <p className="text-xs text-neutral-400 max-w-md mt-1 leading-relaxed">
+                  {financeData.error}
+                </p>
+                <button
+                  onClick={fetchFinanceData}
+                  className="mt-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-neutral-300 text-xs font-bold rounded-xl border border-white/5 cursor-pointer transition-all"
+                >
+                  Спробувати знову
+                </button>
+              </div>
+            ) : financeData ? (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start animate-in fade-in duration-300">
+                {/* Left Column: Visual Dashboard / P&L Details */}
+                <div className="lg:col-span-2">
+                  <FinanceDashboardTab
+                    summary={financeData.summary}
+                    accounts={financeData.accounts}
+                    pnl={financeData.pnl}
+                    isLight={isLight}
+                    userRole={role}
+                    projectId={activeProject.id}
+                    onRefresh={fetchFinanceData}
+                    categories={financeData.categories}
+                    project={financeData.project}
+                    globalCurrency={globalCurrency}
+                  />
                 </div>
-              )
+
+                {/* Right Column: Recent Activity Feed */}
+                <div>
+                  <CashflowFeed
+                    projectId={activeProject.id}
+                    transactions={financeData.transactions}
+                    hasMore={financeData.hasMore}
+                    onLoadMore={() => setFinanceLimit(prev => prev + 20)}
+                    onDeleteSuccess={fetchFinanceData}
+                    accounts={financeData.accounts}
+                    isLight={isLight}
+                    userRole={role}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className={`p-10 rounded-2xl border text-center ${cardClass} ${borderClass} flex flex-col items-center justify-center gap-4 animate-in fade-in duration-300`}>
+                <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                  <Briefcase className="w-6 h-6 animate-pulse" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-neutral-200">Фінансові дані відсутні</h4>
+                  <p className="text-xs text-neutral-400 mt-1 max-w-sm mx-auto leading-relaxed">
+                    Для цього проекту ще не налаштовано фінансовий облік. Створіть першу транзакцію, щоб ініціалізувати дані.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowAddTransaction(true)}
+                  className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold rounded-xl cursor-pointer transition-all flex items-center gap-1.5 mx-auto"
+                >
+                  <Plus className="w-4 h-4" /> Додати першу операцію
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -1163,6 +1127,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             campaignsList={dashboardData.campaignsData || []}
             leadsList={processedLeads}
             setActiveTab={setActiveTab}
+            globalCurrency={globalCurrency}
           />
         )}
 
@@ -1273,13 +1238,16 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         onRefresh={handleRefresh}
       />
       {/* Wizard for transaction entry */}
-      {showAddTransaction && activeProject && financeData && (
+      {showAddTransaction && activeProject && (
         <AddTransactionModal
           projectId={activeProject.id}
           funnels={funnelsList}
-          accounts={financeData.accounts}
-          customCategories={financeData.categories.custom}
-          defaultCategories={financeData.categories.default}
+          accounts={financeData?.accounts || []}
+          customCategories={financeData?.categories?.custom || []}
+          defaultCategories={financeData?.categories?.default || {
+            income: ["Продаж основного курсу", "Продаж трипваєра / міні-продукту", "Клубні підписки (LTV)", "Рассрочка (Банківське поступлення)", "Прочий приход", "Повернення клієнту (Refund)"],
+            expense: ["Трафік та Реклама (Ad Spend)", "Сервіси та інфраструктура", "Оплата команди та підрядників", "Банківські комісії та Еквайринг", "Виплата авансу експерту", "Прочі операційні витрати"]
+          }}
           onClose={() => setShowAddTransaction(false)}
           onSuccess={fetchFinanceData}
           isLight={isLight}

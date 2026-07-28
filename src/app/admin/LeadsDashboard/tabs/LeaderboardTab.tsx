@@ -6,9 +6,10 @@ import { formatDualCurrency, formatDualProfit } from "@/app/admin/utils";
 
 interface LeaderboardTabProps {
   producersLeaderboard: any[];
+  globalCurrency?: "USD" | "UAH";
 }
 
-export const LeaderboardTab = React.memo(function LeaderboardTab({ producersLeaderboard }: LeaderboardTabProps) {
+export const LeaderboardTab = React.memo(function LeaderboardTab({ producersLeaderboard, globalCurrency = "UAH" }: LeaderboardTabProps) {
   const { theme } = useTheme();
   const isLight = theme === "light";
 
@@ -66,10 +67,10 @@ export const LeaderboardTab = React.memo(function LeaderboardTab({ producersLead
                       ${Number(prod.cpl).toFixed(2)}
                     </td>
                     <td className="p-4 text-center font-bold text-emerald-400">
-                      {formatDualCurrency(prod.usd_revenue, prod.uah_revenue, prod.eur_revenue)}
+                      {formatDualCurrency(prod.usd_revenue, prod.uah_revenue, prod.eur_revenue, globalCurrency)}
                     </td>
                     <td className="p-4 text-center font-black">
-                      {formatDualProfit(prod.usd_revenue, prod.spend, prod.uah_revenue, prod.eur_revenue)}
+                      {formatDualProfit(prod.usd_revenue, prod.spend, prod.uah_revenue, prod.eur_revenue, globalCurrency)}
                     </td>
                     <td className="p-4 text-center font-black">
                       <span className={`px-2.5 py-1 rounded-full text-[10px] ${prod.roi >= 150

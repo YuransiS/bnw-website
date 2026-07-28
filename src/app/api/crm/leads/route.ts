@@ -387,9 +387,108 @@ async function handleQueryLeads(request: Request) {
       return true;
     });
     const totalCostsSpend = filteredCosts.reduce((sum: number, c: any) => sum + Number(c.spend || 0), 0);
-    const netProfitUsd = totalUsdRevenue - totalCostsSpend;
-    const blendedRevenue = totalUsdRevenue + (totalUahRevenue / 41.0) + (totalEurRevenue * 1.08);
-    const roi = totalCostsSpend > 0 ? (blendedRevenue / totalCostsSpend) * 100 : 0;
+
+    // Fetch all paid orders for the project and selected period to calculate exact historical NBU blended revenues
+    const paidStatuses = [
+      'closed_won', 'approved', 'aprooved', 'оплачено', 'купив курс', 'купив_курс', 
+      'купив трипвайєр', 'купив трипвайер', 'купив(-ла) трипвайер', 'оплачено полностью'
+    ];
+
+    let paidOrdersQuery = adminSupabase
+      .from("unified_orders")
+      .select("amount, created_at, status, metadata")
+      .eq("project_id", activeProject.id)
+      .in("status", paidStatuses)
+      .gt("amount", 0);
+
+    if (startDate) {
+      const startStr = parseClientDateRange(startDate, false).toISOString();
+      paidOrdersQuery = paidOrdersQuery.gte("created_at", startStr);
+    }
+    if (endDate) {
+      const endStr = parseClientDateRange(endDate, true).toISOString();
+      paidOrdersQuery = paidOrdersQuery.lte("created_at", endStr);
+    }
+
+    const { data: paidOrders } = await paidOrdersQuery;
+
+    const { getExchangeRates } = await import("@/lib/exchange-rate");
+    const todayRates = await getExchangeRates();
+
+    const missingDates = Array.from(
+      new Set(
+        (paidOrders || [])
+          .filter((o: any) => !o.metadata?.usd_rate || !o.metadata?.usd_amount)
+          .map((o: any) => o.created_at ? o.created_at.split("T")[0] : null)
+          .filter(Boolean)
+      )
+    ) as string[];
+
+    const localRateMap: Record<string, any> = {};
+    if (missingDates.length > 0) {
+      await Promise.all(
+        missingDates.map(async (d) => {
+          localRateMap[d] = await getExchangeRates(d);
+        })
+      );
+    }
+
+    let blendedCourseRevenueUsd = 0;
+    let blendedCourseRevenueUah = 0;
+    let blendedTripwireRevenueUsd = 0;
+    let blendedTripwireRevenueUah = 0;
+
+    (paidOrders || []).forEach((o: any) => {
+      const amount = Number(o.amount || 0);
+      const currency = String(o.metadata?.currency || o.metadata?.lead?.currency || "uah").toLowerCase().trim();
+      const dateStr = o.created_at ? o.created_at.split("T")[0] : "";
+      
+      const usdRate = Number(o.metadata?.usd_rate) || (dateStr && localRateMap[dateStr]?.usdRate) || todayRates.usdRate;
+      const eurToUsd = Number(o.metadata?.eur_to_usd) || (dateStr && localRateMap[dateStr]?.eurToUsd) || todayRates.eurToUsd;
+      const eurRate = usdRate * eurToUsd;
+
+      let usdVal = amount;
+      let uahVal = amount;
+
+      if (Number(o.metadata?.usd_amount) > 0 && Number(o.metadata?.uah_amount) > 0) {
+        usdVal = Number(o.metadata.usd_amount);
+        uahVal = Number(o.metadata.uah_amount);
+      } else {
+        if (currency === 'uah' || currency === '₴') {
+          usdVal = amount / usdRate;
+          uahVal = amount;
+        } else if (currency === 'eur' || currency === '€') {
+          usdVal = amount * eurToUsd;
+          uahVal = amount * eurRate;
+        } else {
+          usdVal = amount;
+          uahVal = amount * usdRate;
+        }
+      }
+
+      const isTripwire = 
+        (o.metadata?.original_sheet && ['Практикум', 'Practicum_Leads', 'Заявки на практикум', 'Miні-курс'].includes(o.metadata.original_sheet)) ||
+        (o.metadata?.target_sheet && ['Практикум', 'Practicum_Leads', 'Заявки на практикум', 'Miні-курс'].includes(o.metadata.target_sheet));
+
+      if (isTripwire) {
+        blendedTripwireRevenueUsd += usdVal;
+        blendedTripwireRevenueUah += uahVal;
+      } else {
+        blendedCourseRevenueUsd += usdVal;
+        blendedCourseRevenueUah += uahVal;
+      }
+    });
+
+    const totalBlendedRevenueUsd = blendedCourseRevenueUsd + blendedTripwireRevenueUsd;
+    const totalBlendedRevenueUah = blendedCourseRevenueUah + blendedTripwireRevenueUah;
+
+    const blendedProfitUsd = totalBlendedRevenueUsd - totalCostsSpend;
+    const blendedProfitUah = totalBlendedRevenueUah - (totalCostsSpend * todayRates.usdRate);
+
+    const blendedAovUsd = totalSales > 0 ? totalBlendedRevenueUsd / totalSales : 0;
+    const blendedAovUah = totalSales > 0 ? totalBlendedRevenueUah / totalSales : 0;
+
+    const roi = totalCostsSpend > 0 ? (totalBlendedRevenueUsd / totalCostsSpend) * 100 : 0;
 
     // Clicks summary
     const groupedTraffic = trafficSummaryRes.data || [];
@@ -406,16 +505,16 @@ async function handleQueryLeads(request: Request) {
       totalApplications,
       conversionRate,
       cpl,
-      usdRevenue: totalUsdRevenue,
-      uahRevenue: totalUahRevenue,
+      usdRevenue: totalBlendedRevenueUsd,
+      uahRevenue: totalBlendedRevenueUah,
       eurRevenue: totalEurRevenue,
-      usdCourseRevenue,
-      uahCourseRevenue,
+      usdCourseRevenue: blendedCourseRevenueUsd,
+      uahCourseRevenue: blendedCourseRevenueUah,
       eurCourseRevenue,
-      usdTripwireRevenue,
-      uahTripwireRevenue,
+      usdTripwireRevenue: blendedTripwireRevenueUsd,
+      uahTripwireRevenue: blendedTripwireRevenueUah,
       eurTripwireRevenue,
-      netProfitUsd,
+      netProfitUsd: blendedProfitUsd,
       roi,
       totalSales,
       paidLeadsCount,
@@ -424,8 +523,8 @@ async function handleQueryLeads(request: Request) {
       leadToSaleConvUsd: totalLeads > 0 ? (usdSalesCount / totalLeads) * 100 : 0,
       leadToSaleConvUah: totalLeads > 0 ? (uahSalesCount / totalLeads) * 100 : 0,
       leadToSaleConvEur: totalLeads > 0 ? (eurSalesCount / totalLeads) * 100 : 0,
-      aovUsd,
-      aovUah,
+      aovUsd: blendedAovUsd,
+      aovUah: blendedAovUah,
       aovEur
     };
 
@@ -657,12 +756,8 @@ export async function QUERY(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const methodOverride = request.headers.get("X-HTTP-Method-Override");
-    if (methodOverride === "QUERY") {
-      const data = await handleQueryLeads(request);
-      return NextResponse.json(data);
-    }
-    return NextResponse.json({ error: "Method Not Allowed" }, { status: 405 });
+    const data = await handleQueryLeads(request);
+    return NextResponse.json(data);
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Internal Server Error" }, { status: 400 });
   }

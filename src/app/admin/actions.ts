@@ -665,9 +665,108 @@ export async function getUnifiedCRMData(
       return true;
     });
     const totalCostsSpend = filteredCosts.reduce((sum: number, c: any) => sum + Number(c.spend_usd || c.spend || 0), 0);
-    const netProfitUsd = totalUsdRevenue - totalCostsSpend;
-    const blendedRevenue = totalUsdRevenue + (totalUahRevenue / 41.0) + (totalEurRevenue * 1.08);
-    const roi = totalCostsSpend > 0 ? (blendedRevenue / totalCostsSpend) * 100 : 0;
+
+    // Fetch all paid orders for the project and selected period to calculate exact historical NBU blended revenues
+    const paidStatuses = [
+      'closed_won', 'approved', 'aprooved', 'оплачено', 'купив курс', 'купив_курс', 
+      'купив трипвайєр', 'купив трипвайер', 'купив(-ла) трипвайер', 'оплачено полностью'
+    ];
+
+    let paidOrdersQuery = adminSupabase
+      .from("unified_orders")
+      .select("amount, created_at, status, metadata")
+      .eq("project_id", activeProject.id)
+      .in("status", paidStatuses)
+      .gt("amount", 0);
+
+    if (startDate) {
+      const startStr = parseClientDateRange(startDate, false).toISOString();
+      paidOrdersQuery = paidOrdersQuery.gte("created_at", startStr);
+    }
+    if (endDate) {
+      const endStr = parseClientDateRange(endDate, true).toISOString();
+      paidOrdersQuery = paidOrdersQuery.lte("created_at", endStr);
+    }
+
+    const { data: paidOrders } = await paidOrdersQuery;
+
+    const { getExchangeRates } = await import("@/lib/exchange-rate");
+    const todayRates = await getExchangeRates();
+
+    const missingDates = Array.from(
+      new Set(
+        (paidOrders || [])
+          .filter((o: any) => !o.metadata?.usd_rate || !o.metadata?.usd_amount)
+          .map((o: any) => o.created_at ? o.created_at.split("T")[0] : null)
+          .filter(Boolean)
+      )
+    ) as string[];
+
+    const localRateMap: Record<string, any> = {};
+    if (missingDates.length > 0) {
+      await Promise.all(
+        missingDates.map(async (d) => {
+          localRateMap[d] = await getExchangeRates(d);
+        })
+      );
+    }
+
+    let blendedCourseRevenueUsd = 0;
+    let blendedCourseRevenueUah = 0;
+    let blendedTripwireRevenueUsd = 0;
+    let blendedTripwireRevenueUah = 0;
+
+    (paidOrders || []).forEach((o: any) => {
+      const amount = Number(o.amount || 0);
+      const currency = String(o.metadata?.currency || o.metadata?.lead?.currency || "uah").toLowerCase().trim();
+      const dateStr = o.created_at ? o.created_at.split("T")[0] : "";
+      
+      const usdRate = Number(o.metadata?.usd_rate) || (dateStr && localRateMap[dateStr]?.usdRate) || todayRates.usdRate;
+      const eurToUsd = Number(o.metadata?.eur_to_usd) || (dateStr && localRateMap[dateStr]?.eurToUsd) || todayRates.eurToUsd;
+      const eurRate = usdRate * eurToUsd;
+
+      let usdVal = amount;
+      let uahVal = amount;
+
+      if (Number(o.metadata?.usd_amount) > 0 && Number(o.metadata?.uah_amount) > 0) {
+        usdVal = Number(o.metadata.usd_amount);
+        uahVal = Number(o.metadata.uah_amount);
+      } else {
+        if (currency === 'uah' || currency === '₴') {
+          usdVal = amount / usdRate;
+          uahVal = amount;
+        } else if (currency === 'eur' || currency === '€') {
+          usdVal = amount * eurToUsd;
+          uahVal = amount * eurRate;
+        } else {
+          usdVal = amount;
+          uahVal = amount * usdRate;
+        }
+      }
+
+      const isTripwire = 
+        (o.metadata?.original_sheet && ['Практикум', 'Practicum_Leads', 'Заявки на практикум', 'Miні-курс'].includes(o.metadata.original_sheet)) ||
+        (o.metadata?.target_sheet && ['Практикум', 'Practicum_Leads', 'Заявки на практикум', 'Miні-курс'].includes(o.metadata.target_sheet));
+
+      if (isTripwire) {
+        blendedTripwireRevenueUsd += usdVal;
+        blendedTripwireRevenueUah += uahVal;
+      } else {
+        blendedCourseRevenueUsd += usdVal;
+        blendedCourseRevenueUah += uahVal;
+      }
+    });
+
+    const totalBlendedRevenueUsd = blendedCourseRevenueUsd + blendedTripwireRevenueUsd;
+    const totalBlendedRevenueUah = blendedCourseRevenueUah + blendedTripwireRevenueUah;
+
+    const blendedProfitUsd = totalBlendedRevenueUsd - totalCostsSpend;
+    const blendedProfitUah = totalBlendedRevenueUah - (totalCostsSpend * todayRates.usdRate);
+
+    const blendedAovUsd = totalSales > 0 ? totalBlendedRevenueUsd / totalSales : 0;
+    const blendedAovUah = totalSales > 0 ? totalBlendedRevenueUah / totalSales : 0;
+
+    const roi = totalCostsSpend > 0 ? (totalBlendedRevenueUsd / totalCostsSpend) * 100 : 0;
 
     // Clicks summary
     const groupedTraffic = trafficSummaryRes.data || [];
@@ -684,16 +783,16 @@ export async function getUnifiedCRMData(
       totalApplications,
       conversionRate,
       cpl,
-      usdRevenue: totalUsdRevenue,
-      uahRevenue: totalUahRevenue,
+      usdRevenue: totalBlendedRevenueUsd,
+      uahRevenue: totalBlendedRevenueUah,
       eurRevenue: totalEurRevenue,
-      usdCourseRevenue,
-      uahCourseRevenue,
+      usdCourseRevenue: blendedCourseRevenueUsd,
+      uahCourseRevenue: blendedCourseRevenueUah,
       eurCourseRevenue,
-      usdTripwireRevenue,
-      uahTripwireRevenue,
+      usdTripwireRevenue: blendedTripwireRevenueUsd,
+      uahTripwireRevenue: blendedTripwireRevenueUah,
       eurTripwireRevenue,
-      netProfitUsd,
+      netProfitUsd: blendedProfitUsd,
       roi,
       totalSales,
       paidLeadsCount,
@@ -702,8 +801,8 @@ export async function getUnifiedCRMData(
       leadToSaleConvUsd: totalLeads > 0 ? (usdSalesCount / totalLeads) * 100 : 0,
       leadToSaleConvUah: totalLeads > 0 ? (uahSalesCount / totalLeads) * 100 : 0,
       leadToSaleConvEur: totalLeads > 0 ? (eurSalesCount / totalLeads) * 100 : 0,
-      aovUsd,
-      aovUah,
+      aovUsd: blendedAovUsd,
+      aovUah: blendedAovUah,
       aovEur
     };
 
@@ -1370,16 +1469,40 @@ export async function updateOrderCurrencyAction(
     // Fetch existing order metadata and project_id for access verification
     const { data: order, error: fetchError } = await adminSupabase
       .from("unified_orders")
-      .select("project_id, metadata")
+      .select("project_id, metadata, amount, created_at")
       .eq("id", orderId)
       .single();
 
     if (fetchError) throw fetchError;
     await checkProjectAccess(order.project_id);
 
+    const { getExchangeRates } = await import("@/lib/exchange-rate");
+    const orderDateStr = order.created_at ? order.created_at.split("T")[0] : undefined;
+    const rates = await getExchangeRates(orderDateStr);
+    const amount = Number(order.amount || 0);
+
+    let usdAmount = amount;
+    let uahAmount = amount;
+
+    const currencyLower = currency.toLowerCase().trim();
+    if (currencyLower === 'uah' || currencyLower === '₴') {
+      usdAmount = amount / rates.usdRate;
+      uahAmount = amount;
+    } else if (currencyLower === 'eur' || currencyLower === '€') {
+      usdAmount = amount * rates.eurToUsd;
+      uahAmount = amount * rates.eurRate;
+    } else {
+      usdAmount = amount;
+      uahAmount = amount * rates.usdRate;
+    }
+
     const newMetadata = {
       ...(order?.metadata || {}),
       currency: currency,
+      usd_rate: Number(rates.usdRate.toFixed(4)),
+      eur_to_usd: Number(rates.eurToUsd.toFixed(4)),
+      usd_amount: Number(usdAmount.toFixed(2)),
+      uah_amount: Number(uahAmount.toFixed(2))
     };
 
     const { error: updateError } = await adminSupabase
@@ -1392,7 +1515,7 @@ export async function updateOrderCurrencyAction(
     if (bulk && bulk.landingName) {
       const { data: matchingOrders } = await adminSupabase
         .from("unified_orders")
-        .select("id, project_id, metadata")
+        .select("id, project_id, metadata, amount, created_at")
         .eq("amount", bulk.amount)
         .not("status", "in", "('Клик', 'КликФормы')");
 
@@ -1405,9 +1528,31 @@ export async function updateOrderCurrencyAction(
         for (const orderToUpdate of toUpdate) {
           try {
             await checkProjectAccess(orderToUpdate.project_id);
+            const oAmount = Number(orderToUpdate.amount || 0);
+            const oDateStr = orderToUpdate.created_at ? orderToUpdate.created_at.split("T")[0] : undefined;
+            const oRates = await getExchangeRates(oDateStr);
+
+            let oUsdAmount = oAmount;
+            let oUahAmount = oAmount;
+
+            if (currencyLower === 'uah' || currencyLower === '₴') {
+              oUsdAmount = oAmount / oRates.usdRate;
+              oUahAmount = oAmount;
+            } else if (currencyLower === 'eur' || currencyLower === '€') {
+              oUsdAmount = oAmount * oRates.eurToUsd;
+              oUahAmount = oAmount * oRates.eurRate;
+            } else {
+              oUsdAmount = oAmount;
+              oUahAmount = oAmount * oRates.usdRate;
+            }
+
             const updatedMeta = {
               ...(orderToUpdate.metadata || {}),
               currency: currency,
+              usd_rate: Number(oRates.usdRate.toFixed(4)),
+              eur_to_usd: Number(oRates.eurToUsd.toFixed(4)),
+              usd_amount: Number(oUsdAmount.toFixed(2)),
+              uah_amount: Number(oUahAmount.toFixed(2))
             };
             await adminSupabase
               .from("unified_orders")

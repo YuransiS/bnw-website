@@ -48,6 +48,7 @@ interface AnalyticsTabProps {
   campaignsList: any[];
   leadsList: any[];
   setActiveTab: (val: string) => void;
+  globalCurrency?: "USD" | "UAH";
 }
 
 export const AnalyticsTab = React.memo(function AnalyticsTab({
@@ -72,7 +73,8 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
   funnelTransactions,
   campaignsList,
   leadsList,
-  setActiveTab
+  setActiveTab,
+  globalCurrency = "UAH"
 }: AnalyticsTabProps) {
   const { theme } = useTheme();
   const isLight = theme === "light";
@@ -241,7 +243,7 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
             {node.cr.toFixed(1)}%
           </td>
           <td className={`p-4 text-center font-black ${isLight ? "text-emerald-600" : "text-emerald-400"}`}>
-            {formatDualCurrency(node.usd_revenue, node.uah_revenue)}
+            {formatDualCurrency(node.usd_revenue, node.uah_revenue, 0, globalCurrency)}
           </td>
         </tr>
 
@@ -277,26 +279,14 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
             <div className={`${cardClass} p-4 rounded-xl shadow-md backdrop-blur-md`}>
               <p className={`text-[9px] ${textMutedClass} font-black uppercase tracking-widest`}>Виручка за курс</p>
               <div className="mt-2 space-y-0.5">
-                {singleProjectStats && singleProjectStats.uahCourseRevenue > 0 && (
+                {globalCurrency === "UAH" ? (
                   <p className="text-xl font-black text-emerald-455">
-                    {formatLocaleNumber(singleProjectStats.uahCourseRevenue)} ₴
+                    {formatLocaleNumber(singleProjectStats?.uahCourseRevenue || 0)} ₴
                   </p>
-                )}
-                {singleProjectStats && singleProjectStats.eurCourseRevenue > 0 && (
+                ) : (
                   <p className="text-xl font-black text-emerald-455">
-                    {formatLocaleNumber(singleProjectStats.eurCourseRevenue)} €
+                    ${formatLocaleNumber(singleProjectStats?.usdCourseRevenue || 0)}
                   </p>
-                )}
-                {singleProjectStats && singleProjectStats.usdCourseRevenue > 0 && (
-                  <p className="text-xl font-black text-emerald-455">
-                    ${formatLocaleNumber(singleProjectStats.usdCourseRevenue)}
-                  </p>
-                )}
-                {(!singleProjectStats ||
-                  (singleProjectStats.uahCourseRevenue === 0 &&
-                    singleProjectStats.usdCourseRevenue === 0 &&
-                    singleProjectStats.eurCourseRevenue === 0)) && (
-                  <p className={`text-xl font-black ${textMutedLightClass}`}>0 ₴</p>
                 )}
               </div>
               <p className={`text-[10px] ${textMutedClass} mt-1 font-semibold`}>Виручка тільки від продажу основного курсу</p>
@@ -306,26 +296,14 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
             <div className={`${cardClass} p-4 rounded-xl shadow-md backdrop-blur-md`}>
               <p className={`text-[9px] ${textMutedClass} font-black uppercase tracking-widest`}>Виручка за трипвайєри</p>
               <div className="mt-2 space-y-0.5">
-                {singleProjectStats && singleProjectStats.uahTripwireRevenue > 0 && (
+                {globalCurrency === "UAH" ? (
                   <p className="text-xl font-black text-indigo-400">
-                    {formatLocaleNumber(singleProjectStats.uahTripwireRevenue)} ₴
+                    {formatLocaleNumber(singleProjectStats?.uahTripwireRevenue || 0)} ₴
                   </p>
-                )}
-                {singleProjectStats && singleProjectStats.eurTripwireRevenue > 0 && (
+                ) : (
                   <p className="text-xl font-black text-indigo-400">
-                    {formatLocaleNumber(singleProjectStats.eurTripwireRevenue)} €
+                    ${formatLocaleNumber(singleProjectStats?.usdTripwireRevenue || 0)}
                   </p>
-                )}
-                {singleProjectStats && singleProjectStats.usdTripwireRevenue > 0 && (
-                  <p className="text-xl font-black text-indigo-400">
-                    ${formatLocaleNumber(singleProjectStats.usdTripwireRevenue)}
-                  </p>
-                )}
-                {(!singleProjectStats ||
-                  (singleProjectStats.uahTripwireRevenue === 0 &&
-                    singleProjectStats.usdTripwireRevenue === 0 &&
-                    singleProjectStats.eurTripwireRevenue === 0)) && (
-                  <p className={`text-xl font-black ${textMutedLightClass}`}>0 ₴</p>
                 )}
               </div>
               <p className={`text-[10px] ${textMutedClass} mt-1 font-semibold`}>Виручка від міні-продуктів та практикуму</p>
@@ -337,35 +315,29 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
                 Чистий Прибуток (Маржа)
               </p>
               <div className="mt-2 space-y-0.5">
-                {singleProjectStats && (
-                  <>
-                    {singleProjectStats.uahRevenue > 0 && (
-                      <p className="text-lg font-black text-emerald-455">
-                        {formatLocaleNumber(singleProjectStats.uahRevenue)} ₴
-                      </p>
-                    )}
-                    {singleProjectStats.eurRevenue > 0 && (
-                      <p className="text-lg font-black text-emerald-455">
-                        {formatLocaleNumber(singleProjectStats.eurRevenue)} €
-                      </p>
-                    )}
-                    {(singleProjectStats.usdRevenue > 0 || singleProjectStats.totalSpend > 0) && (
-                      <p
-                        className={`text-lg font-black ${
-                          singleProjectStats.netProfitUsd >= 0 ? "text-emerald-455" : "text-red-400"
-                        }`}
-                      >
-                        {singleProjectStats.netProfitUsd >= 0 ? "" : "-"}$
-                        {formatLocaleNumber(Math.abs(singleProjectStats.netProfitUsd))}
-                      </p>
-                    )}
-                    {singleProjectStats.uahRevenue === 0 &&
-                      singleProjectStats.eurRevenue === 0 &&
-                      singleProjectStats.usdRevenue === 0 &&
-                      singleProjectStats.totalSpend === 0 && (
-                        <p className="text-lg font-black text-emerald-455">0 ₴</p>
-                      )}
-                  </>
+                {globalCurrency === "UAH" ? (
+                  <p
+                    className={`text-lg font-black ${
+                      (singleProjectStats?.uahRevenue || 0) - ((singleProjectStats?.totalSpend || 0) * (singleProjectStats?.uahRevenue / (singleProjectStats?.usdRevenue || 1))) >= 0 ? "text-emerald-455" : "text-red-400"
+                    }`}
+                  >
+                    {((singleProjectStats?.uahRevenue || 0) - ((singleProjectStats?.totalSpend || 0) * (singleProjectStats?.uahRevenue / (singleProjectStats?.usdRevenue || 1)))) >= 0 ? "" : "-"}
+                    {formatLocaleNumber(
+                      Math.abs(
+                        (singleProjectStats?.uahRevenue || 0) - 
+                        ((singleProjectStats?.totalSpend || 0) * (singleProjectStats?.uahRevenue / (singleProjectStats?.usdRevenue || 1)))
+                      )
+                    )} ₴
+                  </p>
+                ) : (
+                  <p
+                    className={`text-lg font-black ${
+                      (singleProjectStats?.netProfitUsd || 0) >= 0 ? "text-emerald-455" : "text-red-400"
+                    }`}
+                  >
+                    {(singleProjectStats?.netProfitUsd || 0) >= 0 ? "" : "-"}$
+                    {formatLocaleNumber(Math.abs(singleProjectStats?.netProfitUsd || 0))}
+                  </p>
                 )}
                 <span className="text-[9px] font-black uppercase text-yellow-400 block mt-1 tracking-wider">
                   ROI за курс: {singleProjectStats?.roi?.toFixed(1) || "0.0"}%
@@ -404,20 +376,28 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
             <div className={`${cardClass} p-4 rounded-xl shadow-md backdrop-blur-md`}>
               <p className={`text-[9px] ${textMutedClass} font-black uppercase tracking-widest`}>CR & Середній Чек</p>
               <div className="mt-2 space-y-1.5">
-                {singleProjectStats && (singleProjectStats.aovUah > 0 || singleProjectStats.leadToSaleConvUah > 0) && (
-                  <div className="flex justify-between items-center text-[10px]">
-                    <span className="text-white/50">UAH:</span>
-                    <span className="font-bold text-emerald-400">{formatLocaleNumber(singleProjectStats.aovUah)} ₴ (CR: {singleProjectStats.leadToSaleConvUah.toFixed(1)}%)</span>
-                  </div>
-                )}
-                {singleProjectStats && (singleProjectStats.aovUsd > 0 || singleProjectStats.leadToSaleConvUsd > 0) && (
-                  <div className="flex justify-between items-center text-[10px]">
-                    <span className="text-white/50">USD:</span>
-                    <span className="font-bold text-emerald-400">${formatLocaleNumber(singleProjectStats.aovUsd)} (CR: {singleProjectStats.leadToSaleConvUsd.toFixed(1)}%)</span>
-                  </div>
-                )}
-                {(!singleProjectStats || (singleProjectStats.aovUah === 0 && singleProjectStats.aovUsd === 0)) && (
-                  <p className="text-[10px] text-white/30 italic">Немає оплат за період</p>
+                {globalCurrency === "UAH" ? (
+                  singleProjectStats && (singleProjectStats.aovUah > 0 || singleProjectStats.leadToSaleConvUah > 0) ? (
+                    <div className="flex justify-between items-center text-[10px]">
+                      <span className="text-white/50">UAH:</span>
+                      <span className="font-bold text-emerald-455">
+                        {formatLocaleNumber(singleProjectStats.aovUah)} ₴ (CR: {singleProjectStats.leadToSaleConvUah.toFixed(1)}%)
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-white/30 italic">Немає оплат за період</p>
+                  )
+                ) : (
+                  singleProjectStats && (singleProjectStats.aovUsd > 0 || singleProjectStats.leadToSaleConvUsd > 0) ? (
+                    <div className="flex justify-between items-center text-[10px]">
+                      <span className="text-white/50">USD:</span>
+                      <span className="font-bold text-emerald-455">
+                        ${formatLocaleNumber(singleProjectStats.aovUsd)} (CR: {singleProjectStats.leadToSaleConvUsd.toFixed(1)}%)
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-white/30 italic">Немає оплат за період</p>
+                  )
                 )}
               </div>
             </div>

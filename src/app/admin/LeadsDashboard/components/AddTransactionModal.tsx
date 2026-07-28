@@ -95,6 +95,10 @@ export default function AddTransactionModal({
       setErrorMsg("Оберіть категорію транзакції");
       return;
     }
+    if (!accountId) {
+      setErrorMsg("Оберіть або створіть рахунок для транзакції");
+      return;
+    }
 
     setIsSubmitting(true);
     setErrorMsg("");
@@ -260,24 +264,30 @@ export default function AddTransactionModal({
               <div className="space-y-2">
                 <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">Счёт списания / получения</label>
                 <div className="grid grid-cols-2 gap-3">
-                  {accounts.map((acc) => (
-                    <button
-                      key={acc.id}
-                      type="button"
-                      onClick={() => handleAccountChange(acc.id)}
-                      className={`px-4 py-3 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
-                        accountId === acc.id
-                          ? "bg-white text-black border-white"
-                          : "bg-white/5 border-white/5 text-neutral-400 hover:border-white/10"
-                      }`}
-                    >
-                      <div>
-                        <div className="text-xs font-bold">{acc.name}</div>
-                        <div className={`text-[10px] mt-0.5 ${accountId === acc.id ? 'text-black/50' : 'text-neutral-500'}`}>Валюта рахунку</div>
-                      </div>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${accountId === acc.id ? 'bg-black/10 text-black' : 'bg-white/5 text-white/60'}`}>{acc.currency}</span>
-                    </button>
-                  ))}
+                  {accounts.length === 0 ? (
+                    <div className="col-span-2 p-4 text-center border border-dashed border-red-500/20 rounded-xl bg-red-500/5 text-xs text-red-400 font-medium">
+                      У вас немає доданих рахунків для цього проекту. Будь ласка, спочатку створіть рахунок у вкладці Налаштування розділу Фінанси.
+                    </div>
+                  ) : (
+                    accounts.map((acc) => (
+                      <button
+                        key={acc.id}
+                        type="button"
+                        onClick={() => handleAccountChange(acc.id)}
+                        className={`px-4 py-3 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                          accountId === acc.id
+                            ? "bg-white text-black border-white"
+                            : "bg-white/5 border-white/5 text-neutral-400 hover:border-white/10"
+                        }`}
+                      >
+                        <div>
+                          <div className="text-xs font-bold">{acc.name}</div>
+                          <div className={`text-[10px] mt-0.5 ${accountId === acc.id ? 'text-black/50' : 'text-neutral-500'}`}>Валюта рахунку</div>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${accountId === acc.id ? 'bg-black/10 text-black' : 'bg-white/5 text-white/60'}`}>{acc.currency}</span>
+                      </button>
+                    ))
+                  )}
                 </div>
               </div>
 

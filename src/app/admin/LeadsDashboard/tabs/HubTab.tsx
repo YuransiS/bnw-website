@@ -57,9 +57,10 @@ const PROJECT_LANDINGS: Record<string, Array<{ label: string; url: string; badge
 interface HubTabProps {
   summaryData: any[];
   campaignsData: any[];
+  globalCurrency?: "USD" | "UAH";
 }
 
-export const HubTab = React.memo(function HubTab({ summaryData, campaignsData }: HubTabProps) {
+export const HubTab = React.memo(function HubTab({ summaryData, campaignsData, globalCurrency = "UAH" }: HubTabProps) {
   const { theme } = useTheme();
   const isLight = theme === "light";
 
@@ -91,14 +92,14 @@ export const HubTab = React.memo(function HubTab({ summaryData, campaignsData }:
           },
           {
             title: "Сумарна Виручка",
-            val: formatDualCurrency(totalUsdRevenue, totalUahRevenue, totalEurRevenue),
+            val: formatDualCurrency(totalUsdRevenue, totalUahRevenue, totalEurRevenue, globalCurrency),
             desc: "Всього отримано оплат",
             color: "text-emerald-400 font-extrabold"
           },
           {
             title: "Чистий Прибуток",
-            val: formatDualProfit(totalUsdRevenue, totalSpend, totalUahRevenue, totalEurRevenue),
-            desc: "Маржинальність після реклами",
+            val: formatDualProfit(totalUsdRevenue, totalSpend, totalUahRevenue, totalEurRevenue, globalCurrency),
+            desc: "Маржинальність после реклами",
             color: "text-purple-400 font-extrabold"
           },
           {
@@ -145,7 +146,7 @@ export const HubTab = React.memo(function HubTab({ summaryData, campaignsData }:
             <tbody className={`divide-y ${borderClass} ${isLight ? "text-neutral-700" : "text-white/80"}`}>
               {summaryData.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-6 text-center text-white/30 italic">Проекти не зареєстровані в CRM</td>
+                   <td colSpan={8} className="p-6 text-center text-white/30 italic">Проекти не зареєстровані в CRM</td>
                 </tr>
               ) : (
                 summaryData.map((proj: any) => {
@@ -165,9 +166,9 @@ export const HubTab = React.memo(function HubTab({ summaryData, campaignsData }:
                       <td className="p-4 text-center font-bold text-red-400">${spend.toFixed(2)}</td>
                       <td className="p-4 text-center font-extrabold">{proj.leads_count}</td>
                       <td className="p-4 text-center font-bold text-neutral-400">${Number(proj.cpl).toFixed(2)}</td>
-                      <td className="p-4 text-center font-bold text-emerald-400">{formatDualCurrency(usdRev, uahRev, eurRev)}</td>
+                      <td className="p-4 text-center font-bold text-emerald-400">{formatDualCurrency(usdRev, uahRev, eurRev, globalCurrency)}</td>
                       <td className="p-4 text-center font-black">
-                        {formatDualProfit(usdRev, spend, uahRev, eurRev)}
+                        {formatDualProfit(usdRev, spend, uahRev, eurRev, globalCurrency)}
                       </td>
                       <td className="p-4 text-center font-black">
                         <span className={`px-2.5 py-1 rounded-full text-[10px] ${projRoi >= 150

@@ -633,19 +633,33 @@ export default function FinanceDashboardTab({
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {accounts.map((acc) => (
-                <div key={acc.id} className="p-4 rounded-xl border border-white/5 bg-white/[0.01] flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-bold text-neutral-300">{acc.name}</span>
-                    <span className={`text-[10px] block ${textMutedClass}`}>Поточний баланс</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-sm font-extrabold text-emerald-400">
-                      {formatMoney(acc.current_balance, acc.currency === "UAH")}
-                    </span>
-                  </div>
+              {accounts.length === 0 ? (
+                <div className="col-span-full p-6 text-center border border-dashed border-white/10 rounded-xl bg-white/[0.01]">
+                  <p className="text-xs text-neutral-400 font-medium">Немає доданих рахунків у проекті</p>
+                  {["admin", "superman", "founder", "developer"].includes(userRole) && (
+                    <button
+                      onClick={() => setActiveSegment("settings")}
+                      className="mt-2 text-[10px] text-emerald-400 hover:text-emerald-300 font-bold uppercase tracking-wider flex items-center gap-1 mx-auto cursor-pointer border-none bg-transparent"
+                    >
+                      <Plus className="w-3 h-3" /> Створити рахунок у налаштуваннях
+                    </button>
+                  )}
                 </div>
-              ))}
+              ) : (
+                accounts.map((acc) => (
+                  <div key={acc.id} className="p-4 rounded-xl border border-white/5 bg-white/[0.01] flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-neutral-300">{acc.name}</span>
+                      <span className={`text-[10px] block ${textMutedClass}`}>Поточний баланс</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-extrabold text-emerald-400">
+                        {formatMoney(acc.current_balance, acc.currency === "UAH")}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </>

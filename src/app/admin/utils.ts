@@ -71,7 +71,15 @@ export const formatLocaleNumber = (num: number) => {
 };
 
 // Currency formatting helper functions
-export const formatDualCurrency = (usd: number, uah: number, eur: number = 0) => {
+export const formatDualCurrency = (usd: number, uah: number, eur: number = 0, currency?: "USD" | "UAH") => {
+  if (currency === "UAH") {
+    const totalUah = uah + (usd * 41.0) + (eur * 1.08 * 41.0);
+    return `${formatLocaleNumber(totalUah)} ₴`;
+  } else if (currency === "USD") {
+    const totalUsd = usd + (uah / 41.0) + (eur * 1.08);
+    return `$${formatLocaleNumber(totalUsd)}`;
+  }
+
   const parts = [];
   if (usd > 0) {
     parts.push(`$${formatLocaleNumber(usd)}`);
@@ -88,8 +96,16 @@ export const formatDualCurrency = (usd: number, uah: number, eur: number = 0) =>
   return parts.join(" + ");
 };
 
-export const formatDualProfit = (usdRevenue: number, spend: number, uahRevenue: number, eurRevenue: number = 0) => {
+export const formatDualProfit = (usdRevenue: number, spend: number, uahRevenue: number, eurRevenue: number = 0, currency?: "USD" | "UAH") => {
   const usdProfit = usdRevenue - spend;
+  if (currency === "UAH") {
+    const totalUahProfit = (usdProfit * 41.0) + uahRevenue + (eurRevenue * 1.08 * 41.0);
+    return `${totalUahProfit >= 0 ? "" : "-"}${formatLocaleNumber(Math.abs(totalUahProfit))} ₴`;
+  } else if (currency === "USD") {
+    const totalUsdProfit = usdProfit + (uahRevenue / 41.0) + (eurRevenue * 1.08);
+    return `${totalUsdProfit >= 0 ? "" : "-"}$${formatLocaleNumber(Math.abs(totalUsdProfit))}`;
+  }
+
   const parts = [];
   if (usdRevenue > 0 || spend > 0) {
     parts.push(`${usdProfit >= 0 ? "" : "-"}$${formatLocaleNumber(Math.abs(usdProfit))}`);
@@ -341,8 +357,7 @@ export const fetchWithPostTunnel = async (slug: string, params: any) => {
   const res = await fetch("/api/crm/leads", {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
-      "X-HTTP-Method-Override": "QUERY"
+      "Content-Type": "application/json"
     },
     body: JSON.stringify({ slug, filters: params })
   });

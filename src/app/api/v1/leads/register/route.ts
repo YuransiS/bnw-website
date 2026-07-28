@@ -193,6 +193,36 @@ export async function POST(req: Request) {
       meta.currency = reqCurrency;
     }
 
+    // Fetch today's NBU rates and store in metadata for exact conversion
+    try {
+      const { getExchangeRates } = await import('@/lib/exchange-rate');
+      const todayRates = await getExchangeRates();
+      const amount = Number(lead.amount || 0);
+      const currency = String(reqCurrency || 'uah').toLowerCase().trim();
+
+      meta.usd_rate = todayRates.usdRate;
+      meta.eur_to_usd = todayRates.eurToUsd;
+
+      let usdAmount = amount;
+      let uahAmount = amount;
+
+      if (currency === 'uah' || currency === '₴') {
+        usdAmount = amount / todayRates.usdRate;
+        uahAmount = amount;
+      } else if (currency === 'eur' || currency === '€') {
+        usdAmount = amount * todayRates.eurToUsd;
+        uahAmount = amount * todayRates.eurRate;
+      } else {
+        usdAmount = amount;
+        uahAmount = amount * todayRates.usdRate;
+      }
+
+      meta.usd_amount = Number(usdAmount.toFixed(2));
+      meta.uah_amount = Number(uahAmount.toFixed(2));
+    } catch (rateErr) {
+      console.error('Failed to resolve exchange rates for registering lead:', rateErr);
+    }
+
     // 7. Создание или обновление лид-события/заказа
     let orderIdToReturn = null;
     let existingOrder = null;
