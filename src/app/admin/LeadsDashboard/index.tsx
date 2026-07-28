@@ -998,7 +998,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             projectId={activeProject?.id || ""}
             campaignsList={dashboardData.campaignsData || []}
             leadsList={processedLeads}
+            costsList={dashboardData.costs || []}
             isLight={isLight}
+            accounts={financeData?.accounts || []}
+            customCategories={financeData?.categories?.custom || []}
+            defaultCategories={financeData?.categories?.default || { income: [], expense: [] }}
+            onFinanceRefresh={fetchFinanceData}
           />
         )}
 

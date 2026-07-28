@@ -59,9 +59,13 @@
 * `project_id` (UUID references `public.projects(id) ON DELETE CASCADE`)
 * `name` (TEXT) - Название воронки
 * `start_date` (DATE) - Дата старта
+* `end_date` (DATE, nullable) - Дата завершения воронки
 * `campaign_ids` (TEXT[]) - UTM Campaign ID, привязанные к воронке
 * `landing_slugs` (TEXT[]) - Лендинги, привязанные к воронке
-* `description` (TEXT)
+* `planned_revenue` (NUMERIC, default 0) - Плановый доход воронки
+* `planned_spend` (NUMERIC, default 0) - Плановые затраты воронки
+* `stages` (JSONB, default '[]') - Массив кастомных этапов воронки
+* `description` (TEXT) - Описание воронки
 * `created_at` (TIMESTAMP)
 
 ### Таблица `public.tasks`

@@ -363,7 +363,7 @@ export async function getUnifiedCRMData(
       if (!isSuperman) {
         const allowedIds = new Set(allowedProjects.map((p) => p.id));
         filteredSummary = summary.filter((p: any) => allowedIds.has(p.project_id));
-        filteredCampaigns = campaigns.filter((c: any) => allowedIds.has(c.project_id));
+        filteredCampaigns = campaigns.filter((c: any) => allowedProjects.some(ap => ap.slug === c.project_slug));
         
         filteredLeaderboard = leaderboard.map((l: any) => {
           const lProjects = String(l.projectNames || "").split(", ").map(p => p.trim());
@@ -644,7 +644,7 @@ export async function getUnifiedCRMData(
     const to = from + pageSize - 1;
 
     const dbQueryStart = performance.now();
-    const [leadsRes, aggLeadsRes, trafficSummaryRes, costsRes, allProfilesRes, utmLeadsSummaryRes, funnelsRes] = await Promise.all([
+    const [leadsRes, aggLeadsRes, trafficSummaryRes, costsRes, allProfilesRes, utmLeadsSummaryRes, funnelsRes, campaignsRes] = await Promise.all([
       query.order("created_at", { ascending: false }).range(from, to),
       aggQuery,
       (() => {
@@ -658,7 +658,7 @@ export async function getUnifiedCRMData(
       (() => {
         let q = adminSupabase
           .from("daily_traffic_and_costs")
-          .select("date, spend_usd, spend")
+          .select("date, campaign_name, campaign_id, spend_usd, spend")
           .eq("project_id", activeProject.id);
         if (startDate) {
           q = q.gte("date", startDate);
@@ -681,7 +681,8 @@ export async function getUnifiedCRMData(
         p_selected_landing: selectedLanding,
         p_assigned_manager_id: isSalesFiltered ? user.id : null
       }),
-      adminSupabase.from("funnels").select("*").eq("project_id", activeProject.id)
+      adminSupabase.from("funnels").select("*").eq("project_id", activeProject.id),
+      adminSupabase.rpc("get_campaigns_summary")
     ]);
     const dbQueryEnd = performance.now();
     const dbQueryMs = dbQueryEnd - dbQueryStart;
@@ -700,6 +701,7 @@ export async function getUnifiedCRMData(
     });
     const totalCount = leadsRes.count || 0;
     const costs = costsRes.data || [];
+    const campaignsData = (campaignsRes.data || []).filter((c: any) => c.project_slug === activeProject.slug);
     const profilesList = allProfilesRes.data || [];
 
     const aggLeads = aggLeadsRes.data || [];
@@ -1095,6 +1097,8 @@ export async function getUnifiedCRMData(
       uniqueSources,
       salesManagers,
       unresolvedOrders: unresolvedOrders.filter((o) => o.projectId === activeProject.id),
+      costs,
+      campaignsData,
       filters: {
         page,
         pageSize,
@@ -2245,7 +2249,11 @@ export async function createFunnelAction(
   startDate: string,
   campaignIds: string[],
   landingSlugs: string[],
-  description?: string
+  description?: string,
+  endDate?: string | null,
+  plannedRevenue?: number,
+  plannedSpend?: number,
+  stages?: any[]
 ) {
   try {
     await checkProjectAccess(projectId);
@@ -2256,9 +2264,13 @@ export async function createFunnelAction(
         project_id: projectId,
         name,
         start_date: startDate,
+        end_date: endDate || null,
         campaign_ids: campaignIds,
         landing_slugs: landingSlugs,
-        description: description || ""
+        description: description || "",
+        planned_revenue: plannedRevenue || 0,
+        planned_spend: plannedSpend || 0,
+        stages: stages || []
       })
       .select()
       .single();
@@ -2267,6 +2279,64 @@ export async function createFunnelAction(
     return { success: true, funnel: data };
   } catch (err: any) {
     return { error: err.message || "Failed to create funnel" };
+  }
+}
+
+export async function updateFunnelAction(
+  projectId: string,
+  funnelId: string,
+  updates: {
+    name: string;
+    startDate: string;
+    endDate?: string | null;
+    campaignIds: string[];
+    landingSlugs: string[];
+    description?: string;
+    plannedRevenue?: number;
+    plannedSpend?: number;
+    stages?: any[];
+  }
+) {
+  try {
+    await checkProjectAccess(projectId);
+    const adminSupabase = createAdminClient();
+    const { data, error } = await adminSupabase
+      .from("funnels")
+      .update({
+        name: updates.name,
+        start_date: updates.startDate,
+        end_date: updates.endDate || null,
+        campaign_ids: updates.campaignIds,
+        landing_slugs: updates.landingSlugs,
+        description: updates.description || "",
+        planned_revenue: updates.plannedRevenue || 0,
+        planned_spend: updates.plannedSpend || 0,
+        stages: updates.stages || []
+      })
+      .eq("id", funnelId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, funnel: data };
+  } catch (err: any) {
+    return { error: err.message || "Failed to update funnel" };
+  }
+}
+
+export async function deleteFunnelAction(projectId: string, funnelId: string) {
+  try {
+    await checkProjectAccess(projectId);
+    const adminSupabase = createAdminClient();
+    const { error } = await adminSupabase
+      .from("funnels")
+      .delete()
+      .eq("id", funnelId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    return { error: err.message || "Failed to delete funnel" };
   }
 }
 
