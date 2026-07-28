@@ -223,6 +223,31 @@ export async function POST(req: Request) {
       console.error('Failed to resolve exchange rates for registering lead:', rateErr);
     }
 
+    // Resolve matching funnel_id based on campaign_ids and landing_slugs
+    let resolvedFunnelId: string | null = null;
+    try {
+      const { data: projectFunnels } = await supabaseAdmin
+        .from('funnels')
+        .select('id, campaign_ids, landing_slugs')
+        .eq('project_id', projectId);
+
+      if (projectFunnels && projectFunnels.length > 0) {
+        const leadCampaign = String(utm_campaign || "").trim().toLowerCase();
+        const leadLanding = String(meta.target_sheet || meta.lead?.target_sheet || "").trim().toLowerCase();
+
+        for (const funnel of projectFunnels) {
+          const campaignMatch = Array.isArray(funnel.campaign_ids) && funnel.campaign_ids.some((id: string) => leadCampaign.includes(id.toLowerCase()));
+          const landingMatch = Array.isArray(funnel.landing_slugs) && funnel.landing_slugs.some((slug: string) => leadLanding.includes(slug.toLowerCase()));
+          if (campaignMatch || landingMatch) {
+            resolvedFunnelId = funnel.id;
+            break;
+          }
+        }
+      }
+    } catch (funnelErr) {
+      console.error('Failed to map funnel for registering lead:', funnelErr);
+    }
+
     // 7. Создание или обновление лид-события/заказа
     let orderIdToReturn = null;
     let existingOrder = null;
@@ -256,7 +281,8 @@ export async function POST(req: Request) {
           page_path: page_path || undefined,
           page_url: page_url || undefined,
           visitor_uuid: visitor_uuid || undefined,
-          metadata: meta
+          metadata: meta,
+          funnel_id: resolvedFunnelId || undefined
         })
         .eq('id', existingOrder.id)
         .select('id')
@@ -295,6 +321,7 @@ export async function POST(req: Request) {
           page_url,
           visitor_uuid,
           metadata: meta,
+          funnel_id: resolvedFunnelId,
           created_at: createdAtIso
         })
         .select('id')

@@ -191,17 +191,20 @@ export async function GET(req: Request) {
 
     const apiVersion = process.env.META_API_VERSION || "v25.0";
 
-    // 1. Fetch projects and mapping rules
-    const [projectsRes, rulesRes] = await Promise.all([
+    // 1. Fetch projects, mapping rules, and funnels
+    const [projectsRes, rulesRes, funnelsRes] = await Promise.all([
       supabase.from("projects").select("id, name, slug"),
-      supabase.from("ad_spend_mappings").select("*").eq("rule_type", "account")
+      supabase.from("ad_spend_mappings").select("*").eq("rule_type", "account"),
+      supabase.from("funnels").select("id, project_id, campaign_ids, landing_slugs")
     ]);
 
     if (projectsRes.error) throw projectsRes.error;
     if (rulesRes.error) throw rulesRes.error;
+    if (funnelsRes.error) throw funnelsRes.error;
 
     const projects = projectsRes.data || [];
     const rules = rulesRes.data || [];
+    const funnels = funnelsRes.data || [];
 
     const slugToId = new Map(projects.map((p) => [p.slug, p.id]));
     const accountToSlug = new Map(rules.map((r) => [r.rule_value, r.project_slug]));
@@ -272,6 +275,16 @@ export async function GET(req: Request) {
           spendEur = spend * (rates.usdToUah / rates.eurToUah);
         }
 
+        const campaignNameLower = String(ins.campaign_name || "").toLowerCase().trim();
+        const projectFunnels = (funnels || []).filter((f: any) => f.project_id === projectId);
+        let resolvedFunnelId: string | null = null;
+        for (const funnel of projectFunnels) {
+          if (Array.isArray(funnel.campaign_ids) && funnel.campaign_ids.some((id: string) => campaignNameLower.includes(id.toLowerCase().trim()))) {
+            resolvedFunnelId = funnel.id;
+            break;
+          }
+        }
+
         allRecords.push({
           project_id: projectId,
           date: ins.date_start,
@@ -285,7 +298,8 @@ export async function GET(req: Request) {
           spend: spend,
           spend_usd: Number(spendUsd.toFixed(2)),
           spend_uah: Number(spendUah.toFixed(2)),
-          spend_eur: Number(spendEur.toFixed(2))
+          spend_eur: Number(spendEur.toFixed(2)),
+          funnel_id: resolvedFunnelId
         });
 
         summary[slug] = (summary[slug] || 0) + spend;
