@@ -126,12 +126,15 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   });
   const { theme, toggleTheme } = useTheme();
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+  const pageSize = 100;
   const [isDevMode, setIsDevMode] = useState(() => {
     if (typeof window === "undefined") return false;
     const saved = localStorage.getItem("crm_dev_mode");
     return saved === "true" && (role === "admin" || role === "superman");
   });
   const [isLoading, setIsLoading] = useState(false);
+
   const [showUnresolvedModal, setShowUnresolvedModal] = useState(false);
   const [updatingCurrencyId, setUpdatingCurrencyId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
@@ -315,9 +318,9 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     setStartDate(formatDate(start));
     setEndDate(end);
   }, []);
-  const pageSize = 100;
 
   // Dynamic theme support definitions
+
   const isLight = theme === "light";
   const bgClass = "bg-crm-bg text-crm-text";
   const cardClass = "bg-crm-card border border-crm-border text-crm-text shadow-sm";
@@ -354,9 +357,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   }, [activeSlug, activeTab]);
 
   // Debounce search query to prevent excessive server requests
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
-
   useEffect(() => {
+
     const handler = setTimeout(() => {
       setDebouncedSearchQuery(searchQuery);
     }, 400);
@@ -524,7 +526,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const handleCreateLead = useCallback(async (payload: any) => {
     if (!activeProject?.id) return { error: "No active project" };
     return createUnifiedLeadAction(activeProject.id, payload);
-  }, [activeProject?.id]);
+  }, [activeProject]);
+
 
   const handleUpdateCurrency = useCallback(async (
     orderId: string,

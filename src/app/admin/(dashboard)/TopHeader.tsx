@@ -17,8 +17,8 @@ import {
 import { getCellsAction } from "../actions";
 import { createClient } from "@/utils/supabase/client";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 interface TopHeaderProps {
+
   isSuperman?: boolean;
   allowedProjects?: any[];
   userRole: string;

@@ -37,8 +37,8 @@ interface Project {
   cell_id?: string | null;
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 interface SidebarProps {
+
   isSuperman: boolean;
   allowedProjects: Project[];
   userRole: string;

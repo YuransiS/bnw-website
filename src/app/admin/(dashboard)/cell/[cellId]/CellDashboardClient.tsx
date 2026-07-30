@@ -11,8 +11,8 @@ import {
   ChevronRight
 } from "lucide-react";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 interface CellDashboardClientProps {
+
   cell: any;
   cellProjects: any[];
   producersWithProjects: any[];

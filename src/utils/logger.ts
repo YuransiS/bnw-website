@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 export interface LogEntry {
+
 
   id: string;
   type: "info" | "warn" | "error" | "perf";
