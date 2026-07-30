@@ -97,8 +97,10 @@ export async function createLeadAction(input: LeadInput) {
     }
 
     return { success: true, lead: leadData };
-  } catch (err: any) {
-    console.error("[createLeadAction] Critical error registering lead:", err);
-    return { error: err.message || "Невідома помилка на сервері." };
+  } catch (err: unknown) {
+    const errorObj = err as Error;
+    console.error("[createLeadAction] Critical error registering lead:", errorObj);
+    return { error: errorObj.message || "Невідома помилка на сервері." };
   }
 }
+

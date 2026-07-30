@@ -37,6 +37,7 @@ interface Project {
   cell_id?: string | null;
 }
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 interface SidebarProps {
   isSuperman: boolean;
   allowedProjects: Project[];
@@ -48,6 +49,7 @@ interface SidebarProps {
   profiles: any[];
   profileProjects: any[];
 }
+
 
 // Deterministic premium icon assignment based on project attributes
 const getProjectIcon = (slug: string, index: number) => {
@@ -66,18 +68,14 @@ export default function Sidebar({
   userRole,
   userEmail,
   fullName,
-  isActualDev,
-  actualRole,
   profiles,
   profileProjects
 }: SidebarProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const pathname = usePathname();
   const [isPending, startTransition] = useTransition();
+
   const { theme } = useTheme();
-
-
 
   const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault();
@@ -87,22 +85,18 @@ export default function Sidebar({
       router.refresh();
     });
   };
-
-  const isSettingsPage = pathname === "/admin/settings";
   
+  const isSettingsPage = pathname === "/admin/settings";
+
   // Resolve active states based on URL pathname
   let activeProjectId = "";
+
   let activeCellId = "";
   let activeProducerId = "";
   let activeAll = false;
-  let activeMain = false;
 
   if (pathname.includes("/admin/project/")) {
     activeProjectId = pathname.split("/project/")[1]?.split("/")[0] || "";
-    const activeProj = allowedProjects.find(p => p.id === activeProjectId);
-    if (activeProj?.slug === "bw_main") {
-      activeMain = true;
-    }
   } else if (pathname.includes("/admin/cell/")) {
     activeCellId = pathname.split("/cell/")[1]?.split("/")[0] || "";
   } else if (pathname.includes("/admin/producer/")) {
@@ -112,6 +106,7 @@ export default function Sidebar({
   }
 
   const [cells, setCells] = useState<any[]>([]);
+
 
   useEffect(() => {
     if (["admin", "superman", "founder", "developer"].includes(userRole)) {
@@ -125,8 +120,8 @@ export default function Sidebar({
 
   // Retrieve current user ID from profiles mapping
   const currentUserId = React.useMemo(() => {
-    const matched = profiles.find(p => p.email?.toLowerCase() === userEmail.toLowerCase());
-    return matched?.id || "";
+    const matched = profiles.find((p: any) => p.email?.toLowerCase() === userEmail.toLowerCase());
+    return (matched as any)?.id || "";
   }, [profiles, userEmail]);
 
   // Hierarchical grouping: Cell -> Producer -> Project
@@ -136,20 +131,20 @@ export default function Sidebar({
     // 1. Filter cells based on role
     let visibleCells = cells;
     if (userRole === "cell_leader") {
-      visibleCells = cells.filter(c => c.cell_leader_id === currentUserId);
+      visibleCells = cells.filter((c: any) => c.cell_leader_id === currentUserId);
     } else if (userRole === "producer") {
       const producerCellIds = Array.from(new Set(activeProjects.map(p => p.cell_id).filter(Boolean)));
-      visibleCells = cells.filter(c => producerCellIds.includes(c.id));
+      visibleCells = cells.filter((c: any) => producerCellIds.includes(c.id));
     }
 
-    return visibleCells.map(cell => {
+    return visibleCells.map((cell: any) => {
       const cellProjects = activeProjects.filter(p => p.cell_id === cell.id);
       const cellProjectIds = cellProjects.map(p => p.id);
 
       let cellProducers: any[] = [];
 
       if (userRole === "producer") {
-        const currentUserProfile = profiles.find(p => p.id === currentUserId);
+        const currentUserProfile = profiles.find((p: any) => p.id === currentUserId);
         if (currentUserProfile) {
           cellProducers = [{
             ...currentUserProfile,
@@ -157,15 +152,15 @@ export default function Sidebar({
           }];
         }
       } else {
-        const cellProducerMappings = profileProjects.filter(pp => cellProjectIds.includes(pp.project_id));
-        const producerIdsInCell = Array.from(new Set(cellProducerMappings.map(pp => pp.profile_id)));
+        const cellProducerMappings = profileProjects.filter((pp: any) => cellProjectIds.includes(pp.project_id));
+        const producerIdsInCell = Array.from(new Set(cellProducerMappings.map((pp: any) => pp.profile_id)));
         
         cellProducers = profiles
-          .filter(p => producerIdsInCell.includes(p.id) && p.role === "producer")
-          .map(producer => {
+          .filter((p: any) => producerIdsInCell.includes(p.id) && p.role === "producer")
+          .map((producer: any) => {
             const producerProjIds = profileProjects
-              .filter(pp => pp.profile_id === producer.id)
-              .map(pp => pp.project_id);
+              .filter((pp: any) => pp.profile_id === producer.id)
+              .map((pp: any) => pp.project_id);
             const producerProjectsInCell = cellProjects.filter(p => producerProjIds.includes(p.id));
 
             return {
@@ -174,7 +169,7 @@ export default function Sidebar({
             };
           });
 
-        const assignedProjectIds = cellProducerMappings.map(pp => pp.project_id);
+        const assignedProjectIds = cellProducerMappings.map((pp: any) => pp.project_id);
         const unassignedProjects = cellProjects.filter(p => !assignedProjectIds.includes(p.id));
         if (unassignedProjects.length > 0) {
           cellProducers.push({
@@ -195,11 +190,8 @@ export default function Sidebar({
     });
   }, [cells, allowedProjects, profiles, profileProjects, userRole, currentUserId]);
 
-  const isSupervisor = ["admin", "superman", "founder", "developer"].includes(userRole);
-
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
 
   const [expandedCellIds, setExpandedCellIds] = useState<string[]>([]);
   const [expandedProducerIds, setExpandedProducerIds] = useState<string[]>([]);
@@ -234,12 +226,12 @@ export default function Sidebar({
 
   // Sync collapsed state from localStorage after mount
   useEffect(() => {
-    setIsMounted(true);
     const cachedState = localStorage.getItem("crm-sidebar-collapsed");
     if (cachedState) {
       setIsCollapsed(cachedState === "true");
     }
   }, []);
+
 
   const toggleCollapse = () => {
     const newState = !isCollapsed;
@@ -589,8 +581,9 @@ export default function Sidebar({
             <div className="space-y-1.5">
               {!isCollapsed && (
                 <p className={`text-[10px] font-bold uppercase tracking-widest px-4 mb-1.5 ${isLight ? "text-neutral-400" : "text-white/40"}`}>
-                  Зворотній зв'язок
+                  Зворотній зв&apos;язок
                 </p>
+
               )}
               
               <div className="relative group">

@@ -10,7 +10,7 @@ export interface RegisteredPageConfig {
   type?: 'free' | 'paid' | 'quiz' | 'thank_you' | 'other';
   badgeColor?: string;
   parameters?: Array<{ key: string; description?: string }>;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface RegisterPagesPayload {
@@ -33,45 +33,33 @@ export async function registerSiteLandings({
     const endpoint = `${crmApiUrl.replace(/\/$/, '')}/api/v1/landings/register`;
     const res = await fetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        project_slug: projectSlug,
-        api_key: apiKey,
-        pages
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectSlug, apiKey, pages })
     });
-
-    const data = await res.json();
-    return data;
-  } catch (error) {
-    console.error('[bnwLandingTracker] Failed to register landings:', error);
-    return { success: false, error };
+    return await res.json();
+  } catch {
+    return { error: 'Failed to register landings' };
   }
 }
 
+const STORAGE_KEY = 'bnw_visitor_uuid';
+
 /**
- * Ensures a persistent visitor_uuid stored in localStorage & cookie.
+ * Retrieves existing or generates new unique Visitor UUID stored in localStorage & Cookie.
  */
 export function getOrCreateVisitorUuid(): string {
   if (typeof window === 'undefined') return '';
-  const STORAGE_KEY = 'bnw_visitor_uuid';
+
   let uuid = localStorage.getItem(STORAGE_KEY);
-  
-  if (!uuid || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid)) {
-    uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-      const r = (Math.random() * 16) | 0;
-      const v = c === 'x' ? r : (r & 0x3) | 0x8;
-      return v.toString(16);
-    });
+  if (!uuid) {
+    uuid = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `v_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     localStorage.setItem(STORAGE_KEY, uuid);
   }
 
   // Set cookie for cross-subdomain / request tracking
   try {
     document.cookie = `${STORAGE_KEY}=${uuid}; path=/; max-age=31536000; SameSite=Lax`;
-  } catch (e) {
+  } catch {
     // Ignore cookie errors
   }
 
@@ -113,7 +101,7 @@ export async function trackPageView({
   if (typeof window === 'undefined') return;
 
   const visitorUuid = getOrCreateVisitorUuid();
-  const { offerId, promoId, params } = extractPageParams();
+  const { offerId, promoId } = extractPageParams();
   const searchParams = new URLSearchParams(window.location.search);
 
   const payload = {
@@ -151,7 +139,7 @@ export async function trackPageView({
       body: JSON.stringify(payload),
       keepalive: true
     }).catch(() => {});
-  } catch (err) {
+  } catch {
     // Non-blocking
   }
 }

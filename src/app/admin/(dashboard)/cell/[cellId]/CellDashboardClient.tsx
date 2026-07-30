@@ -8,15 +8,10 @@ import {
   ArrowRight, 
   ShieldAlert, 
   Award, 
-  User, 
-  TrendingUp, 
-  Percent, 
-  Briefcase, 
-  Building2,
-  ChevronRight,
-  Sparkles
+  ChevronRight
 } from "lucide-react";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 interface CellDashboardClientProps {
   cell: any;
   cellProjects: any[];
@@ -27,6 +22,8 @@ interface CellDashboardClientProps {
   cellProfit: number;
   cellRoi: number;
 }
+
+
 
 export default function CellDashboardClient({
   cell,

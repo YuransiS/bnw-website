@@ -35,14 +35,15 @@ export async function getExchangeRates(dateStr?: string): Promise<ExchangeRates>
       return FALLBACK_RATES;
     }
 
-    const data: any[] = await response.json();
+    const data: Array<Record<string, unknown>> = await response.json();
     if (Array.isArray(data) && data.length > 0) {
       const usdObj = data.find(c => c.cc === "USD");
       const eurObj = data.find(c => c.cc === "EUR");
 
-      const usdRate = usdObj && typeof usdObj.rate === "number" ? usdObj.rate : FALLBACK_RATES.usdRate;
-      const eurRate = eurObj && typeof eurObj.rate === "number" ? eurObj.rate : FALLBACK_RATES.eurRate;
+      const usdRate = usdObj && typeof usdObj.rate === "number" ? (usdObj.rate as number) : FALLBACK_RATES.usdRate;
+      const eurRate = eurObj && typeof eurObj.rate === "number" ? (eurObj.rate as number) : FALLBACK_RATES.eurRate;
       const eurToUsd = usdRate > 0 ? eurRate / usdRate : FALLBACK_RATES.eurToUsd;
+
 
       return {
         usdRate: Number(usdRate.toFixed(4)),

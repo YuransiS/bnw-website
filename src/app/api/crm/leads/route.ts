@@ -75,7 +75,7 @@ async function handleQueryLeads(request: Request) {
         supabase.rpc("get_campaigns_summary"),
       ]);
 
-      let summary = (summaryRes.data || []).map((s: any) => ({
+      const summary = (summaryRes.data || []).map((s: any) => ({
         id: s.project_id,
         name: s.project_name,
         slug: s.project_slug,
@@ -86,7 +86,7 @@ async function handleQueryLeads(request: Request) {
         uah_revenue: Number(s.uah_revenue || 0),
         eur_revenue: Number(s.eur_revenue || 0)
       }));
-      let campaigns = campaignRes.data || [];
+      const campaigns = campaignRes.data || [];
 
       return {
         viewType: "all",

@@ -227,7 +227,7 @@ export default function PerformanceView({
       headers.join(","),
       ...activeRows.map((row: any) => 
         fields.map(field => {
-          let val = row[field];
+          const val = row[field];
           if (typeof val === "string") {
             // Escape commas
             return `"${val.replace(/"/g, '""')}"`;

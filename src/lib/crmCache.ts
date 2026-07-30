@@ -1,5 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 import { createAdminClient } from "@/utils/supabase/server";
 import { statusMapper } from "@/lib/statusMapper";
+
 
 // Helper registry of project landings for matching
 const PROJECT_LANDINGS: Record<string, Array<{ label: string; url: string; badgeColor: string; type: "paid" | "free" }>> = {

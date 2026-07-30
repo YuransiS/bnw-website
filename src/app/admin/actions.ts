@@ -307,7 +307,7 @@ export async function getUnifiedCRMData(
           adminSupabase.rpc("get_producers_leaderboard")
         ]);
 
-        let rawSummary = summaryRes.data || [];
+        const rawSummary = summaryRes.data || [];
         summary = rawSummary.map((p: any) => ({
           project_id: p.project_id,
           project_name: p.project_name,
@@ -660,7 +660,7 @@ export async function getUnifiedCRMData(
         }
 
         const results = await Promise.all(tasks);
-        let allRows = [...data];
+        const allRows = [...data];
         for (const res of results) {
           if (res.data) allRows.push(...res.data);
         }
@@ -726,7 +726,7 @@ export async function getUnifiedCRMData(
     const aggLeads = aggLeadsRes.data || [];
 
     // Calculate aggregated metrics from aggLeads
-    let totalLeads = totalCount || aggLeads.length;
+    const totalLeads = totalCount || aggLeads.length;
 
     let totalApplications = 0;
     let usdCourseRevenue = 0;
@@ -1999,8 +1999,9 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
 
     const normSlug = (str: any) => String(str || "").toLowerCase().trim().replace(/%20/g, " ").replace(/[\s_\-\/\.\|\:\,\;\(\)]+/g, "");
 
-    (ordersData || []).forEach(o => {
+    (ordersData || []).forEach((o: any) => {
       const rawUtm = String(o.utm_campaign || o.campaign_name || "").trim();
+
       const rawId = String(o.campaign_id || o.metadata?.campaign_id || "").trim();
       let matchedCampId: string | null = null;
 

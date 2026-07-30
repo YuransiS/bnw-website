@@ -1,4 +1,6 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { isValidPhoneNumber, getCountryCallingCode, CountryCode } from 'libphonenumber-js';
+
 
 export function validatePhoneNumber(phone: string, defaultCountry = 'UA'): boolean {
   const trimmed = phone.trim();

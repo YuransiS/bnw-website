@@ -117,7 +117,7 @@ export async function getFinanceSummaryAction(
     let totalExpenseUSD = 0;
     let totalIncomeUAH = 0;
     let totalExpenseUAH = 0;
-    let totalTrafficUSD = totalTrafficFromDbUSD;
+    const totalTrafficUSD = totalTrafficFromDbUSD;
     let totalPaidToExpertUSD = 0;
     let totalPaidToExpertUAH = 0;
     let totalReceivablesUSD = 0;

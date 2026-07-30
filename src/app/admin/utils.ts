@@ -56,7 +56,7 @@ export const formatLocaleNumber = (num: number) => {
   const str = val.toFixed(2);
   const parts = str.split(".");
   let integerPart = parts[0];
-  let decimalPart = parts[1];
+  const decimalPart = parts[1];
 
   // Use non-breaking space \u00A0 as thousands separator
   integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, "\u00A0");

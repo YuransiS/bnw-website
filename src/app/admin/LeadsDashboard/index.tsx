@@ -104,6 +104,50 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   // Local state to hold dashboard data (pre-calculated server side)
   const [dashboardData, setDashboardData] = useState(initialData);
 
+  // Unified data structures
+  const viewType = dashboardData.viewType; // 'all' or 'single'
+  const role = dashboardData.role;
+  const allowedProjects = dashboardData.allowedProjects || [];
+  const activeSlug = dashboardData.activeSlug || "";
+  const activeProject = dashboardData.activeProject;
+
+  // Scoped project data states
+  const summaryData = dashboardData.summaryData || [];
+  const campaignsData = dashboardData.campaignsData || [];
+  const producersLeaderboard = dashboardData.producersLeaderboard || [];
+  const salesManagers = dashboardData.salesManagers || [];
+
+  // Local component states
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    if (viewType === "all") return "hub";
+    if (role === "expert") return "finance_expert";
+    if (role === "sales") return "leads";
+    return "analytics";
+  });
+  const { theme, toggleTheme } = useTheme();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isDevMode, setIsDevMode] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const saved = localStorage.getItem("crm_dev_mode");
+    return saved === "true" && (role === "admin" || role === "superman");
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [showUnresolvedModal, setShowUnresolvedModal] = useState(false);
+  const [updatingCurrencyId, setUpdatingCurrencyId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [touchCountFilter, setTouchCountFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
+  const [unpaidIntentOnly, setUnpaidIntentOnly] = useState(false);
+  const monthDates = getCurrentMonthDates();
+  const [startDate, setStartDate] = useState(monthDates.startDate);
+  const [endDate, setEndDate] = useState(monthDates.endDate);
+  const [dateRangePreset, setDateRangePreset] = useState<"all" | "30d" | "7d" | "1d" | "month" | "custom">("month");
+  const [globalCurrency, setGlobalCurrency] = useState<"USD" | "UAH">("UAH");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedLanding, setSelectedLanding] = useState<string>("all");
+
+  const [activeQuizLeadId, setActiveQuizLeadId] = useState<string | null>(null);
+
   // Reference to track last fetched parameters to prevent duplicate/redundant client-side fetches
   const lastFetchedParamsRef = React.useRef<string>("");
   const clientCacheRef = React.useRef<Record<string, any>>({});
@@ -118,19 +162,40 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   // Track previous project slug to detect project switching
   const prevSlugRef = React.useRef(initialData.activeSlug || "");
 
+  const [unresolvedOrders, setUnresolvedOrders] = useState<any[]>([]);
+
+  useEffect(() => {
+    let list = dashboardData.unresolvedOrders || [];
+    if (viewType === "single" && activeProject) {
+      list = list.filter((o: any) => o.projectId === activeProject.id);
+    }
+    setUnresolvedOrders(list);
+  }, [dashboardData.unresolvedOrders, viewType, activeProject]);
+
+
   // Sync state when props change
   useEffect(() => {
     const currentSlug = initialData.activeSlug || "";
     const isProjectSwitched = currentSlug !== prevSlugRef.current;
 
     if (!isProjectSwitched) {
-      // Current project had a mutation. Clear client cache.
       clientCacheRef.current = {};
     }
 
-    // Reset all filter states to default values if project is switched
     if (isProjectSwitched) {
       isResettingRef.current = true;
+      prevSlugRef.current = currentSlug;
+      const mDates = getCurrentMonthDates();
+      setStartDate(mDates.startDate);
+      setEndDate(mDates.endDate);
+      setStatusFilter("all");
+      setTouchCountFilter("all");
+      setSourceFilter("all");
+      setUnpaidIntentOnly(false);
+      setCurrentPage(1);
+      setSelectedLanding("all");
+      setSearchQuery("");
+      setDateRangePreset("month");
       if (currentSlug === "all") {
         setActiveTab("hub");
       } else if (prevSlugRef.current === "all") {
@@ -142,24 +207,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           setActiveTab("analytics");
         }
       }
-
-      prevSlugRef.current = currentSlug;
-      const monthDates = getCurrentMonthDates();
-      setStartDate(monthDates.startDate);
-      setEndDate(monthDates.endDate);
-      setStatusFilter("all");
-      setTouchCountFilter("all");
-      setSourceFilter("all");
-      setUnpaidIntentOnly(false);
-      setCurrentPage(1);
-      setSelectedLanding("all");
-      setSearchQuery("");
-      setDateRangePreset("month");
     }
 
     setDashboardData(initialData);
 
-    // Sync the parameter reference with the new server-provided initialData
     lastFetchedParamsRef.current = JSON.stringify({
       activeSlug: currentSlug,
       page: isProjectSwitched ? 1 : currentPage,
@@ -175,49 +226,6 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       skipTraffic: activeTab !== "analytics"
     });
   }, [initialData]);
-
-  // Unified data structures
-  const viewType = dashboardData.viewType; // 'all' or 'single'
-  const role = dashboardData.role;
-  const allowedProjects = dashboardData.allowedProjects || [];
-  const activeSlug = dashboardData.activeSlug || "";
-  const activeProject = dashboardData.activeProject;
-
-  // Scoped project data states
-  const summaryData = dashboardData.summaryData || [];
-  const campaignsData = dashboardData.campaignsData || [];
-  const producersLeaderboard = dashboardData.producersLeaderboard || [];
-  const salesManagers = dashboardData.salesManagers || [];
-  const [unresolvedOrders, setUnresolvedOrders] = useState<any[]>([]);
-
-  useEffect(() => {
-    let list = dashboardData.unresolvedOrders || [];
-    if (viewType === "single" && activeProject) {
-      list = list.filter((o: any) => o.projectId === activeProject.id);
-    }
-    setUnresolvedOrders(list);
-  }, [dashboardData.unresolvedOrders, viewType, activeProject]);
-
-  // Local component states
-  const [activeTab, setActiveTab] = useState<string>(() => {
-    if (viewType === "all") return "hub";
-    if (role === "expert") return "finance_expert";
-    if (role === "sales") return "leads";
-    return "analytics";
-  });
-  const { theme, toggleTheme } = useTheme();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isDevMode, setIsDevMode] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("crm_dev_mode");
-    if (saved === "true" && (role === "admin" || role === "superman")) {
-      setIsDevMode(true);
-    } else {
-      setIsDevMode(false);
-    }
-  }, [role]);
 
   const toggleDevMode = () => {
     if (role !== "admin" && role !== "superman") return;
@@ -238,20 +246,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     }
   }, [activeSlug, hasMounted]);
 
-  const [showUnresolvedModal, setShowUnresolvedModal] = useState(false);
-  const [updatingCurrencyId, setUpdatingCurrencyId] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [touchCountFilter, setTouchCountFilter] = useState("all");
-  const [sourceFilter, setSourceFilter] = useState("all");
-  const [unpaidIntentOnly, setUnpaidIntentOnly] = useState(false);
-  const monthDates = getCurrentMonthDates();
-  const [startDate, setStartDate] = useState(monthDates.startDate);
-  const [endDate, setEndDate] = useState(monthDates.endDate);
-  const [dateRangePreset, setDateRangePreset] = useState<"all" | "30d" | "7d" | "1d" | "month" | "custom">("month");
-  const [globalCurrency, setGlobalCurrency] = useState<"USD" | "UAH">("UAH");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [selectedLanding, setSelectedLanding] = useState<string>("all");
-  const [activeQuizLeadId, setActiveQuizLeadId] = useState<string | null>(null);
+
 
   // Finance Subsystem States & Handlers
   const [financeData, setFinanceData] = useState<any>(null);

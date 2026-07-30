@@ -17,28 +17,28 @@ const ModalContext = createContext<ModalContextType | undefined>(undefined);
 export function ModalProvider({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeButtonId, setActiveButtonId] = useState<string | null>(null);
-  const [visitorId, setVisitorId] = useState<string | null>(() => {
+  const [visitorId] = useState<string | null>(() => {
     if (typeof window !== "undefined") {
-      return localStorage.getItem("visitor_id");
+      let current = localStorage.getItem("visitor_id");
+      if (!current) {
+        current = crypto.randomUUID();
+        localStorage.setItem("visitor_id", current);
+      }
+      return current;
     }
     return null;
   });
 
   // Analytics Initialization Script
   useEffect(() => {
-    let currentVisitorId = localStorage.getItem("visitor_id");
-    if (!currentVisitorId) {
-      currentVisitorId = crypto.randomUUID();
-      localStorage.setItem("visitor_id", currentVisitorId);
-      setVisitorId(currentVisitorId);
-    }
+    if (!visitorId) return;
 
     // Record background page view
     const trackPageView = async () => {
       try {
         const supabase = createClient();
         await supabase.from("page_views").insert({
-          visitor_id: currentVisitorId,
+          visitor_id: visitorId,
           path: window.location.pathname,
         });
       } catch (err) {
@@ -47,7 +47,9 @@ export function ModalProvider({ children }: { children: React.ReactNode }) {
     };
 
     trackPageView();
-  }, []);
+  }, [visitorId]);
+
+
 
   const openModal = async (buttonId: string) => {
     setActiveButtonId(buttonId);
@@ -58,8 +60,8 @@ export function ModalProvider({ children }: { children: React.ReactNode }) {
     if (!currentVisitorId) {
       currentVisitorId = crypto.randomUUID();
       localStorage.setItem("visitor_id", currentVisitorId);
-      setVisitorId(currentVisitorId);
     }
+
 
     try {
       const supabase = createClient();

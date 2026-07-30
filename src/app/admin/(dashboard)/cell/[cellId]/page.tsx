@@ -1,9 +1,8 @@
 import React from "react";
-import Link from "next/link";
-import { getUnifiedCRMData, getCellsAction } from "../../../actions";
+import { getUnifiedCRMData } from "../../../actions";
 import { createAdminClient } from "@/utils/supabase/server";
 import { getSessionAndAccess } from "../../../actions";
-import { Layers, ArrowRight, ShieldAlert, Award, ClipboardCheck } from "lucide-react";
+
 
 export const revalidate = 0;
 

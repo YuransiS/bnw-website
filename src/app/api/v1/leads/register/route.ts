@@ -374,7 +374,7 @@ export async function POST(req: Request) {
 async function autoRegisterLandingParams(supabaseAdmin: any, projectId: string, pageUrl?: string | null, pagePath?: string | null) {
   if (!pageUrl && !pagePath) return;
   try {
-    let urlStr = pageUrl || pagePath || '';
+    const urlStr = pageUrl || pagePath || '';
     let parsedUrl: URL | null = null;
     if (urlStr.startsWith('http://') || urlStr.startsWith('https://')) {
       parsedUrl = new URL(urlStr);

@@ -12,48 +12,44 @@ import {
   Crown, 
   Layers, 
   Briefcase, 
-  Building2,
-  ShieldAlert,
-  Globe
+  Building2
 } from "lucide-react";
 import { getCellsAction } from "../actions";
 import { createClient } from "@/utils/supabase/client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 interface TopHeaderProps {
-  isSuperman: boolean;
-  allowedProjects: any[];
+  isSuperman?: boolean;
+  allowedProjects?: any[];
   userRole: string;
   userEmail: string;
   fullName: string;
-  isActualDev: boolean;
-  actualRole: string;
+  isActualDev?: boolean;
+  actualRole?: string;
   profiles: any[];
-  profileProjects: any[];
+  profileProjects?: any[];
 }
 
+
 export default function TopHeader({
-  isSuperman,
-  allowedProjects,
   userRole,
   userEmail,
   fullName,
-  isActualDev,
-  actualRole,
-  profiles,
-  profileProjects
+  profiles
 }: TopHeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [cells, setCells] = useState<any[]>([]);
+
   const [isAccountOpen, setIsAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
 
   // Retrieve current user profile
   const currentProfile = React.useMemo(() => {
-    return profiles.find(p => p.email?.toLowerCase() === userEmail.toLowerCase());
+    return profiles.find((p: any) => p.email?.toLowerCase() === userEmail.toLowerCase());
   }, [profiles, userEmail]);
 
-  const currentUserId = currentProfile?.id || "";
+  const currentUserId = (currentProfile as any)?.id || "";
 
   // Fetch cells list for header tabs
   useEffect(() => {
@@ -72,7 +68,7 @@ export default function TopHeader({
       const now = new Date();
       const currentHour = now.getHours(); // Local hour
       
-      let target = new Date(now);
+      const target = new Date(now);
       target.setMinutes(0);
       target.setSeconds(0);
       target.setMilliseconds(0);
@@ -98,11 +94,9 @@ export default function TopHeader({
       const secs = diffSecs % 60;
       
       if (hrs > 0) {
-        setTimeRemaining(`${hrs}г ${mins}хв`);
+        setTimeRemaining(`${hrs}:${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`);
       } else {
-        const minStr = String(mins).padStart(2, "0");
-        const secStr = String(secs).padStart(2, "0");
-        setTimeRemaining(`${minStr}:${secStr}`);
+        setTimeRemaining(`${mins}:${secs < 10 ? '0' : ''}${secs}`);
       }
     };
     
@@ -112,11 +106,11 @@ export default function TopHeader({
   }, []);
 
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (accountRef.current && !accountRef.current.contains(event.target as Node)) {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (accountRef.current && !accountRef.current.contains(e.target as Node)) {
         setIsAccountOpen(false);
       }
-    }
+    };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
@@ -129,7 +123,6 @@ export default function TopHeader({
   // Active state checkers
   const isFounderActive = pathname === "/admin/founder" || pathname === "/admin";
   const activeCellId = pathname.includes("/admin/cell/") ? pathname.split("/cell/")[1]?.split("/")[0] : "";
-  const activeProjectId = pathname.includes("/admin/project/") ? pathname.split("/project/")[1]?.split("/")[0] : "";
 
   // Handle Logout
   const handleLogout = async () => {
