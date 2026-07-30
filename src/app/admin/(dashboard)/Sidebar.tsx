@@ -377,6 +377,29 @@ export default function Sidebar({
                 </p>
               )}
               <div className="space-y-1 max-h-[350px] overflow-y-auto custom-scrollbar p-0.5">
+                {/* Direct 1-Click "Загальний огляд" Project Link when inside a Project */}
+                {activeProjectId && (
+                  <div className="relative group mb-1.5">
+                    <Link
+                      href={`/admin/project/${activeProjectId}`}
+                      onClick={(e) => handleLinkClick(e, `/admin/project/${activeProjectId}`)}
+                      className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border transition-all text-xs font-black cursor-pointer bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 ${
+                        isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : ""
+                      }`}
+                    >
+                      <LayoutDashboard className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      {!isCollapsed && <span className="truncate">Загальний огляд</span>}
+                    </Link>
+                    {isCollapsed && (
+                      <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl ${
+                        isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
+                      }`}>
+                        Загальний огляд
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Hub "Панель фаундерів" link */}
                 {isSuperman && (
                   <div className="relative group">
@@ -405,6 +428,7 @@ export default function Sidebar({
                     )}
                   </div>
                 )}
+
 
                 {/* Dynamic Cell -> Producer -> Project Tree */}
                 {!isCollapsed ? (

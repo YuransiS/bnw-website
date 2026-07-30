@@ -646,7 +646,26 @@ export async function getUnifiedCRMData(
     const dbQueryStart = performance.now();
     const [leadsRes, aggLeadsRes, trafficSummaryRes, costsRes, allProfilesRes, utmLeadsSummaryRes, funnelsRes, campaignsRes] = await Promise.all([
       query.order("created_at", { ascending: false }).range(from, to),
-      aggQuery,
+      (async () => {
+        const { data, count, error } = await aggQuery.range(0, 999);
+        if (error || !data) return { data: [], count: 0 };
+        if (!count || count <= 1000) return { data, count };
+
+        const pagesCount = Math.ceil(count / 1000);
+        const tasks = [];
+        for (let i = 1; i < pagesCount; i++) {
+          const fromIdx = i * 1000;
+          const toIdx = fromIdx + 999;
+          tasks.push(aggQuery.range(fromIdx, toIdx));
+        }
+
+        const results = await Promise.all(tasks);
+        let allRows = [...data];
+        for (const res of results) {
+          if (res.data) allRows.push(...res.data);
+        }
+        return { data: allRows, count };
+      })(),
       (() => {
         if (filters?.skipTraffic) return Promise.resolve({ data: [], error: null } as any);
         return adminSupabase.rpc("get_traffic_clicks_summary", {
@@ -699,7 +718,7 @@ export async function getUnifiedCRMData(
         funnelName: matchedFunnel ? matchedFunnel.name : null
       };
     });
-    const totalCount = leadsRes.count || 0;
+    const totalCount = leadsRes.count || aggLeadsRes.count || 0;
     const costs = costsRes.data || [];
     const campaignsData = (campaignsRes.data || []).filter((c: any) => c.project_slug === activeProject.slug);
     const profilesList = allProfilesRes.data || [];
@@ -707,7 +726,8 @@ export async function getUnifiedCRMData(
     const aggLeads = aggLeadsRes.data || [];
 
     // Calculate aggregated metrics from aggLeads
-    let totalLeads = aggLeads.length;
+    let totalLeads = totalCount || aggLeads.length;
+
     let totalApplications = 0;
     let usdCourseRevenue = 0;
     let uahCourseRevenue = 0;
@@ -1977,29 +1997,67 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
       campaignMap[campId].impressions += Number(c.impressions || 0);
     });
 
+    const normSlug = (str: any) => String(str || "").toLowerCase().trim().replace(/%20/g, " ").replace(/[\s_\-\/\.\|\:\,\;\(\)]+/g, "");
+
     (ordersData || []).forEach(o => {
-      let campId = "unknown";
-      if (o.campaign_id && campaignMap[o.campaign_id]) {
-        campId = o.campaign_id;
-      } else if (o.utm_campaign) {
-        // Try extracting campaign_id using regular expression (matches digits at the end of utm_campaign)
-        const matchId = String(o.utm_campaign).match(/(\d+)$/);
-        if (matchId && campaignMap[matchId[1]]) {
-          campId = matchId[1];
-        } else {
-          const match = Object.values(campaignMap).find(c => c.campaign_name === o.utm_campaign);
-          if (match) {
-            campId = match.campaign_id;
+      const rawUtm = String(o.utm_campaign || o.campaign_name || "").trim();
+      const rawId = String(o.campaign_id || o.metadata?.campaign_id || "").trim();
+      let matchedCampId: string | null = null;
+
+      // Strategy 1: Direct ID match
+      if (rawId && campaignMap[rawId]) {
+        matchedCampId = rawId;
+      } else if (rawUtm && campaignMap[rawUtm]) {
+        matchedCampId = rawUtm;
+      }
+
+      // Strategy 2: Extract numeric Meta campaign ID from utm_campaign
+      if (!matchedCampId && rawUtm) {
+        const digitsMatch = rawUtm.match(/(\d{8,})/);
+        if (digitsMatch && campaignMap[digitsMatch[1]]) {
+          matchedCampId = digitsMatch[1];
+        }
+      }
+
+      // Strategy 3: Normalized string slug exact match
+      const normUtm = normSlug(rawUtm);
+      if (!matchedCampId && normUtm) {
+        for (const c of Object.values(campaignMap)) {
+          const normName = normSlug(c.campaign_name);
+          const normId = normSlug(c.campaign_id);
+          if (normName === normUtm || normId === normUtm) {
+            matchedCampId = c.campaign_id;
+            break;
           }
         }
       }
+
+      // Strategy 4: Substring / slug match
+      if (!matchedCampId && normUtm) {
+        for (const c of Object.values(campaignMap)) {
+          const normName = normSlug(c.campaign_name);
+          if (normName && (normUtm.includes(normName) || normName.includes(normUtm))) {
+            matchedCampId = c.campaign_id;
+            break;
+          }
+        }
+      }
+
+      // Strategy 5: Match to first active cost campaign if single active campaign
+      if (!matchedCampId && Object.keys(campaignMap).length === 1) {
+        matchedCampId = Object.keys(campaignMap)[0];
+      }
+
+      // Strategy 6: Fallback to lead's own utm_campaign name (or Meta Organic)
+      const campId = matchedCampId || (rawUtm ? `custom_${normUtm}` : (Object.keys(campaignMap)[0] || "organic_meta"));
+      const fallbackName = rawUtm || "Органічний трафік (Meta Direct)";
 
       const orderDate = o.created_at ? o.created_at.split('T')[0] : undefined;
 
       if (!campaignMap[campId]) {
         campaignMap[campId] = {
           campaign_id: campId,
-          campaign_name: campId === "unknown" ? "Трафік без ID кампанії" : (o.utm_campaign || "Без назви"),
+          campaign_name: fallbackName,
           spend: 0,
           clicks: 0,
           impressions: 0,
@@ -2019,6 +2077,7 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
           campaignMap[campId].max_date = orderDate;
         }
       }
+
 
       const orderStatus = String(o.status || '').toLowerCase();
       const isLead = !leadStatusesToExclude.includes(o.status);
