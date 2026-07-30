@@ -54,6 +54,10 @@ export async function POST(req: Request) {
       const rawVisitorUuid = m.visitor_uuid || m.visitor_id || m.visitorId || metadata?.visitor_uuid || metadata?.visitor_id || metadata?.visitorId || lead?.visitor_uuid || lead?.visitor_id || lead?.visitorId || null;
       const visitor_uuid = rawVisitorUuid && isValidUuid(rawVisitorUuid) ? rawVisitorUuid : null;
 
+      const parsedQueryParams = parseQueryParams(page_url || page_path);
+      const offer_id = m.offer_id || m.o || parsedQueryParams.offer_id || null;
+      const promo_id = m.promo_id || m.p || parsedQueryParams.promo_id || null;
+
       const { data: clickData, error: clickError } = await supabaseAdmin
         .from('traffic_clicks')
         .insert({
@@ -67,11 +71,15 @@ export async function POST(req: Request) {
           utm_term,
           page_path,
           page_url,
+          offer_id,
+          promo_id,
+          query_params: parsedQueryParams.query_params,
           metadata: metadata || {},
           created_at: createdAtIso
         })
         .select('id')
         .single();
+
 
       if (clickError) {
         throw new Error(`Failed to insert traffic click: ${clickError.message}`);
@@ -266,6 +274,10 @@ export async function POST(req: Request) {
       }
     }
 
+    const orderQueryParams = parseQueryParams(page_url || page_path);
+    const resolvedOfferId = (marketing?.offer_id || marketing?.o || lead?.offer_id || lead?.o || orderQueryParams.offer_id || null);
+    const resolvedPromoId = (marketing?.promo_id || marketing?.p || lead?.promo_id || lead?.p || orderQueryParams.promo_id || null);
+
     if (existingOrder) {
       // Update existing order status, amount, and metadata
       const { data: updatedOrder, error: orderError } = await supabaseAdmin
@@ -280,6 +292,9 @@ export async function POST(req: Request) {
           utm_term: utm_term || undefined,
           page_path: page_path || undefined,
           page_url: page_url || undefined,
+          offer_id: resolvedOfferId || undefined,
+          promo_id: resolvedPromoId || undefined,
+          query_params: orderQueryParams.query_params,
           visitor_uuid: visitor_uuid || undefined,
           metadata: meta,
           funnel_id: resolvedFunnelId || undefined
@@ -319,6 +334,9 @@ export async function POST(req: Request) {
           user_agent,
           page_path,
           page_url,
+          offer_id: resolvedOfferId,
+          promo_id: resolvedPromoId,
+          query_params: orderQueryParams.query_params,
           visitor_uuid,
           metadata: meta,
           funnel_id: resolvedFunnelId,
@@ -327,11 +345,15 @@ export async function POST(req: Request) {
         .select('id')
         .single();
 
+
       if (orderError) {
         throw new Error(`Failed to log order: ${orderError.message}`);
       }
       orderIdToReturn = newOrder.id;
     }
+
+    // Auto-discover/update landing query parameters (?p, ?o, etc.)
+    autoRegisterLandingParams(supabaseAdmin, projectId, page_url, page_path);
 
     return NextResponse.json({
       success: true,
@@ -348,3 +370,106 @@ export async function POST(req: Request) {
     );
   }
 }
+
+async function autoRegisterLandingParams(supabaseAdmin: any, projectId: string, pageUrl?: string | null, pagePath?: string | null) {
+  if (!pageUrl && !pagePath) return;
+  try {
+    let urlStr = pageUrl || pagePath || '';
+    let parsedUrl: URL | null = null;
+    if (urlStr.startsWith('http://') || urlStr.startsWith('https://')) {
+      parsedUrl = new URL(urlStr);
+    } else if (pageUrl && (pageUrl.startsWith('http://') || pageUrl.startsWith('https://'))) {
+      parsedUrl = new URL(pageUrl);
+    }
+
+    const path = parsedUrl ? parsedUrl.pathname.toLowerCase() : (pagePath ? pagePath.toLowerCase() : '/');
+    const queryParams: Array<{ key: string }> = [];
+
+    if (parsedUrl && parsedUrl.searchParams) {
+      parsedUrl.searchParams.forEach((_, key) => {
+        const kLower = key.toLowerCase();
+        if (kLower && !['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'fbclid', 'gclid'].includes(kLower)) {
+          queryParams.push({ key: kLower });
+        }
+      });
+    }
+
+    const { data: existing } = await supabaseAdmin
+      .from('project_landings')
+      .select('*')
+      .eq('project_id', projectId)
+      .eq('path', path)
+      .maybeSingle();
+
+    let mergedParams = existing?.parameters || [];
+    if (!Array.isArray(mergedParams)) mergedParams = [];
+
+    let updated = false;
+    for (const q of queryParams) {
+      const idx = mergedParams.findIndex((p: any) => p.key === q.key);
+      if (idx >= 0) {
+        mergedParams[idx].observed_count = (mergedParams[idx].observed_count || 1) + 1;
+        mergedParams[idx].last_seen_at = new Date().toISOString();
+        updated = true;
+      } else {
+        mergedParams.push({
+          key: q.key,
+          description: `Parameter ?${q.key}`,
+          observed_count: 1,
+          last_seen_at: new Date().toISOString()
+        });
+        updated = true;
+      }
+    }
+
+    if (updated || (!existing && queryParams.length > 0)) {
+      await supabaseAdmin.from('project_landings').upsert(
+        {
+          project_id: projectId,
+          label: existing?.label || path,
+          url: pageUrl || existing?.url || path,
+          path,
+          type: existing?.type || 'free',
+          parameters: mergedParams,
+          last_ping_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: 'project_id,path' }
+      );
+    }
+  } catch (err) {
+    console.warn('[Auto-Register Landing Params Warning]:', err);
+  }
+}
+
+function parseQueryParams(pageUrl?: string | null) {
+  const result: { offer_id: string; promo_id: string; query_params: Record<string, string> } = {
+    offer_id: '',
+    promo_id: '',
+    query_params: {}
+  };
+  if (!pageUrl) return result;
+  try {
+    let urlObj: URL | null = null;
+    if (pageUrl.startsWith('http://') || pageUrl.startsWith('https://')) {
+      urlObj = new URL(pageUrl);
+    } else {
+      urlObj = new URL(pageUrl, 'https://placeholder.domain');
+    }
+    urlObj.searchParams.forEach((val, key) => {
+      const kLower = key.toLowerCase();
+      result.query_params[kLower] = val;
+      if (kLower === 'o' || kLower === 'offer' || kLower === 'offer_id') {
+        result.offer_id = val;
+      }
+      if (kLower === 'p' || kLower === 'promo' || kLower === 'promo_id' || kLower === 'package') {
+        result.promo_id = val;
+      }
+    });
+  } catch (e) {
+    // Ignore parse errors
+  }
+  return result;
+}
+
+

@@ -36,10 +36,36 @@
 * `src/app/auth/callback/route.ts` — API роут для обмена временного OAuth-кода на сессию Supabase.
 * `src/app/api/crm/leads/route.ts` — HTTP QUERY-эндпоинт (RFC 10008) для фильтрации и поиска лидов с поддержкой резервного POST-туннелирования (`X-HTTP-Method-Override`). Выполняет SQL-агрегацию на стороне СУБД.
 * `src/app/api/crm/rebuild-cache/route.ts` — API роут-приемник Upstash QStash для гарантированного асинхронного ребилда кэша в облаке Vercel с проверкой подписей вебхуков.
+* `src/app/api/v1/landings/register/route.ts` — HTTP POST API-шлюз для автоматической регистрации лендингов, веб-страниц и поддерживаемых URL-параметров (`?p`, `?o`, `?utm_*`) с внешних сайтов холдинга (`SvitlanaTapes`, `victoria-mc`, `economica` и др.).
+* `src/app/api/v1/landings/route.ts` — HTTP GET API-эндпоинт для динамического получения реестра лендингов и параметров проекта.
+* `src/lib/projectLandings.ts` — Сервисный модуль с функцией `getProjectLandings` для подгрузки динамического реестра страниц из БД с безопасным fallback к статической конфигурации.
+* `src/lib/bnwLandingTracker.ts` — Клиентский SDK-модуль для мгновенной интеграции авто-регистрации страниц и URL-параметров на внешних сайтах.
 
 ---
 
 ## 3. Схема данных (Supabase PostgreSQL)
+
+### Таблица `public.project_landings`
+Динамический реестр страниц, лендингов и URL-параметров проектов холдинга.
+* `id` (UUID, primary key)
+* `project_id` (UUID references `public.projects(id) ON DELETE CASCADE`)
+* `label` (TEXT) - Отображаемая метка страницы ("VSL-форма", "Практикум", "Антиботокс")
+* `url` (TEXT) - Полный URL лендинга
+* `path` (TEXT) - Нормализованный относительный путь (`/free-lection/vsl-form/`)
+* `type` (TEXT, 'free' | 'paid' | 'quiz' | 'thank_you' | 'other')
+* `parameters` (JSONB) - Зарегистрированные параметры запроса (`?p`, `?o`, `?utm_*`) с счетчиком наблюдений и описанием
+* `badge_color` (TEXT) - Цветовое оформление плашки в UI CRM
+* `is_active` (BOOLEAN, default true)
+* `last_ping_at` (TIMESTAMPTZ) - Время последнего отклика/ping от сайта
+
+### Поля сквозной аналитики и атрибуции (`traffic_clicks` & `unified_orders`)
+* `offer_id` (TEXT) — Идентификатор конкретного оффера (`?o=...` или `?offer=...`)
+* `promo_id` (TEXT) — Идентификатор промокода / скидочного пакета (`?p=...` или `?promo=...`)
+* `query_params` (JSONB) — Полный набор параметров URL для сквозного отслеживания
+* **Составные индексы:** `idx_traffic_clicks_proj_visitor`, `idx_traffic_clicks_proj_offer`, `idx_unified_orders_proj_offer`, `idx_unified_orders_proj_promo` для высокой скорости работы в Enterprise-режиме (без перегрузки RAM на фронтенде).
+* **Enterprise RPC `get_customer_journey_scoped`:** Функция СУБД для изолированного по проекту объединения и выборки всех кликов и заказов лида.
+
+
 
 ### Таблица `public.profiles`
 * `id` (UUID, primary key references `auth.users`)

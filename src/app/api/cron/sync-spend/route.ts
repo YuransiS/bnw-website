@@ -162,15 +162,18 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const secret = searchParams.get("secret");
-    const authHeader = req.headers.get("Authorization");
+    const authHeader = req.headers.get("Authorization") || req.headers.get("authorization");
+    const customHeader = req.headers.get("x-cron-secret");
 
     const expectedSecret = process.env.CRON_SECRET;
     const isAuthorized =
       (expectedSecret && secret === expectedSecret) ||
+      (expectedSecret && customHeader === expectedSecret) ||
       (expectedSecret && authHeader === `Bearer ${expectedSecret}`) ||
+      (expectedSecret && authHeader === expectedSecret) ||
       process.env.NODE_ENV === "development";
 
-    if (!isAuthorized) {
+    if (!isAuthorized && expectedSecret) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

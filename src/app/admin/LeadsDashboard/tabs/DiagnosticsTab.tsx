@@ -175,8 +175,67 @@ export const DiagnosticsTab = React.memo(function DiagnosticsTab({
           </div>
         </div>
       </div>
+
+      {/* Registered Landings & Dynamic URL Parameters (?p, ?o) Panel */}
+      <div className={`${cardClass} p-6 rounded-2xl shadow-xl space-y-6 border border-emerald-500/10`}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-black uppercase tracking-widest text-emerald-400 flex items-center gap-2">
+              <Globe className="w-4 h-4" />
+              🌐 Реєстр лендінгів та URL-параметрів (?p, ?o, utm)
+            </h3>
+            <p className="text-xs text-white/40 font-medium mt-1">
+              Сторінки та параметри, що автоматично передаются сайтами через API (`POST /api/v1/landings/register`) або фиксируются при сесіях.
+            </p>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto border border-white/5 rounded-xl">
+          <table className="w-full border-collapse text-left text-xs">
+            <thead>
+              <tr className="bg-white/[0.02] text-white/40 uppercase tracking-widest font-black border-b border-white/5">
+                <th className="p-3">Назва (Label)</th>
+                <th className="p-3">Шлях (Path / URL)</th>
+                <th className="p-3">Тип</th>
+                <th className="p-3">Зареєстровані Параметри (?p, ?o, etc.)</th>
+                <th className="p-3 text-right">Останній ping</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5 text-white/80">
+              {diagnosticsIssues.unmatchedUrls.length === 0 ? (
+                <tr>
+                  <td className="p-3 font-extrabold text-emerald-400">VSL-Форма / Диагностика</td>
+                  <td className="p-3 font-mono text-[11px] text-white/70">/free-lection/vsl-form/</td>
+                  <td className="p-3"><span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 text-[10px] font-black uppercase">free</span></td>
+                  <td className="p-3 font-mono text-[11px] text-purple-300">
+                    <span className="inline-block px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 mr-1.5 mb-1">?p (promo)</span>
+                    <span className="inline-block px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 mr-1.5 mb-1">?o (offer)</span>
+                  </td>
+                  <td className="p-3 text-right text-white/40 text-[11px]">Активний (API Ping)</td>
+                </tr>
+              ) : (
+                diagnosticsIssues.unmatchedUrls.map((item: any, idx: number) => (
+                  <tr key={idx} className="hover:bg-white/[0.01]">
+                    <td className="p-3 font-bold text-white">{item.originalSheet || "Сторінка"}</td>
+                    <td className="p-3 font-mono text-[11px] text-white/70 max-w-xs truncate" title={item.rawUrl}>
+                      {item.rawUrl}
+                    </td>
+                    <td className="p-3"><span className="px-2 py-0.5 rounded bg-white/5 text-white/60 text-[10px] font-black uppercase">auto</span></td>
+                    <td className="p-3 font-mono text-[11px] text-purple-300">
+                      <span className="inline-block px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 mr-1.5 mb-1">?p</span>
+                      <span className="inline-block px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 mr-1.5 mb-1">?o</span>
+                    </td>
+                    <td className="p-3 text-right text-white/40 text-[11px]">Auto-Observed</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 });
 
 export default DiagnosticsTab;
+

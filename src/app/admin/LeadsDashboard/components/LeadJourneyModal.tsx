@@ -159,13 +159,83 @@ export default function LeadJourneyModal({
         <div className="grid grid-cols-1 gap-6 flex-grow overflow-hidden">
           {/* Left Column: Timeline list */}
           <div
-            className={`overflow-y-auto custom-scrollbar space-y-0 pr-2 pt-2 h-full ${
+            className={`overflow-y-auto custom-scrollbar space-y-4 pr-2 pt-2 h-full ${
               activeModalTab === "journey" ? "flex flex-col flex-grow" : "hidden"
             }`}
           >
-            <h4 className="text-[10px] font-black uppercase text-white/40 tracking-widest mb-3">
+            {/* 360 Multi-Touch Attribution Card */}
+            {history.length > 0 && (() => {
+              const firstTouch = history[0];
+              const convertingTouch = history.find((h: any) =>
+                ["closed_won", "approved", "оплачено", "купив курс", "купив_курс", "купив трипвайєр", "купив трипвайер"].includes(String(h.status).toLowerCase())
+              ) || history[history.length - 1];
+
+              const firstOffer = firstTouch?.offer_id || firstTouch?.metadata?.offer_id || firstTouch?.metadata?.o || "";
+              const convertingOffer = convertingTouch?.offer_id || convertingTouch?.metadata?.offer_id || convertingTouch?.metadata?.o || "";
+              const convertingPromo = convertingTouch?.promo_id || convertingTouch?.metadata?.promo_id || convertingTouch?.metadata?.p || "";
+
+              return (
+                <div className="bg-gradient-to-r from-purple-500/10 via-blue-500/10 to-emerald-500/10 border border-white/10 rounded-2xl p-4 space-y-3 shadow-xl backdrop-blur-md">
+                  <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                    <span className="text-[10px] font-black uppercase text-purple-300 tracking-widest flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                      Сквозная атрибуция 360°
+                    </span>
+                    <span className="text-[9px] font-extrabold text-white/40 uppercase">
+                      Касаний: {history.length}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-[11px]">
+                    <div className="space-y-1 bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
+                      <span className="text-[9px] font-black uppercase text-blue-400 tracking-wider block">
+                        🏁 Первое касание (First Touch)
+                      </span>
+                      <p className="text-white font-bold truncate">
+                        {firstTouch?.utm_source ? `UTM: ${firstTouch.utm_source}` : "Прямой заход"}
+                      </p>
+                      <p className="text-white/50 text-[10px] truncate">
+                        Лендинг: {firstTouch?.page_path || firstTouch?.metadata?.page_path || firstTouch?.metadata?.path || "/"}
+                      </p>
+                      {firstOffer && (
+                        <span className="inline-block px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-[9px] text-purple-300 font-mono mt-1">
+                          ?o={firstOffer}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="space-y-1 bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
+                      <span className="text-[9px] font-black uppercase text-emerald-400 tracking-wider block">
+                        🎯 Конвертирующее касание
+                      </span>
+                      <p className="text-white font-bold truncate">
+                        Статус: {convertingTouch?.status || "Визит"}
+                      </p>
+                      <p className="text-white/50 text-[10px] truncate">
+                        Лендинг: {convertingTouch?.page_path || convertingTouch?.metadata?.page_path || convertingTouch?.metadata?.path || "/"}
+                      </p>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {convertingOffer && (
+                          <span className="inline-block px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-[9px] text-purple-300 font-mono">
+                            ?o={convertingOffer}
+                          </span>
+                        )}
+                        {convertingPromo && (
+                          <span className="inline-block px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-[9px] text-amber-300 font-mono">
+                            ?p={convertingPromo}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <h4 className="text-[10px] font-black uppercase text-white/40 tracking-widest mb-1 pt-2">
               Хронологія шляху клієнта
             </h4>
+
             {history.map((touch: any, idx: number) => {
               const isPaidCourse = touch.status === "Купив курс";
               const isTripwire = touch.status === "Купив(-ла) Трипвайер";
