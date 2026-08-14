@@ -820,11 +820,107 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
       }
     });
 
-    const hasPayment = normalizedGroupLeads.some((o: any) => o.status === "Купив курс" || o.status === "Купив(-ла) Трипвайер" || o.amount > 0);
-    const hasCheckout = normalizedGroupLeads.some(
-      (o: any) => o.status === "⏳ Очікується оплата" || (o.order_id && !o.order_id.startsWith("ELT_ORD_")) || o.metadata?.payment_intent
-    );
+    // 1. Precise Payment & Checkout Intent Detection
+    const totalPaidAmount = usdCoursePaid + uahCoursePaid + eurCoursePaid + usdTripwirePaid + uahTripwirePaid + eurTripwirePaid;
+    const hasPayment = totalPaidAmount > 0 || normalizedGroupLeads.some((o: any) => {
+      const norm = statusMapper.normalize(o.status);
+      return norm === "closed_won" || o.status === "Купив курс" || o.status === "Купив(-ла) Трипвайер";
+    });
+
+    const hasCheckout = normalizedGroupLeads.some((o: any) => {
+      const norm = statusMapper.normalize(o.status);
+      const isPaidStatus = norm === "closed_won" || o.status === "Купив курс" || o.status === "Купив(-ла) Трипвайер";
+      if (isPaidStatus) return false;
+
+      const amt = Number(o.amount || 0);
+      const s = String(o.status || "").toLowerCase();
+      const meta = o.metadata || {};
+      const url = String(o.page_url || meta.page_url || "").toLowerCase();
+      
+      const isExplicitCheckoutStatus = 
+        s === "⏳ очікується оплата" || 
+        s === "очікується оплата" || 
+        s === "очікує оплати" || 
+        s.includes("checkout") || 
+        s.includes("кошик");
+
+      const hasPaymentIntentMeta = Boolean(meta.payment_intent || meta.wfp_order_id || meta.mono_invoice_id || meta.checkout_started);
+      const isCheckoutPage = url.includes("/checkout") || url.includes("/pay") || url.includes("/order") || url.includes("wayforpay");
+
+      // An unpaid checkout MUST have an amount > 0 or explicit payment intent/checkout status
+      return (amt > 0 || hasPaymentIntentMeta || isExplicitCheckoutStatus) && (isExplicitCheckoutStatus || hasPaymentIntentMeta || (amt > 0 && isCheckoutPage));
+    });
+
     const isUnpaidIntent = !hasPayment && hasCheckout;
+
+    // 2. Tag Hierarchy Engine (Levels 1, 2, 3)
+    const derivedTagsSet = new Set<string>();
+
+    if (hasPayment) {
+      derivedTagsSet.add("Клієнт");
+      if (usdCoursePaid > 0 || uahCoursePaid > 0 || eurCoursePaid > 0) derivedTagsSet.add("Оплачено: Курс");
+      if (usdTripwirePaid > 0 || uahTripwirePaid > 0 || eurTripwirePaid > 0) derivedTagsSet.add("Оплачено: Трипваєр");
+    }
+
+    if (isUnpaidIntent) {
+      derivedTagsSet.add("Кинув кошик");
+    }
+
+    // Check for diagnostic / questionnaire form lead
+    const hasDiagnosticForm = normalizedGroupLeads.some((o: any) => {
+      const meta = o.metadata || {};
+      const raw = meta.raw_row || {};
+      const path = o.page_path || raw.page_path || "";
+      const url = o.page_url || raw.page_url || "";
+      const origSheet = meta.original_sheet || raw.original_sheet || "";
+      return path === "/rozbir" || url.toLowerCase().includes("/rozbir") || origSheet === "Розбір (Old)" || origSheet === "Ленд 3" || raw.request || meta.request || raw.purpose || raw.niche;
+    });
+
+    if (hasDiagnosticForm) {
+      derivedTagsSet.add("Залишив заявку");
+      derivedTagsSet.add("Анкета розбору");
+    }
+
+    // Free registration check
+    const hasFreeRegistration = normalizedGroupLeads.some((o: any) => {
+      const amt = Number(o.amount || 0);
+      const s = String(o.status || "").toLowerCase();
+      return amt === 0 && (s === "новий лід" || s === "зареєстровано" || s === "pending" || s === "new" || !s);
+    });
+
+    if (hasFreeRegistration && !hasPayment && !hasDiagnosticForm && !isUnpaidIntent) {
+      derivedTagsSet.add("Зареєструвався");
+      derivedTagsSet.add("Безкоштовна реєстрація");
+    }
+
+    if (isMultiSource) {
+      derivedTagsSet.add("Мульти-канал");
+    }
+
+    // Level 2: Visited Landings
+    visitedLandings.forEach((landUrl) => {
+      let cleanLand = landUrl.replace(/^https?:\/\/[^\/]+/, "").replace(/\/$/, "");
+      if (!cleanLand || cleanLand === "/") cleanLand = "/головна";
+      derivedTagsSet.add(`Лендинг: ${cleanLand}`);
+    });
+
+    // Level 3: Product-specific actions
+    normalizedGroupLeads.forEach((o: any) => {
+      const amt = Number(o.amount || 0);
+      const prodName = o.metadata?.leadData?.course || o.metadata?.lead?.leadData?.course || o.metadata?.target_sheet || o.metadata?.lead?.target_sheet || "";
+      const norm = statusMapper.normalize(o.status);
+      const isPaidOrder = norm === "closed_won" || o.status === "Купив курс" || o.status === "Купив(-ла) Трипвайер";
+
+      if (amt > 0 && prodName) {
+        if (!isPaidOrder && !hasPayment) {
+          derivedTagsSet.add(`Кинув кошик: ${prodName}`);
+        } else if (isPaidOrder) {
+          derivedTagsSet.add(`Придбано: ${prodName}`);
+        }
+      }
+    });
+
+    const leadTags = Array.from(derivedTagsSet);
 
     return {
       project_id: projectId,
@@ -836,6 +932,7 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
       telegram: primaryLead.telegram || "",
       email: primaryLead.email || "",
       status: finalStatus,
+      tags: leadTags,
       page_path,
       page_url,
       touch_count: normalizedGroupLeads.length,

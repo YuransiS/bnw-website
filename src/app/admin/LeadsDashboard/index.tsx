@@ -15,6 +15,7 @@ import {
   XCircle,
   ChevronDown,
   Wallet,
+  Globe,
   Plus
 } from "lucide-react";
 
@@ -46,6 +47,7 @@ import LeadsTab from "./tabs/LeadsTab";
 import QuizzesTab from "./tabs/QuizzesTab";
 import DiagnosticsTab from "./tabs/DiagnosticsTab";
 import FunnelsTab from "./tabs/FunnelsTab";
+import LandingsRegistryTab from "./tabs/LandingsRegistryTab";
 import FinanceDashboardTab from "./tabs/FinanceDashboardTab";
 import FinanceExpertTab from "./tabs/FinanceExpertTab";
 import CashflowFeed from "./components/CashflowFeed";
@@ -844,6 +846,24 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           </button>
         )}
 
+        {/* Landings & Satellites Registry Tab */}
+        {["admin", "superman", "founder", "developer", "cell_leader", "producer"].includes(role) && (
+          <button
+            onClick={() => setActiveTab("landings_registry")}
+            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
+              activeTab === "landings_registry"
+                ? isLight
+                  ? "bg-neutral-900 text-white shadow-sm"
+                  : "bg-white text-black shadow-lg"
+                : isLight
+                ? "text-neutral-500 hover:text-neutral-900"
+                : "text-white/40 hover:text-white"
+            }`}
+          >
+            <Globe className="w-4 h-4 text-emerald-450" />🌐 Сателіти & Лендінги
+          </button>
+        )}
+
         {/* Project Analytics Tab - Superman & Producer */}
         {viewType === "single" && (role === "admin" || role === "superman" || role === "producer") && (
           <button
@@ -1196,6 +1216,13 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             totalCount={totalCount}
             isDevMode={isDevMode}
             openLeadModal={openLeadModal}
+          />
+        )}
+
+        {activeTab === "landings_registry" && (
+          <LandingsRegistryTab
+            activeSlug={activeSlug}
+            allowedProjects={dashboardData.allowedProjects || []}
           />
         )}
       </div>

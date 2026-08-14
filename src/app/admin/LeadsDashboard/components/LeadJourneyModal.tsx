@@ -163,6 +163,43 @@ export default function LeadJourneyModal({
               activeModalTab === "journey" ? "flex flex-col flex-grow" : "hidden"
             }`}
           >
+            {/* Tag Hierarchy Card */}
+            {((lead.tags && lead.tags.length > 0) || (lead as any).tags) && (
+              <div className="bg-white/[0.02] border border-white/10 rounded-2xl p-4 space-y-2 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase text-emerald-400 tracking-widest flex items-center gap-1.5">
+                    🏷️ Ієрархія Тегів Ліда
+                  </span>
+                  <span className="text-[9px] font-bold text-white/40">
+                    Тегів: {(lead.tags || (lead as any).tags || []).length}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {(lead.tags || (lead as any).tags || []).map((tag: string) => {
+                    let badgeStyle = "bg-neutral-500/10 text-neutral-300 border-neutral-500/20";
+                    if (tag.includes("Оплачено") || tag === "Клієнт" || tag.includes("Придбано")) {
+                      badgeStyle = "bg-emerald-500/15 text-emerald-400 border-emerald-500/30 font-bold";
+                    } else if (tag.includes("Кинув кошик")) {
+                      badgeStyle = "bg-rose-500/15 text-rose-400 border-rose-500/30 font-bold";
+                    } else if (tag.includes("Залишив заявку") || tag.includes("Анкета")) {
+                      badgeStyle = "bg-blue-500/15 text-blue-400 border-blue-500/30 font-bold";
+                    } else if (tag.includes("Зареєструвався") || tag.includes("Безкоштовна")) {
+                      badgeStyle = "bg-cyan-500/15 text-cyan-400 border-cyan-500/30 font-bold";
+                    } else if (tag.includes("Лендинг")) {
+                      badgeStyle = "bg-indigo-500/15 text-indigo-300 border-indigo-500/30 font-semibold";
+                    } else if (tag.includes("Мульти-канал")) {
+                      badgeStyle = "bg-purple-500/15 text-purple-400 border-purple-500/30 font-semibold";
+                    }
+                    return (
+                      <span key={tag} className={`px-2.5 py-1 rounded-lg text-[10px] border ${badgeStyle}`}>
+                        {tag}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* 360 Multi-Touch Attribution Card */}
             {history.length > 0 && (() => {
               const firstTouch = history[0];

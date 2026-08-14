@@ -301,8 +301,7 @@ export async function GET(req: Request) {
           spend: spend,
           spend_usd: Number(spendUsd.toFixed(2)),
           spend_uah: Number(spendUah.toFixed(2)),
-          spend_eur: Number(spendEur.toFixed(2)),
-          funnel_id: resolvedFunnelId
+          spend_eur: Number(spendEur.toFixed(2))
         });
 
         summary[slug] = (summary[slug] || 0) + spend;

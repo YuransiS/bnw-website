@@ -587,6 +587,7 @@ async function handleQueryLeads(request: Request) {
         isUnpaidIntent: lead.is_unpaid_intent || false,
         visitedLandings: lead.visited_landings || [],
         isMultiSource: lead.is_multi_source || false,
+        tags: lead.tags || [],
         createdAt: lead.created_at,
         visitor_uuid: lead.visitor_uuid
       };

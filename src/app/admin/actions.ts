@@ -996,6 +996,7 @@ export async function getUnifiedCRMData(
         isUnpaidIntent: lead.is_unpaid_intent || false,
         visitedLandings: lead.visited_landings || [],
         isMultiSource: lead.is_multi_source || false,
+        tags: lead.tags || [],
         createdAt: lead.created_at,
         visitor_uuid: lead.visitor_uuid
       };
@@ -2713,4 +2714,146 @@ export async function getGlobalTaskLogsAction() {
     return { error: err.message || "Failed to fetch global task logs" };
   }
 }
+
+/**
+ * Pings all satellite websites live, queries /api/v1/discovery or root domains,
+ * discovers all routes/landings, and updates project status.
+ */
+export async function pingAllProjectsAction() {
+  try {
+    const supabase = await createClient();
+    const adminSupabase = createAdminClient();
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Unauthorized");
+
+    const { data: projects, error: projErr } = await adminSupabase
+      .from("projects")
+      .select("id, name, slug, is_active, cell_id");
+
+    if (projErr) throw projErr;
+
+    const { DEFAULT_PROJECT_LANDINGS } = await import("@/lib/projectLandings");
+
+    const results = [];
+
+    for (const proj of projects || []) {
+      const slug = proj.slug;
+      const defaultLandings = DEFAULT_PROJECT_LANDINGS[slug] || [];
+      const rootUrl = defaultLandings[0]?.url || `https://${slug.replace(/_/g, "-")}.vercel.app`;
+      const domain = rootUrl.replace(/\/$/, "");
+
+      const start = performance.now();
+      let isLive = false;
+      let discoveredPages: any[] = [];
+      let message = "";
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+        let res = await fetch(`${domain}/api/v1/discovery`, {
+          signal: controller.signal,
+          headers: { "User-Agent": "BnW-CRM-Discovery/1.0" }
+        });
+
+        if (!res.ok && res.status === 404) {
+          res = await fetch(`${domain}/api/discovery`, {
+            signal: controller.signal,
+            headers: { "User-Agent": "BnW-CRM-Discovery/1.0" }
+          });
+        }
+
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const data = await res.json();
+          isLive = true;
+          if (Array.isArray(data.pages)) {
+            discoveredPages = data.pages;
+          }
+          message = `Discovery OK (HTTP ${res.status})`;
+        } else {
+          const pingRes = await fetch(domain, { method: "HEAD", signal: AbortSignal.timeout(3500) });
+          if (pingRes.ok || pingRes.status < 500) {
+            isLive = true;
+            message = `Domain alive (HTTP ${pingRes.status})`;
+          } else {
+            message = `HTTP ${pingRes.status}`;
+          }
+        }
+      } catch (err: any) {
+        try {
+          const pingRes = await fetch(domain, { method: "HEAD", signal: AbortSignal.timeout(3500) });
+          if (pingRes.ok || pingRes.status < 500) {
+            isLive = true;
+            message = `Domain alive (HTTP ${pingRes.status})`;
+          } else {
+            message = `Ping failed: ${err.name === "AbortError" ? "Timeout" : err.message}`;
+          }
+        } catch (subErr: any) {
+          message = `Failed: ${err.name === "AbortError" ? "Timeout" : err.message}`;
+        }
+      }
+
+      const latencyMs = Math.round(performance.now() - start);
+
+      // Save discovered landings into DB if available
+      if (isLive && discoveredPages.length > 0) {
+        for (const p of discoveredPages) {
+          const rawPath = p.path || p.url || "/";
+          let normalizedPath = rawPath;
+          if (rawPath.startsWith("http")) {
+            try {
+              normalizedPath = new URL(rawPath).pathname;
+            } catch {
+              normalizedPath = rawPath;
+            }
+          }
+          if (!normalizedPath.startsWith("/")) normalizedPath = "/" + normalizedPath;
+          normalizedPath = normalizedPath.toLowerCase();
+
+          try {
+            await adminSupabase.from("project_landings").upsert({
+              project_id: proj.id,
+              label: p.label || normalizedPath,
+              url: p.url || `${domain}${normalizedPath}`,
+              path: normalizedPath,
+              type: p.type || "free",
+              badge_color: p.badgeColor || "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+              parameters: p.parameters || [],
+              is_active: true,
+              last_ping_at: new Date().toISOString()
+            }, { onConflict: "project_id,path" });
+          } catch (landErr) {
+            // Non-blocking fallback
+          }
+        }
+      }
+
+      results.push({
+        id: proj.id,
+        slug,
+        name: proj.name,
+        domain,
+        isLive,
+        status: isLive ? "live" : "unresponsive",
+        latencyMs,
+        discoveredCount: discoveredPages.length || defaultLandings.length,
+        landings: discoveredPages.length > 0 ? discoveredPages : defaultLandings,
+        message,
+        lastPingAt: new Date().toISOString()
+      });
+    }
+
+    return {
+      success: true,
+      timestamp: new Date().toISOString(),
+      results
+    };
+  } catch (err: any) {
+    return { error: err.message || "Failed to ping projects" };
+  }
+}
+
 

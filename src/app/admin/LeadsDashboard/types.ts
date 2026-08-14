@@ -51,6 +51,7 @@ export interface LeadItem {
   isUnpaidIntent?: boolean;
   visitedLandings?: string[];
   isMultiSource?: boolean;
+  tags?: string[];
   createdAt: string;
   visitor_uuid?: string | null;
   customerId?: string | null;

@@ -432,16 +432,29 @@ export const LeadsTab = React.memo(function LeadsTab({
                       }}
                       className={`${tableRowClass} cursor-pointer transition-all hover:bg-emerald-500/[0.02]`}
                     >
-                      {/* Client name and ID */}
+                      {/* Client name, ID and Tags */}
                       <td className="p-4">
-                        <div className="font-extrabold text-sm flex items-center gap-1.5">
+                        <div className="font-extrabold text-sm flex flex-wrap items-center gap-1.5">
                           <span className={isLight ? "text-neutral-900" : "text-white"}>{lead.name}</span>
-                          {lead.isMultiSource && (
-                            <span className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                              Мульти-канал
-                            </span>
-                          )}
-                          {isUnpaidIntent && (
+                          {(lead.tags || (lead as any).tags || []).slice(0, 3).map((tag: string) => {
+                            if (tag.includes("Оплачено") || tag === "Клієнт") {
+                              return <span key={tag} className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{tag}</span>;
+                            }
+                            if (tag.includes("Кинув кошик")) {
+                              return <span key={tag} className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-red-500/10 text-red-400 border border-red-500/20">{tag}</span>;
+                            }
+                            if (tag.includes("Залишив заявку") || tag.includes("Анкета")) {
+                              return <span key={tag} className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20">{tag}</span>;
+                            }
+                            if (tag.includes("Зареєструвався") || tag.includes("Безкоштовна")) {
+                              return <span key={tag} className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">{tag}</span>;
+                            }
+                            if (tag.includes("Мульти-канал")) {
+                              return <span key={tag} className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-purple-500/10 text-purple-400 border border-purple-500/20">{tag}</span>;
+                            }
+                            return <span key={tag} className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-neutral-500/10 text-neutral-400 border border-neutral-500/20">{tag}</span>;
+                          })}
+                          {(!lead.tags || lead.tags.length === 0) && isUnpaidIntent && (
                             <span className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-red-500/10 text-red-400 border border-red-500/20">
                               Кинув кошик
                             </span>
@@ -453,23 +466,6 @@ export const LeadsTab = React.memo(function LeadsTab({
                             >
                               Без імені
                             </span>
-                          )}
-                          {funnels && funnels.length > 0 && (
-                            (lead as any).funnelName ? (
-                              <span 
-                                className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-emerald-500/10 text-emerald-450 border border-emerald-500/20"
-                                title={`Воронка: ${(lead as any).funnelName}`}
-                              >
-                                {(lead as any).funnelName}
-                              </span>
-                            ) : (
-                              <span 
-                                className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-yellow-500/10 text-yellow-500 border border-yellow-500/20"
-                                title="Цей лід не прикріплений до жодної воронки (Tracking Error)"
-                              >
-                                ⚠️ Без воронки
-                              </span>
-                            )
                           )}
                         </div>
                         <div
@@ -615,16 +611,21 @@ export const LeadsTab = React.memo(function LeadsTab({
                         }`}
                       >
                         {lead.name}
-                        {lead.isMultiSource && (
-                          <span className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                            Мульти-канал
-                          </span>
-                        )}
-                        {isUnpaidIntent && (
-                          <span className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-red-500/10 text-red-400 border border-red-500/20">
-                            Кинув кошик
-                          </span>
-                        )}
+                        {(lead.tags || (lead as any).tags || []).slice(0, 3).map((tag: string) => {
+                          if (tag.includes("Оплачено") || tag === "Клієнт") {
+                            return <span key={tag} className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{tag}</span>;
+                          }
+                          if (tag.includes("Кинув кошик")) {
+                            return <span key={tag} className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-red-500/10 text-red-400 border border-red-500/20">{tag}</span>;
+                          }
+                          if (tag.includes("Залишив заявку") || tag.includes("Анкета")) {
+                            return <span key={tag} className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20">{tag}</span>;
+                          }
+                          if (tag.includes("Зареєструвався") || tag.includes("Безкоштовна")) {
+                            return <span key={tag} className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">{tag}</span>;
+                          }
+                          return <span key={tag} className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-purple-500/10 text-purple-400 border border-purple-500/20">{tag}</span>;
+                        })}
                       </h3>
                       <div
                         className={`text-[10px] ${textMutedClass} font-semibold truncate max-w-[200px]`}
@@ -734,37 +735,102 @@ export const LeadsTab = React.memo(function LeadsTab({
         </div>
 
         {/* Pagination controls */}
-        {totalCount > pageSize && (
-          <div className={`flex justify-between items-center p-4 border-t ${borderClass}`}>
-            <span className={`text-[11px] font-black uppercase ${textMutedClass}`}>
-              Показано {Math.min((currentPage - 1) * pageSize + 1, totalCount)}—{Math.min(currentPage * pageSize, totalCount)} із {totalCount} лідів
-            </span>
-            <div className="flex gap-2">
-              <button
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all disabled:opacity-30 ${
-                  isLight
-                    ? "border-neutral-200 hover:bg-neutral-100 disabled:hover:bg-transparent"
-                    : "border-white/10 hover:bg-white/5 disabled:hover:bg-transparent"
-                }`}
-              >
-                Назад
-              </button>
-              <button
-                disabled={currentPage * pageSize >= totalCount}
-                onClick={() => setCurrentPage((prev) => prev + 1)}
-                className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all disabled:opacity-30 ${
-                  isLight
-                    ? "border-neutral-200 hover:bg-neutral-100 disabled:hover:bg-transparent"
-                    : "border-white/10 hover:bg-white/5 disabled:hover:bg-transparent"
-                }`}
-              >
-                Вперед
-              </button>
+        {totalCount > pageSize && (() => {
+          const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+          const maxVisiblePages = 5;
+          let startPage = Math.max(1, currentPage - 2);
+          let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+          if (endPage - startPage < maxVisiblePages - 1) {
+            startPage = Math.max(1, endPage - maxVisiblePages + 1);
+          }
+          const pageNumbers = [];
+          for (let p = startPage; p <= endPage; p++) {
+            pageNumbers.push(p);
+          }
+
+          return (
+            <div className={`flex flex-col sm:flex-row justify-between items-center gap-3 p-4 border-t ${borderClass}`}>
+              <div className="flex items-center gap-2">
+                <span className={`text-[11px] font-black uppercase ${textMutedClass}`}>
+                  Показано {Math.min((currentPage - 1) * pageSize + 1, totalCount)}—{Math.min(currentPage * pageSize, totalCount)} із {totalCount} лідів
+                </span>
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  Стор. {currentPage} з {totalPages}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {/* First Page */}
+                <button
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(1)}
+                  className={`px-2 py-1 rounded-lg border text-xs font-bold transition-all disabled:opacity-30 ${
+                    isLight
+                      ? "border-neutral-200 hover:bg-neutral-100 disabled:hover:bg-transparent text-neutral-600"
+                      : "border-white/10 hover:bg-white/5 disabled:hover:bg-transparent text-white/60"
+                  }`}
+                  title="Перша сторінка"
+                >
+                  ««
+                </button>
+                {/* Prev Page */}
+                <button
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                  className={`px-3 py-1 rounded-lg border text-xs font-bold transition-all disabled:opacity-30 ${
+                    isLight
+                      ? "border-neutral-200 hover:bg-neutral-100 disabled:hover:bg-transparent text-neutral-800"
+                      : "border-white/10 hover:bg-white/5 disabled:hover:bg-transparent text-white"
+                  }`}
+                >
+                  Назад
+                </button>
+
+                {/* Numeric Page Buttons */}
+                {pageNumbers.map((num) => (
+                  <button
+                    key={num}
+                    onClick={() => setCurrentPage(num)}
+                    className={`min-w-[32px] h-7 px-2 rounded-lg text-xs font-black transition-all ${
+                      num === currentPage
+                        ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
+                        : isLight
+                        ? "border border-neutral-200 hover:bg-neutral-100 text-neutral-700"
+                        : "border border-white/10 hover:bg-white/5 text-white/70"
+                    }`}
+                  >
+                    {num}
+                  </button>
+                ))}
+
+                {/* Next Page */}
+                <button
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                  className={`px-3 py-1 rounded-lg border text-xs font-bold transition-all disabled:opacity-30 ${
+                    isLight
+                      ? "border-neutral-200 hover:bg-neutral-100 disabled:hover:bg-transparent text-neutral-800"
+                      : "border-white/10 hover:bg-white/5 disabled:hover:bg-transparent text-white"
+                  }`}
+                >
+                  Вперед
+                </button>
+                {/* Last Page */}
+                <button
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage(totalPages)}
+                  className={`px-2 py-1 rounded-lg border text-xs font-bold transition-all disabled:opacity-30 ${
+                    isLight
+                      ? "border-neutral-200 hover:bg-neutral-100 disabled:hover:bg-transparent text-neutral-600"
+                      : "border-white/10 hover:bg-white/5 disabled:hover:bg-transparent text-white/60"
+                  }`}
+                  title="Остання сторінка"
+                >
+                  »»
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );
