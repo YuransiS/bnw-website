@@ -1,5 +1,3 @@
-import { createAdminClient } from "@/utils/supabase/server";
-
 export interface LandingParam {
   key: string;
   description?: string;
@@ -76,35 +74,3 @@ export const DEFAULT_PROJECT_LANDINGS: Record<string, ProjectLandingItem[]> = {
   ]
 };
 
-/**
- * Fetches dynamic project landings from Supabase. Falls back to static defaults if DB is empty or offline.
- */
-export async function getProjectLandings(projectSlug: string): Promise<ProjectLandingItem[]> {
-  try {
-    const supabaseAdmin = createAdminClient();
-    const { data: dbLandings, error } = await supabaseAdmin
-      .from("project_landings")
-      .select("*, projects!inner(slug)")
-      .eq("projects.slug", projectSlug)
-      .eq("is_active", true)
-      .order("created_at", { ascending: true });
-
-    if (!error && dbLandings && dbLandings.length > 0) {
-      return dbLandings.map((item: Record<string, unknown>) => ({
-        id: item.id as string,
-        label: (item.label || item.path) as string,
-        url: item.url as string,
-        path: item.path as string,
-        badgeColor: (item.badge_color || "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20") as string,
-        type: (item.type || "free") as "free" | "paid" | "quiz" | "thank_you" | "other",
-        parameters: Array.isArray(item.parameters) ? (item.parameters as Array<{ key: string; description?: string }>) : [],
-        lastPingAt: item.last_ping_at as string | undefined
-      }));
-    }
-  } catch (err) {
-
-    console.warn(`[getProjectLandings] Failed to query DB for ${projectSlug}:`, err);
-  }
-
-  return DEFAULT_PROJECT_LANDINGS[projectSlug] || [];
-}
