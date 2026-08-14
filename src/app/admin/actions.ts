@@ -66,13 +66,13 @@ export async function getSessionAndAccess(selectedProjectSlug?: string) {
   const isCellLeader = profile.role === "cell_leader";
 
   // Fetch allowed projects mapping
-  let allowedProjects: { id: string; name: string; slug: string }[] = [];
+  let allowedProjects: { id: string; name: string; slug: string; cell_id?: string | null; default_currency?: string; expert_share_percent?: number }[] = [];
 
   if (isSuperman) {
     // Superman role sees all active projects without checking profile_projects mapping and RLS
     const { data: allProj } = await adminSupabase
       .from("projects")
-      .select("id, name, slug, is_active")
+      .select("id, name, slug, is_active, cell_id, default_currency, expert_share_percent")
       .order("name");
     const projectsList = allProj || [];
 
@@ -88,7 +88,7 @@ export async function getSessionAndAccess(selectedProjectSlug?: string) {
     if (cellIds.length > 0) {
       const { data: cellProj } = await adminSupabase
         .from("projects")
-        .select("id, name, slug, is_active")
+        .select("id, name, slug, is_active, cell_id, default_currency, expert_share_percent")
         .in("cell_id", cellIds)
         .order("name");
       const projectsList = cellProj || [];
@@ -97,7 +97,7 @@ export async function getSessionAndAccess(selectedProjectSlug?: string) {
   } else {
     const { data } = await supabase
       .from("profile_projects")
-      .select("projects(id, name, slug, is_active)")
+      .select("projects(id, name, slug, is_active, cell_id, default_currency, expert_share_percent)")
       .eq("profile_id", user.id);
 
     allowedProjects = (data || [])
