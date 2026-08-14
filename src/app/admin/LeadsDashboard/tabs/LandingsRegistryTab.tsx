@@ -11,20 +11,24 @@ import {
   Activity,
   Layers,
   Sparkles,
+  Settings,
   Link as LinkIcon
 } from "lucide-react";
 import { useTheme } from "../../ThemeProvider";
 import { pingAllProjectsAction } from "../../actions";
 import { DEFAULT_PROJECT_LANDINGS } from "@/lib/projectLandings";
+import ProjectSettingsModal from "../components/ProjectSettingsModal";
 
 interface LandingsRegistryTabProps {
   activeSlug: string;
   allowedProjects: any[];
+  userRole?: string;
 }
 
 export default function LandingsRegistryTab({
   activeSlug,
-  allowedProjects
+  allowedProjects,
+  userRole = "admin"
 }: LandingsRegistryTabProps) {
   const { theme } = useTheme();
   const isLight = theme === "light";
@@ -33,6 +37,7 @@ export default function LandingsRegistryTab({
   const [pingResults, setPingResults] = useState<any[]>([]);
   const [lastPingTime, setLastPingTime] = useState<string | null>(null);
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
+  const [selectedProjectForSettings, setSelectedProjectForSettings] = useState<any | null>(null);
 
   // Initialize with allowed projects and static defaults
   useEffect(() => {
@@ -44,6 +49,9 @@ export default function LandingsRegistryTab({
         id: p.id,
         slug,
         name: p.name,
+        cell_id: p.cell_id,
+        default_currency: p.default_currency || "UAH",
+        expert_share_percent: p.expert_share_percent ?? 50,
         domain: rootUrl.replace(/\/$/, ""),
         isLive: true,
         status: "live",
@@ -273,14 +281,43 @@ export default function LandingsRegistryTab({
               {/* Card Footer status info */}
               <div className="pt-3 border-t border-crm-border flex items-center justify-between text-[10px] text-crm-muted">
                 <span>{project.message || "Очікує пінг"}</span>
-                {project.lastPingAt && (
-                  <span>Пінг: {new Date(project.lastPingAt).toLocaleTimeString("uk-UA")}</span>
-                )}
+                <div className="flex items-center gap-2">
+                  {["admin", "superman", "founder", "developer"].includes(userRole) && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedProjectForSettings(project)}
+                      className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 hover:text-crm-text text-crm-muted flex items-center gap-1 font-bold transition-all"
+                      title="Налаштування проекту"
+                    >
+                      <Settings className="w-3 h-3" />
+                      Налаштування
+                    </button>
+                  )}
+                  {project.lastPingAt && (
+                    <span>Пінг: {new Date(project.lastPingAt).toLocaleTimeString("uk-UA")}</span>
+                  )}
+                </div>
               </div>
             </div>
           );
         })}
       </div>
+
+      {/* Project Settings Modal */}
+      {selectedProjectForSettings && (
+        <ProjectSettingsModal
+          isOpen={!!selectedProjectForSettings}
+          onClose={() => setSelectedProjectForSettings(null)}
+          project={selectedProjectForSettings}
+          userRole={userRole}
+          onProjectUpdated={(updated) => {
+            setPingResults((prev) =>
+              prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p))
+            );
+            setSelectedProjectForSettings(null);
+          }}
+        />
+      )}
     </div>
   );
 }

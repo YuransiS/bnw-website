@@ -2856,4 +2856,191 @@ export async function pingAllProjectsAction() {
   }
 }
 
+/**
+ * Updates official project settings (name, cell_id, is_active, etc.)
+ */
+export async function updateProjectSettingsAction(
+  projectId: string,
+  payload: {
+    name?: string;
+    cell_id?: string | null;
+    is_active?: boolean;
+    default_currency?: string;
+    target_currency?: string;
+    expert_share_percent?: number;
+  }
+) {
+  try {
+    const supabase = await createClient();
+    const adminSupabase = createAdminClient();
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Unauthorized");
+
+    const { data: profile } = await adminSupabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile || !["admin", "superman", "founder", "developer"].includes(profile.role)) {
+      throw new Error("Only developers and founders can update project settings");
+    }
+
+    const { data: updated, error } = await adminSupabase
+      .from("projects")
+      .update(payload)
+      .eq("id", projectId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return { success: true, project: updated };
+  } catch (err: any) {
+    return { error: err.message || "Failed to update project settings" };
+  }
+}
+
+/**
+ * Fetches all accessible Meta Ad Accounts via Meta Graph API
+ */
+export async function getMetaAdAccountsAction() {
+  try {
+    const supabase = await createClient();
+    const adminSupabase = createAdminClient();
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Unauthorized");
+
+    const token = process.env.META_ACCESS_TOKEN;
+    if (!token) throw new Error("META_ACCESS_TOKEN is not configured");
+
+    const url = `https://graph.facebook.com/v25.0/me/adaccounts?fields=name,account_id,id,account_status,currency,amount_spent&limit=50&access_token=${token}`;
+    const res = await fetch(url, { next: { revalidate: 300 } });
+    if (!res.ok) {
+      const errBody = await res.json();
+      throw new Error(errBody.error?.message || `Meta API HTTP ${res.status}`);
+    }
+
+    const json = await res.json();
+    const accounts = json.data || [];
+
+    // Also get current mappings from DB
+    const { data: mappings } = await adminSupabase
+      .from("ad_spend_mappings")
+      .select("project_slug, rule_value");
+
+    const mappingMap = new Map((mappings || []).map((m: any) => [m.project_slug, m.rule_value]));
+
+    return {
+      success: true,
+      accounts: accounts.map((acc: any) => ({
+        id: acc.id,
+        accountId: acc.account_id,
+        name: acc.name,
+        currency: acc.currency,
+        amountSpent: acc.amount_spent,
+        status: acc.account_status
+      })),
+      mappings: Object.fromEntries(mappingMap)
+    };
+  } catch (err: any) {
+    return { error: err.message || "Failed to fetch Meta ad accounts" };
+  }
+}
+
+/**
+ * Fetches campaigns for a specific Meta Ad Account
+ */
+export async function getMetaAccountCampaignsAction(adAccountId: string) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Unauthorized");
+
+    const token = process.env.META_ACCESS_TOKEN;
+    if (!token) throw new Error("META_ACCESS_TOKEN is not configured");
+
+    const cleanAccountId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
+    const url = `https://graph.facebook.com/v25.0/${cleanAccountId}/campaigns?fields=id,name,status,effective_status,objective,created_time&limit=50&access_token=${token}`;
+
+    const res = await fetch(url, { next: { revalidate: 60 } });
+    if (!res.ok) {
+      const errBody = await res.json();
+      throw new Error(errBody.error?.message || `Meta API HTTP ${res.status}`);
+    }
+
+    const json = await res.json();
+    const campaigns = (json.data || []).map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      status: c.status,
+      effectiveStatus: c.effective_status,
+      objective: c.objective,
+      createdTime: c.created_time
+    }));
+
+    return { success: true, campaigns };
+  } catch (err: any) {
+    return { error: err.message || "Failed to fetch Meta campaigns" };
+  }
+}
+
+/**
+ * Binds/Links a project to a Meta Ad Account in ad_spend_mappings
+ */
+export async function bindProjectAdAccountAction(projectSlug: string, adAccountId: string) {
+  try {
+    const supabase = await createClient();
+    const adminSupabase = createAdminClient();
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Unauthorized");
+
+    const { data: profile } = await adminSupabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile || !["admin", "superman", "founder", "developer"].includes(profile.role)) {
+      throw new Error("Only developers and founders can bind ad accounts");
+    }
+
+    const cleanAccountId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
+
+    // Check if mapping exists for this slug
+    const { data: existing } = await adminSupabase
+      .from("ad_spend_mappings")
+      .select("id")
+      .eq("project_slug", projectSlug)
+      .maybeSingle();
+
+    if (existing) {
+      const { error: updateErr } = await adminSupabase
+        .from("ad_spend_mappings")
+        .update({ rule_value: cleanAccountId, rule_type: "account" })
+        .eq("id", existing.id);
+
+      if (updateErr) throw updateErr;
+    } else {
+      const { error: insErr } = await adminSupabase
+        .from("ad_spend_mappings")
+        .insert({
+          project_slug: projectSlug,
+          rule_type: "account",
+          rule_value: cleanAccountId
+        });
+
+      if (insErr) throw insErr;
+    }
+
+    return { success: true, projectSlug, adAccountId: cleanAccountId };
+  } catch (err: any) {
+    return { error: err.message || "Failed to bind Meta ad account" };
+  }
+}
+
+
 

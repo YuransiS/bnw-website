@@ -1223,6 +1223,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           <LandingsRegistryTab
             activeSlug={activeSlug}
             allowedProjects={dashboardData.allowedProjects || []}
+            userRole={role}
           />
         )}
       </div>

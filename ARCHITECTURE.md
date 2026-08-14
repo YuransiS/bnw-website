@@ -182,3 +182,23 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
 * **Стандартный хелпер для сателлитов:** `src/lib/bnwSatelliteDiscovery.ts` предоставляет функцию `createDiscoveryHandler()` для быстрого подключения эндпоинта `/api/v1/discovery` в Next.js App Router.
 * **Интерфейс реестра в CRM:** Вкладка `LandingsRegistryTab.tsx` отображает список всех проектов, задержку отклика, индикаторы здоровья (🟢 Live / 🔴 Offline), список обнаруженных страниц с типами и кнопками перехода в 1 клик, а также кнопку ручного пинга всех сайтов холдинга.
 
+---
+
+## 7. Управление проектами и интеграция рекламных кабинетов Meta (Facebook API)
+* **Каталог официальных названий проектов:**
+  - `sofia`: **Софія (Economica)**
+  - `victoria`: **Вікторія Візуал**
+  - `viktoria_chernysh`: **Вікторія Черниш**
+  - `svitlana`: **Світлана Тейп**
+  - `anastasia_sych`: **Анастасія Сич**
+  - `clean_klinom`: **clean.klinom**
+  - `sergiy`: **Сергій Чернявський**
+  - `nesoniaa`: **Nesoniaa**
+  - `bw_main`: **B&W Main**
+* **Модальное окно управления проектом (`ProjectSettingsModal.tsx`):** Доступно ролям `founder`, `developer`, `superman`, `admin`. Позволяет редактировать официальное название, ответственного лидера ячейки, базовую валюту и долю эксперта.
+* **Привязка рекламных кабинетов и стриминг кампаний Meta:**
+  - Функция `getMetaAdAccountsAction()` запрашивает через Meta Graph API (`v25.0`) все доступные рекламные аккаунты.
+  - Функция `bindProjectAdAccountAction()` сохраняет маппинг в таблицу `ad_spend_mappings`.
+  - Функция `getMetaAccountCampaignsAction()` автоматически подтягивает в реальном времени все рекламные кампании (ID, Название, Статус `ACTIVE`/`PAUSED`, Цель `OUTCOME_LEADS`/`OUTCOME_SALES`) для последующей привязки к воронкам и сквозной аналитике.
+
+
