@@ -405,7 +405,7 @@ export default function FunnelsTab({
   // Quick Finish Funnel action
   const handleFinishFunnel = async (funnel: Funnel) => {
     const today = new Date().toISOString().split("T")[0];
-    const confirmFinish = confirm(`Завершити воронку "${funnel.name}" сьогоднішнім числом (${today})?`);
+    const confirmFinish = confirm(`Завершити кампанію / воронку "${funnel.name}" сьогоднішнім числом (${today})?`);
     if (!confirmFinish) return;
 
     try {
@@ -432,7 +432,45 @@ export default function FunnelsTab({
       });
 
       if (res.error) {
-        alert("Не вдалося завершити воронку: " + res.error);
+        alert("Не вдалося завершити кампанію: " + res.error);
+      } else {
+        loadFunnels(funnel.id);
+      }
+    } catch (err: any) {
+      alert("Помилка: " + err.message);
+    }
+  };
+
+  // Re-open Completed Funnel action (remove end_date)
+  const handleReopenFunnel = async (funnel: Funnel) => {
+    const confirmReopen = confirm(`Відновити воронку "${funnel.name}" як активну (зняти дату завершення)?`);
+    if (!confirmReopen) return;
+
+    try {
+      let parsedStages: string[] = [];
+      if (Array.isArray(funnel.stages)) {
+        parsedStages = funnel.stages as string[];
+      } else {
+        const metaStages = funnel.description?.match(/\[Stages:\s*([^\]]+)\]/);
+        if (metaStages && metaStages[1]) {
+          parsedStages = metaStages[1].split(",").map(s => s.trim());
+        }
+      }
+
+      const res = await updateFunnelAction(projectId, funnel.id, {
+        name: funnel.name,
+        startDate: funnel.start_date,
+        endDate: null,
+        campaignIds: funnel.campaign_ids,
+        landingSlugs: funnel.landing_slugs,
+        description: funnel.description,
+        plannedRevenue: funnel.planned_revenue || 0,
+        plannedSpend: funnel.planned_spend || 0,
+        stages: parsedStages
+      });
+
+      if (res.error) {
+        alert("Не вдалося відновити воронку: " + res.error);
       } else {
         loadFunnels(funnel.id);
       }
@@ -747,7 +785,7 @@ export default function FunnelsTab({
                 <div className="space-y-1">
                   <label className="text-[10px] uppercase font-bold text-white/50 flex justify-between">
                     <span>Дата завершення</span>
-                    <span className="text-[8px] text-white/30">(необов'язково)</span>
+                    <span className="text-[9px] text-emerald-400 font-bold">(необов'язково)</span>
                   </label>
                   <input
                     type="date"
@@ -755,6 +793,9 @@ export default function FunnelsTab({
                     onChange={(e) => setEndDate(e.target.value)}
                     className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white"
                   />
+                  <p className="text-[9px] text-white/40 pt-0.5">
+                    Необов'язково. Якщо не вказано — воронка триватиме безперервно до натискання «Завершити кампанію».
+                  </p>
                 </div>
               </div>
 
@@ -1181,13 +1222,21 @@ export default function FunnelsTab({
               </div>
 
               <div className="flex flex-wrap gap-2">
-                {isActive && (
+                {isActive ? (
                   <button
                     type="button"
                     onClick={() => handleFinishFunnel(selectedFunnel)}
                     className="px-3 py-2 bg-emerald-500/10 text-emerald-450 border border-emerald-500/20 hover:bg-emerald-500/25 font-bold rounded-xl flex items-center gap-1.5 cursor-pointer text-xs transition-all"
                   >
-                    <CheckCircle className="w-3.5 h-3.5" /> Завершити воронку
+                    <CheckCircle className="w-3.5 h-3.5" /> Завершити кампанію
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleReopenFunnel(selectedFunnel)}
+                    className="px-3 py-2 bg-white/5 text-white/70 border border-white/10 hover:bg-white/10 font-bold rounded-xl flex items-center gap-1.5 cursor-pointer text-xs transition-all"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Відновити кампанію
                   </button>
                 )}
                 <button
@@ -1658,6 +1707,31 @@ export default function FunnelsTab({
                     </div>
 
                     <div className="flex items-center gap-2">
+                      {isActive ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleFinishFunnel(funnel);
+                          }}
+                          className="px-2.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-bold text-emerald-400 hover:bg-emerald-500/20 cursor-pointer transition-all flex items-center gap-1"
+                          title="Завершити кампанію сьогоднішнім днем"
+                        >
+                          <CheckCircle className="w-3 h-3" /> Завершити кампанію
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleReopenFunnel(funnel);
+                          }}
+                          className="px-2.5 py-1.5 rounded-xl bg-white/5 border border-white/10 text-[10px] font-bold text-white/70 hover:bg-white/10 cursor-pointer transition-all flex items-center gap-1"
+                          title="Відновити активність кампанії"
+                        >
+                          <RefreshCw className="w-3 h-3" /> Відновити
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => setSelectedFunnel(funnel)}
