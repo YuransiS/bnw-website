@@ -4,8 +4,8 @@ import { createAdminClient } from "@/utils/supabase/server";
 import { checkProjectAccess } from "./actions";
 import { rebuildProjectCache } from "@/lib/crmCache";
 
-export const SANDBOX_PROJECT_ID = "e0000000-0000-4000-8000-000000000001";
-export const SANDBOX_PROJECT_SLUG = "sandbox";
+const SANDBOX_PROJECT_ID = "e0000000-0000-4000-8000-000000000001";
+const SANDBOX_PROJECT_SLUG = "sandbox";
 
 /**
  * Seed or reset the entire Sandbox test project with comprehensive, realistic production data.
