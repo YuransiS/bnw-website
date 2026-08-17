@@ -86,14 +86,14 @@ export default function CellDashboardClient({
 
         <div className="flex items-center gap-2 flex-wrap">
           {/* Currency Switcher */}
-          <div className="flex bg-white/5 p-1 rounded-xl border border-white/5 mr-2">
+          <div className="flex bg-neutral-900 p-1 rounded-xl border border-white/10 mr-2">
             {(["UAH", "USD", "EUR"] as const).map((curr) => (
               <button
                 key={curr}
                 onClick={() => setSelectedCurrency(curr)}
                 className={`px-3 py-1.5 text-[10px] font-black rounded-lg cursor-pointer transition-all ${
                   selectedCurrency === curr
-                    ? "bg-white text-black font-black"
+                    ? "bg-emerald-500 text-black shadow-md shadow-emerald-500/20"
                     : "text-white/40 hover:text-white font-bold"
                 }`}
               >
@@ -243,12 +243,12 @@ export default function CellDashboardClient({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {cellProjects.map((proj: any) => (
-                <div key={proj.project_id} className="border border-white/5 bg-white/[0.01] hover:bg-white/[0.03] rounded-xl p-4 transition-all flex flex-col justify-between">
+                <div key={proj.project_id} className="border border-white/10 bg-[#0C0C0F] hover:border-emerald-500/30 rounded-2xl p-5 transition-all flex flex-col justify-between shadow-lg">
                   <div>
                     <div className="flex justify-between items-start">
                       <h3 className="font-black text-sm text-white">{proj.project_name}</h3>
-                      <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                        Number(proj.roi || 0) >= 100 ? "bg-emerald-500/10 text-emerald-400" : "bg-white/5 text-white/40"
+                      <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold border ${
+                        Number(proj.roi || 0) >= 100 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-white/5 text-white/40 border-white/5"
                       }`}>
                         ROI: {Math.round(proj.roi || 0)}%
                       </span>

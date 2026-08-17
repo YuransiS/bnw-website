@@ -11,27 +11,13 @@ const ThemeContext = createContext<{
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [theme] = useState<"dark">("dark");
 
-  useEffect(() => {
-    const savedTheme = localStorage.getItem("crm-theme") as "dark" | "light";
-    if (savedTheme) {
-      setTheme(savedTheme);
-    } else {
-      const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      setTheme(isDark ? "dark" : "light");
-    }
-  }, []);
-
-  const toggleTheme = () => {
-    const newTheme = theme === "dark" ? "light" : "dark";
-    setTheme(newTheme);
-    localStorage.setItem("crm-theme", newTheme);
-  };
+  const toggleTheme = () => {};
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
-      <div className={`admin-layout-root w-full min-h-screen bg-crm-bg text-crm-text flex flex-col font-sans transition-all duration-200 ${theme === "light" ? "theme-light" : ""}`}>
+    <ThemeContext.Provider value={{ theme: "dark", toggleTheme }}>
+      <div className="admin-layout-root w-full min-h-screen bg-crm-bg text-crm-text flex flex-col font-sans">
         {children}
       </div>
     </ThemeContext.Provider>

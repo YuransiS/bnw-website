@@ -80,7 +80,7 @@ export default function FounderDashboardClient({
             <button
               onClick={() => setCurrency("USD")}
               className={`px-3 py-1 text-[10px] font-black rounded-lg transition-all cursor-pointer ${
-                currency === "USD" ? "bg-white text-black shadow-sm" : "text-white/40 hover:text-white"
+                currency === "USD" ? "bg-emerald-500 text-black shadow-sm" : "text-white/40 hover:text-white"
               }`}
             >
               $ USD

@@ -739,7 +739,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             <button
               onClick={() => setGlobalCurrency("USD")}
               className={`px-3 py-1 text-[10px] font-black rounded-lg transition-all cursor-pointer ${
-                globalCurrency === "USD" ? "bg-white text-black shadow-sm" : "text-white/40 hover:text-white"
+                globalCurrency === "USD" ? "bg-emerald-500 text-black shadow-sm" : "text-white/40 hover:text-white"
               }`}
             >
               $ USD
@@ -815,12 +815,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             onClick={() => setActiveTab("hub")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
               activeTab === "hub"
-                ? isLight
-                  ? "bg-neutral-900 text-white shadow-sm"
-                  : "bg-white text-black shadow-lg"
-                : isLight
-                ? "text-neutral-500 hover:text-neutral-900"
-                : "text-white/40 hover:text-white"
+                ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
+                : "text-white/40 hover:text-white hover:bg-white/5"
             }`}
           >
             <Layers className="w-4 h-4" />
@@ -834,12 +830,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             onClick={() => setActiveTab("leaderboard")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
               activeTab === "leaderboard"
-                ? isLight
-                  ? "bg-neutral-900 text-white shadow-sm"
-                  : "bg-white text-black shadow-lg"
-                : isLight
-                ? "text-neutral-500 hover:text-neutral-900"
-                : "text-white/40 hover:text-white"
+                ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
+                : "text-white/40 hover:text-white hover:bg-white/5"
             }`}
           >
             <Users className="w-4 h-4" />🏆 Лідери ОП
@@ -852,15 +844,11 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             onClick={() => setActiveTab("landings_registry")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
               activeTab === "landings_registry"
-                ? isLight
-                  ? "bg-neutral-900 text-white shadow-sm"
-                  : "bg-white text-black shadow-lg"
-                : isLight
-                ? "text-neutral-500 hover:text-neutral-900"
-                : "text-white/40 hover:text-white"
+                ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
+                : "text-white/40 hover:text-white hover:bg-white/5"
             }`}
           >
-            <Globe className="w-4 h-4 text-emerald-450" />🌐 Сателіти & Лендінги
+            <Globe className="w-4 h-4" />🌐 Сателіти & Лендінги
           </button>
         )}
 
@@ -870,12 +858,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             onClick={() => setActiveTab("analytics")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
               activeTab === "analytics"
-                ? isLight
-                  ? "bg-neutral-900 text-white shadow-sm"
-                  : "bg-white text-black shadow-lg"
-                : isLight
-                ? "text-neutral-500 hover:text-neutral-900"
-                : "text-white/40 hover:text-white"
+                ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
+                : "text-white/40 hover:text-white hover:bg-white/5"
             }`}
           >
             <BarChart4 className="w-4 h-4" />
@@ -889,12 +873,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             onClick={() => setActiveTab("traffic")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
               activeTab === "traffic"
-                ? isLight
-                  ? "bg-neutral-900 text-white shadow-sm"
-                  : "bg-white text-black shadow-lg"
-                : isLight
-                ? "text-neutral-500 hover:text-neutral-900"
-                : "text-white/40 hover:text-white"
+                ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
+                : "text-white/40 hover:text-white hover:bg-white/5"
             }`}
           >
             <Activity className="w-4 h-4 text-emerald-450" />🚥 Трафік
@@ -907,12 +887,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             onClick={() => setActiveTab("quizzes")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
               activeTab === "quizzes"
-                ? isLight
-                  ? "bg-neutral-900 text-white shadow-sm"
-                  : "bg-white text-black shadow-lg"
-                : isLight
-                ? "text-neutral-500 hover:text-neutral-900"
-                : "text-white/40 hover:text-white"
+                ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
+                : "text-white/40 hover:text-white hover:bg-white/5"
             }`}
           >
             <ClipboardCheck className="w-4 h-4 text-emerald-455" />📋 Заявки
@@ -925,12 +901,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             onClick={() => setActiveTab("leads")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
               activeTab === "leads"
-                ? isLight
-                  ? "bg-neutral-900 text-white shadow-sm"
-                  : "bg-white text-black shadow-lg"
-                : isLight
-                ? "text-neutral-500 hover:text-neutral-900"
-                : "text-white/40 hover:text-white"
+                ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
+                : "text-white/40 hover:text-white hover:bg-white/5"
             }`}
           >
             <Grid className="w-4 h-4" />
@@ -944,12 +916,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             onClick={() => setActiveTab("funnels")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
               activeTab === "funnels"
-                ? isLight
-                  ? "bg-neutral-900 text-white shadow-sm"
-                  : "bg-white text-black shadow-lg"
-                : isLight
-                ? "text-neutral-500 hover:text-neutral-900"
-                : "text-white/40 hover:text-white"
+                ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
+                : "text-white/40 hover:text-white hover:bg-white/5"
             }`}
           >
             <Layers className="w-4 h-4" />
@@ -963,12 +931,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             onClick={() => setActiveTab("finance")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
               activeTab === "finance"
-                ? isLight
-                  ? "bg-neutral-900 text-white shadow-sm"
-                  : "bg-white text-black shadow-lg"
-                : isLight
-                ? "text-neutral-500 hover:text-neutral-900"
-                : "text-white/40 hover:text-white"
+                ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
+                : "text-white/40 hover:text-white hover:bg-white/5"
             }`}
           >
             <Wallet className="w-4 h-4 text-emerald-400" />💳 Фінанси
@@ -981,10 +945,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             onClick={() => setActiveTab("diagnostics")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 border border-red-500/20 bg-red-500/5 ${
               activeTab === "diagnostics"
-                ? isLight
-                  ? "bg-neutral-900 text-white shadow-sm"
-                  : "bg-white text-black shadow-lg"
-                : "text-red-400 hover:text-red-300"
+                ? "bg-red-500 text-white font-black shadow-lg shadow-red-500/20"
+                : "text-red-400 hover:text-red-300 hover:bg-white/5"
             }`}
           >
             <AlertCircle className="w-4 h-4 animate-pulse" />🐞 Діагностика

@@ -195,7 +195,7 @@ export default function TopHeader({
                     href={`/admin/cell/${cell.id}`}
                     className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
                       isActive
-                        ? "bg-white text-black shadow-md"
+                        ? "bg-emerald-500 text-black font-black shadow-md shadow-emerald-500/20"
                         : "text-white/60 hover:text-white hover:bg-white/5"
                     }`}
                   >
