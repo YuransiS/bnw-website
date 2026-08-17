@@ -80,7 +80,7 @@ export async function getFinanceSummaryAction(
       .select("name, type, parent_section, is_system")
       .or(`project_id.eq.${projectId},is_system.eq.true`);
 
-    // Fetch Transactions Query Builder
+    // 1. Fetch Transactions Query Builder
     let query = adminSupabase
       .from("financial_transactions")
       .select("*")
@@ -96,7 +96,23 @@ export async function getFinanceSummaryAction(
     const { data: allTransactions, error: txErr } = await query.order("date", { ascending: false }).order("created_at", { ascending: false });
     if (txErr || !allTransactions) throw new Error("Failed to fetch transactions");
 
-    // Fetch traffic spend from daily_traffic_and_costs
+    // 2. Fetch Automated Paid Orders from unified_orders
+    let ordersQuery = adminSupabase
+      .from("unified_orders")
+      .select("id, amount, status, order_id, created_at, metadata")
+      .eq("project_id", projectId)
+      .gt("amount", 0);
+
+    if (startDateStr) {
+      ordersQuery = ordersQuery.gte("created_at", startDateStr);
+    }
+    if (endDateStr) {
+      ordersQuery = ordersQuery.lte("created_at", `${endDateStr}T23:59:59.999Z`);
+    }
+
+    const { data: dbOrders } = await ordersQuery;
+
+    // 3. Fetch traffic spend from daily_traffic_and_costs
     let trafficQuery = adminSupabase
       .from("daily_traffic_and_costs")
       .select("spend_usd")
@@ -151,6 +167,79 @@ export async function getFinanceSummaryAction(
       other: 0,
       refunds: 0
     };
+
+    // Helper to identify paid status
+    const isPaidStatus = (status: string) => {
+      const s = String(status || "").toLowerCase().trim();
+      return (
+        ["closed_won", "approved", "paid", "success", "оплачено", "completed"].includes(s) ||
+        s.includes("оплач") ||
+        s.includes("approved")
+      );
+    };
+
+    // Aggregate automated revenue from unified_orders
+    (dbOrders || []).forEach((order) => {
+      if (!isPaidStatus(order.status)) return;
+
+      const rawAmount = Number(order.amount || 0);
+      if (rawAmount <= 0) return;
+
+      const meta = order.metadata || {};
+      const uahAmount = Number(meta.uah_amount || 0);
+      const usdAmount = Number(meta.usd_amount || 0);
+      const currency = String(
+        meta.currency || 
+        meta.lead?.currency || 
+        meta.raw_row?.currency || 
+        (project as any).default_currency || 
+        "UAH"
+      ).toUpperCase().trim();
+
+      let finalUSD = usdAmount;
+      let finalUAH = uahAmount;
+
+      if (!finalUSD && !finalUAH) {
+        if (currency === "USD" || currency === "$") {
+          finalUSD = rawAmount;
+          finalUAH = rawAmount * 44;
+        } else if (currency === "EUR" || currency === "€") {
+          finalUSD = rawAmount * 1.09;
+          finalUAH = rawAmount * 48;
+        } else {
+          finalUAH = rawAmount;
+          finalUSD = rawAmount / 44;
+        }
+      } else if (!finalUSD && finalUAH) {
+        finalUSD = finalUAH / 44;
+      } else if (finalUSD && !finalUAH) {
+        finalUAH = finalUSD * 44;
+      }
+
+      totalIncomeUSD += finalUSD;
+      totalIncomeUAH += finalUAH;
+
+      // Classify category for PnL
+      const productInfo = String(
+        meta.tariff ||
+        meta.product ||
+        meta.raw_row?.query ||
+        meta.raw_row?.tariff ||
+        meta.target_sheet ||
+        order.order_id ||
+        ""
+      ).toLowerCase();
+
+      if (productInfo.includes("клуб") || productInfo.includes("club") || productInfo.includes("renew") || productInfo.includes("підписк")) {
+        revenueBreakdown.club += finalUSD;
+      } else if (productInfo.includes("трипва") || productInfo.includes("tripwire") || productInfo.includes("міні") || productInfo.includes("mini") || productInfo.includes("допродаж")) {
+        revenueBreakdown.tripwires += finalUSD;
+      } else if (productInfo.includes("розстроч") || productInfo.includes("рассроч") || productInfo.includes("installment")) {
+        revenueBreakdown.installments += finalUSD;
+      } else {
+        revenueBreakdown.product += finalUSD;
+      }
+    });
 
     allTransactions.forEach((tx) => {
       const amount = Number(tx.amount || 0);

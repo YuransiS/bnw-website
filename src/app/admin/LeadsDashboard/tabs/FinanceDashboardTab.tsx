@@ -268,12 +268,12 @@ export default function FinanceDashboardTab({
 
       {/* Top Segment Controls */}
       <div className="flex justify-between items-center">
-        <div className="flex bg-white/5 p-1 rounded-xl border border-white/5">
+        <div className="flex bg-neutral-900 p-1 rounded-xl border border-white/10">
           <button
             onClick={() => setActiveSegment("dashboard")}
-            className={`px-4 py-2 text-xs font-semibold rounded-lg cursor-pointer transition-all ${
+            className={`px-4 py-2 text-xs font-bold rounded-lg cursor-pointer transition-all ${
               activeSegment === "dashboard"
-                ? "bg-white text-black"
+                ? "bg-emerald-500 text-black font-black shadow-md shadow-emerald-500/20"
                 : "text-neutral-400 hover:text-white"
             }`}
           >
@@ -281,9 +281,9 @@ export default function FinanceDashboardTab({
           </button>
           <button
             onClick={() => setActiveSegment("pnl")}
-            className={`px-4 py-2 text-xs font-semibold rounded-lg cursor-pointer transition-all ${
+            className={`px-4 py-2 text-xs font-bold rounded-lg cursor-pointer transition-all ${
               activeSegment === "pnl"
-                ? "bg-white text-black"
+                ? "bg-emerald-500 text-black font-black shadow-md shadow-emerald-500/20"
                 : "text-neutral-400 hover:text-white"
             }`}
           >
@@ -292,9 +292,9 @@ export default function FinanceDashboardTab({
           {["admin", "superman", "founder", "developer"].includes(userRole) && (
             <button
               onClick={() => setActiveSegment("settings")}
-              className={`px-4 py-2 text-xs font-semibold rounded-lg cursor-pointer transition-all flex items-center gap-1 ${
+              className={`px-4 py-2 text-xs font-bold rounded-lg cursor-pointer transition-all flex items-center gap-1 ${
                 activeSegment === "settings"
-                  ? "bg-white text-black"
+                  ? "bg-emerald-500 text-black font-black shadow-md shadow-emerald-500/20"
                   : "text-neutral-400 hover:text-white"
               }`}
             >
