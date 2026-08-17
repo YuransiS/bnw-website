@@ -720,7 +720,45 @@ export async function getUnifiedCRMData(
     });
     const totalCount = leadsRes.count || aggLeadsRes.count || 0;
     const costs = costsRes.data || [];
-    const campaignsData = (campaignsRes.data || []).filter((c: any) => c.project_slug === activeProject.slug);
+    
+    // Consolidate campaigns from both get_campaigns_summary and daily_traffic_and_costs
+    const campaignMap = new Map<string, any>();
+    const rpcCampaigns = (campaignsRes.data || []).filter((c: any) => c.project_slug === activeProject.slug);
+    rpcCampaigns.forEach((c: any) => {
+      const name = String(c.campaign_name || "").trim();
+      if (name) {
+        campaignMap.set(name, {
+          campaign_name: name,
+          campaign_id: c.campaign_id,
+          spend: Number(c.spend || 0),
+          clicks: Number(c.clicks || 0),
+          impressions: Number(c.impressions || 0),
+          leads_count: Number(c.leads_count || 0),
+          sales: Number(c.sales || 0),
+          profit: Number(c.profit || 0),
+          roi: Number(c.roi || 0)
+        });
+      }
+    });
+
+    costs.forEach((c: any) => {
+      const name = String(c.campaign_name || "").trim();
+      if (name && !campaignMap.has(name)) {
+        campaignMap.set(name, {
+          campaign_name: name,
+          campaign_id: c.campaign_id,
+          spend: Number(c.spend_usd || c.spend || 0),
+          clicks: 0,
+          impressions: 0,
+          leads_count: 0,
+          sales: 0,
+          profit: 0,
+          roi: 0
+        });
+      }
+    });
+
+    const campaignsData = Array.from(campaignMap.values());
     const profilesList = allProfilesRes.data || [];
 
     const aggLeads = aggLeadsRes.data || [];

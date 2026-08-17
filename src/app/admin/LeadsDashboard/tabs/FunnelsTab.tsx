@@ -45,6 +45,85 @@ interface Funnel {
   created_at: string;
 }
 
+const FUNNEL_TYPES = [
+  {
+    id: "Інтенсив",
+    label: "Інтенсив",
+    defaultStages: [
+      "Реєстрація на інтенсив",
+      "Участь в інтенсиві (День 1-3)",
+      "Домашні завдання",
+      "Анкета / Офер",
+      "Оплата (Заявка)"
+    ]
+  },
+  {
+    id: "Вебінар",
+    label: "Вебінар",
+    defaultStages: [
+      "Підписка в бот",
+      "Реєстрація на вебінар",
+      "Перегляд вебінару",
+      "Анкета діагностики",
+      "Оплата (Заявка)"
+    ]
+  },
+  {
+    id: "Автовеб",
+    label: "Автовеб",
+    defaultStages: [
+      "Підписка в бот",
+      "Реєстрація на автовеб",
+      "Перегляд ефіру",
+      "Анкета діагностики",
+      "Оплата (Заявка)"
+    ]
+  },
+  {
+    id: "Марафон",
+    label: "Марафон",
+    defaultStages: [
+      "Підписка на марафон",
+      "Участь у марафоні",
+      "Виконання завдань",
+      "Анкета діагностики",
+      "Оплата (Заявка)"
+    ]
+  },
+  {
+    id: "VSL",
+    label: "VSL",
+    defaultStages: [
+      "Перехід на VSL",
+      "Перегляд відео",
+      "Клік по кнопці оферу",
+      "Анкета діагностики",
+      "Оплата (Заявка)"
+    ]
+  },
+  {
+    id: "Діагностика",
+    label: "Діагностика",
+    defaultStages: [
+      "Заявка на діагностику",
+      "Кваліфікація ліда",
+      "Проведення розбору",
+      "Виставлення рахунку",
+      "Оплата"
+    ]
+  },
+  {
+    id: "Трипваєр",
+    label: "Трипваєр",
+    defaultStages: [
+      "Перехід на лендінг",
+      "Купівля трипваєру",
+      "Допродаж основного курсу",
+      "Оплата основного продукту"
+    ]
+  }
+];
+
 export default function FunnelsTab({
   projectId,
   campaignsList,
@@ -73,13 +152,12 @@ export default function FunnelsTab({
   // Campaigns Multiselect State
   const [selectedCampaigns, setSelectedCampaigns] = useState<string[]>([]);
   const [searchCampaignQuery, setSearchCampaignQuery] = useState("");
-  const [manualCampaignInput, setManualCampaignInput] = useState("");
   
   // Creation/Editing Form State
   const [showForm, setShowForm] = useState(false);
   const [editingFunnel, setEditingFunnel] = useState<Funnel | null>(null);
   const [wizardStep, setWizardStep] = useState(1);
-  const [funnelType, setFunnelType] = useState("Вебінар");
+  const [funnelType, setFunnelType] = useState("Інтенсив");
   
   const [name, setName] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -90,10 +168,10 @@ export default function FunnelsTab({
   
   // Custom Customer Journey Stages
   const [stages, setStages] = useState<string[]>([
-    "Підписка в бот",
-    "Реєстрація на подію",
-    "Перегляд вебінару",
-    "Анкета діагностики",
+    "Реєстрація на інтенсив",
+    "Участь в інтенсиві (День 1-3)",
+    "Домашні завдання",
+    "Анкета / Офер",
     "Оплата (Заявка)"
   ]);
   const [newStageName, setNewStageName] = useState("");
@@ -166,6 +244,15 @@ export default function FunnelsTab({
     }
   }, [accounts, txAccountId]);
 
+  // Change Funnel Type with smart default stages
+  const handleSelectFunnelType = (typeId: string) => {
+    setFunnelType(typeId);
+    const found = FUNNEL_TYPES.find(t => t.id === typeId);
+    if (found && (!editingFunnel || stages.length === 0)) {
+      setStages(found.defaultStages);
+    }
+  };
+
   // Open Form for Creation
   const handleOpenCreate = () => {
     setEditingFunnel(null);
@@ -174,18 +261,17 @@ export default function FunnelsTab({
     setEndDate("");
     setPlannedRevenue("0");
     setPlannedSpend("0");
-    setFunnelType("Вебінар");
+    setFunnelType("Інтенсив");
     setStages([
-      "Підписка в бот",
-      "Реєстрація на подію",
-      "Перегляд вебінару",
-      "Анкета діагностики",
+      "Реєстрація на інтенсив",
+      "Участь в інтенсиві (День 1-3)",
+      "Домашні завдання",
+      "Анкета / Офер",
       "Оплата (Заявка)"
     ]);
     setSelectedPages([]);
     setManualPageInput("");
     setSelectedCampaigns([]);
-    setManualCampaignInput("");
     setDescription("");
     setWizardStep(1);
     setShowForm(true);
@@ -203,7 +289,7 @@ export default function FunnelsTab({
     // Parse metadata for type
     const parsedType = funnel.description?.startsWith("[Type:")
       ? funnel.description.split("]")[0].replace("[Type: ", "")
-      : "Вебінар";
+      : "Інтенсив";
     setFunnelType(parsedType);
 
     // Clean description
@@ -223,18 +309,18 @@ export default function FunnelsTab({
         parsedStages = metaStages[1].split(",").map(s => s.trim()).filter(Boolean);
       }
     }
-    setStages(parsedStages.length > 0 ? parsedStages : [
-      "Підписка в бот",
-      "Реєстрація на подію",
-      "Перегляд вебінару",
-      "Анкета діагностики",
+    const defaultStages = FUNNEL_TYPES.find(t => t.id === parsedType)?.defaultStages || [
+      "Реєстрація на інтенсив",
+      "Участь в інтенсиві (День 1-3)",
+      "Домашні завдання",
+      "Анкета / Офер",
       "Оплата (Заявка)"
-    ]);
+    ];
+    setStages(parsedStages.length > 0 ? parsedStages : defaultStages);
 
     setSelectedPages(funnel.landing_slugs || []);
     setManualPageInput("");
     setSelectedCampaigns(funnel.campaign_ids || []);
-    setManualCampaignInput("");
     
     setWizardStep(1);
     setShowForm(true);
@@ -266,11 +352,7 @@ export default function FunnelsTab({
 
     setIsSubmitting(true);
     try {
-      const manualCampaigns = manualCampaignInput
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const campaignIds = Array.from(new Set([...selectedCampaigns, ...manualCampaigns]));
+      const campaignIds = Array.from(new Set(selectedCampaigns));
       
       const manualSlugs = manualPageInput
         .split(",")
@@ -453,13 +535,25 @@ export default function FunnelsTab({
       if (leadTime < startDateTime) return false;
       if (endDateTime && leadTime > endDateTime) return false;
 
-      const leadCampaign = String(lead.utm_campaign || "").trim().toLowerCase();
-      const leadLanding = String(lead.landing || lead.metadata?.target_sheet || "").trim().toLowerCase();
+      const leadCampaign = String(lead.utm_campaign || lead.utmCampaign || "").trim().toLowerCase();
+      const leadLanding = String(lead.landing || lead.page_path || lead.page_url || lead.target_sheet || lead.metadata?.target_sheet || "").trim().toLowerCase();
+      const visitedLandings = (lead.visited_landings || lead.visitedLandings || []).map((l: string) => String(l).toLowerCase());
 
-      const campaignMatch = funnel.campaign_ids.some((id) => leadCampaign.includes(id.toLowerCase()));
-      const landingMatch = funnel.landing_slugs.some((slug) => leadLanding.includes(slug.toLowerCase()));
+      const hasCampaigns = Array.isArray(funnel.campaign_ids) && funnel.campaign_ids.length > 0;
+      const hasLandings = Array.isArray(funnel.landing_slugs) && funnel.landing_slugs.length > 0;
 
-      return campaignMatch || landingMatch;
+      const campaignMatch = hasCampaigns && funnel.campaign_ids.some((id) => id && leadCampaign.includes(id.toLowerCase()));
+      const landingMatch = hasLandings && funnel.landing_slugs.some((slug) => {
+        if (!slug) return false;
+        const s = slug.toLowerCase();
+        return leadLanding.includes(s) || visitedLandings.some((vl: string) => vl.includes(s));
+      });
+
+      if (!hasCampaigns && !hasLandings) {
+        return true;
+      }
+
+      return Boolean(campaignMatch || landingMatch);
     });
 
     // Sum revenue from these leads
@@ -594,19 +688,19 @@ export default function FunnelsTab({
 
               <div className="space-y-2">
                 <label className="text-[10px] uppercase font-bold text-white/50 block">Тип воронки</label>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                  {["Вебінар", "Автовеб", "VSL", "Діагностика", "Трипваєр"].map((t) => (
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
+                  {FUNNEL_TYPES.map((t) => (
                     <button
-                      key={t}
+                      key={t.id}
                       type="button"
-                      onClick={() => setFunnelType(t)}
-                      className={`py-2 px-1 rounded-lg border font-bold text-center transition-all cursor-pointer ${
-                        funnelType === t
-                          ? "bg-emerald-500/10 border-emerald-500 text-emerald-450"
-                          : "bg-white/5 border-white/5 text-white/50 hover:border-white/10"
+                      onClick={() => handleSelectFunnelType(t.id)}
+                      className={`py-2 px-1 rounded-lg border font-bold text-center transition-all cursor-pointer text-xs ${
+                        funnelType === t.id
+                          ? "bg-emerald-500/10 border-emerald-500 text-emerald-450 shadow-sm"
+                          : "bg-white/5 border-white/5 text-white/50 hover:border-white/10 hover:text-white"
                       }`}
                     >
-                      {t}
+                      {t.label}
                     </button>
                   ))}
                 </div>
@@ -832,100 +926,102 @@ export default function FunnelsTab({
             </div>
           )}
 
-          {/* STEP 4: UTM Кампанії */}
+          {/* STEP 4: Рекламні Кампанії */}
           {wizardStep === 4 && (
             <div className="space-y-4 animate-in fade-in duration-200">
               <div className="space-y-2">
-                <label className="text-[10px] uppercase font-bold text-white/50 block">Рекламні Кампанії UTM</label>
-                
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-white/40">
-                    <Search className="w-3.5 h-3.5" />
-                  </span>
-                  <input
-                    type="text"
-                    value={searchCampaignQuery}
-                    onChange={(e) => setSearchCampaignQuery(e.target.value)}
-                    placeholder="Пошук рекламних кампаній..."
-                    className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 rounded-xl text-xs focus:outline-none focus:border-emerald-500 text-white placeholder-white/30"
-                  />
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-white/50 block">Рекламні Кампанії (Meta / Facebook Ads)</label>
+                  <p className="text-[10px] text-white/40 mt-0.5">
+                    Оберіть рекламні кампанії Facebook, трафік з яких належить до цієї воронки (необов'язково).
+                  </p>
                 </div>
+                
+                {campaignsList.length > 0 ? (
+                  <>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-white/40">
+                        <Search className="w-3.5 h-3.5" />
+                      </span>
+                      <input
+                        type="text"
+                        value={searchCampaignQuery}
+                        onChange={(e) => setSearchCampaignQuery(e.target.value)}
+                        placeholder="Пошук рекламних кампаній..."
+                        className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 rounded-xl text-xs focus:outline-none focus:border-emerald-500 text-white placeholder-white/30"
+                      />
+                    </div>
 
-                <div className="border border-white/10 rounded-xl overflow-hidden bg-black/35">
-                  <div className="max-h-40 overflow-y-auto divide-y divide-white/5 custom-scrollbar text-xs">
-                    {Array.from(new Set(campaignsList.map((c: any) => String(c.campaign_name || '').trim()).filter(Boolean)))
-                      .filter((campName) => campName.toLowerCase().includes(searchCampaignQuery.toLowerCase()))
-                      .map((campName) => {
-                        const isSelected = selectedCampaigns.includes(campName);
-                        const stats = campaignsList.find((c) => c.campaign_name === campName);
-                        const spendUSD = stats ? Number(stats.spend || 0) : 0;
-                        const leadsCount = stats ? Number(stats.leads_count || 0) : 0;
+                    <div className="border border-white/10 rounded-xl overflow-hidden bg-black/35">
+                      <div className="max-h-48 overflow-y-auto divide-y divide-white/5 custom-scrollbar text-xs">
+                        {Array.from(new Set(campaignsList.map((c: any) => String(c.campaign_name || '').trim()).filter(Boolean)))
+                          .filter((campName) => campName.toLowerCase().includes(searchCampaignQuery.toLowerCase()))
+                          .map((campName) => {
+                            const isSelected = selectedCampaigns.includes(campName);
+                            const stats = campaignsList.find((c) => c.campaign_name === campName);
+                            const spendUSD = stats ? Number(stats.spend || 0) : 0;
+                            const leadsCount = stats ? Number(stats.leads_count || 0) : 0;
 
-                        return (
-                          <div
-                            key={campName}
-                            onClick={() => {
-                              if (isSelected) {
-                                setSelectedCampaigns(selectedCampaigns.filter((c) => c !== campName));
-                              } else {
-                                setSelectedCampaigns([...selectedCampaigns, campName]);
-                              }
-                            }}
-                            className={`flex justify-between items-center px-3 py-2 cursor-pointer transition-all hover:bg-white/5 ${
-                              isSelected ? "bg-emerald-500/5 hover:bg-emerald-500/10" : ""
-                            }`}
+                            return (
+                              <div
+                                key={campName}
+                                onClick={() => {
+                                  if (isSelected) {
+                                    setSelectedCampaigns(selectedCampaigns.filter((c) => c !== campName));
+                                  } else {
+                                    setSelectedCampaigns([...selectedCampaigns, campName]);
+                                  }
+                                }}
+                                className={`flex justify-between items-center px-3 py-2.5 cursor-pointer transition-all hover:bg-white/5 ${
+                                  isSelected ? "bg-emerald-500/5 hover:bg-emerald-500/10" : ""
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => {}}
+                                    className="rounded border-white/10 bg-white/5 text-emerald-500 focus:ring-emerald-500/20 w-3.5 h-3.5"
+                                  />
+                                  <span className={`font-bold ${isSelected ? "text-emerald-400" : "text-white"}`}>
+                                    {campName}
+                                  </span>
+                                </div>
+                                {spendUSD > 0 && (
+                                  <span className="text-[9px] bg-white/5 px-2 py-0.5 rounded font-black text-white/50">
+                                    Витрати: ${Math.round(spendUSD).toLocaleString()} ({leadsCount} лід.)
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+
+                    {selectedCampaigns.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 p-2 bg-white/[0.02] border border-white/5 rounded-xl">
+                        {selectedCampaigns.map((camp) => (
+                          <span
+                            key={camp}
+                            onClick={() => setSelectedCampaigns(selectedCampaigns.filter((c) => c !== camp))}
+                            className="bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-450 px-2 py-0.5 rounded-lg font-bold flex items-center gap-1 cursor-pointer transition-all text-[10px]"
                           >
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                readOnly
-                                className="rounded border-white/10 bg-white/5 text-emerald-500 focus:ring-emerald-500/20 w-3.5 h-3.5"
-                              />
-                              <span className={`font-bold ${isSelected ? "text-emerald-400" : "text-white"}`}>
-                                {campName}
-                              </span>
-                            </div>
-                            {spendUSD > 0 && (
-                              <span className="text-[9px] bg-white/5 px-2 py-0.5 rounded font-black text-white/50">
-                                Витрати: ${Math.round(spendUSD).toLocaleString()} ({leadsCount} лід.)
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    {campaignsList.length === 0 && (
-                      <div className="p-4 text-center text-[10px] text-white/30 italic">
-                        Facebook-кампаній не виявлено. Ви можете додати їх вручну нижче.
+                            {camp} <span className="text-white/40">×</span>
+                          </span>
+                        ))}
                       </div>
                     )}
-                  </div>
-                </div>
-
-                {selectedCampaigns.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 p-2 bg-white/[0.02] border border-white/5 rounded-xl">
-                    {selectedCampaigns.map((camp) => (
-                      <span
-                        key={camp}
-                        onClick={() => setSelectedCampaigns(selectedCampaigns.filter((c) => c !== camp))}
-                        className="bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-450 px-2 py-0.5 rounded-lg font-bold flex items-center gap-1 cursor-pointer transition-all text-[10px]"
-                      >
-                        {camp} <span className="text-white/40">×</span>
-                      </span>
-                    ))}
+                  </>
+                ) : (
+                  <div className="p-5 text-center rounded-xl bg-white/[0.02] border border-white/10 space-y-2">
+                    <p className="text-xs text-white/70 font-semibold">
+                      Рекламні кампанії з кабінету Meta Ads підтягнуться автоматично після синхронізації витрат.
+                    </p>
+                    <p className="text-[11px] text-white/40">
+                      Цей крок необов'язковий — воронка рахуватиме лідів за обраними лендінгами та датами.
+                    </p>
                   </div>
                 )}
-
-                <div className="space-y-1 pt-1">
-                  <label className="text-[10px] uppercase font-bold text-white/50 block">UTM-мітки кампаній вручну (через кому)</label>
-                  <input
-                    type="text"
-                    value={manualCampaignInput}
-                    onChange={(e) => setManualCampaignInput(e.target.value)}
-                    placeholder="utm_campaign_new, active_adset_marathon"
-                    className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white placeholder-white/30"
-                  />
-                </div>
               </div>
 
               <div className="flex justify-between pt-2">
