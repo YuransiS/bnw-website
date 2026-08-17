@@ -109,16 +109,16 @@ export async function getSessionAndAccess(selectedProjectSlug?: string) {
   // Resolve current active project slug
   let activeSlug = selectedProjectSlug;
   if (!activeSlug && allowedProjects.length > 0) {
-    activeSlug = isSuperman ? "all" : allowedProjects[0].slug;
+    activeSlug = isSuperman || isCellLeader ? "all" : allowedProjects[0].slug;
   }
 
   // Verify access to requested slug
-  if (activeSlug === "all" && !isSuperman) {
-    activeSlug = allowedProjects.length > 0 ? allowedProjects[0].slug : undefined;
-  }
-
-  if (activeSlug && activeSlug !== "all" && !allowedProjects.some((p) => p.slug === activeSlug)) {
-    activeSlug = allowedProjects.length > 0 ? allowedProjects[0].slug : undefined;
+  if (activeSlug === "all") {
+    if (allowedProjects.length === 0) {
+      activeSlug = undefined;
+    }
+  } else if (activeSlug && !allowedProjects.some((p) => p.slug === activeSlug)) {
+    activeSlug = allowedProjects.length > 0 ? (isSuperman || isCellLeader ? "all" : allowedProjects[0].slug) : undefined;
   }
 
   devLogger.info(

@@ -50,14 +50,44 @@ export default async function CellDashboardPage({ params }: PageProps) {
     }
   }
 
-  // 2. Fetch project metrics & filter for this cell
+  // 2. Fetch all active projects belonging to this cell directly from DB
+  const { data: dbCellProjects } = await adminSupabase
+    .from("projects")
+    .select("*")
+    .eq("cell_id", cellId)
+    .eq("is_active", true)
+    .order("name");
+
+  const cellProjIds = (dbCellProjects || []).map((p: any) => p.id);
+
+  // 3. Fetch project metrics & summary data
   const initialData = await getUnifiedCRMData("all");
   const summaryData = initialData.summaryData || [];
   const leaderboard = initialData.producersLeaderboard || [];
 
-  // Filter projects belonging to this cell
-  const cellProjects = summaryData.filter((p: any) => p.cell_id === cellId);
-  const cellProjIds = cellProjects.map((p: any) => p.project_id);
+  // Merge DB project records with financial summary metrics
+  const cellProjects = (dbCellProjects || []).map((dbP: any) => {
+    const summaryItem = summaryData.find(
+      (s: any) => s.project_id === dbP.id || s.project_slug === dbP.slug
+    );
+    const revUah = Number(summaryItem?.revenue_uah || 0);
+    const expUah = Number(summaryItem?.expenses_uah || 0);
+    const roiVal = expUah > 0 ? ((revUah - expUah) / expUah) * 100 : Number(summaryItem?.roi || 0);
+
+    return {
+      project_id: dbP.id,
+      project_name: dbP.name,
+      project_slug: dbP.slug,
+      cell_id: dbP.cell_id,
+      revenue_uah: revUah,
+      expenses_uah: expUah,
+      revenue_usd: Number(summaryItem?.revenue_usd || 0),
+      revenue_eur: Number(summaryItem?.revenue_eur || 0),
+      leads_count: Number(summaryItem?.leads_count || 0),
+      cpl: Number(summaryItem?.cpl || 0),
+      roi: roiVal
+    };
+  });
 
   // Sum cell metrics
   let cellRevenue = 0;
@@ -100,7 +130,7 @@ export default async function CellDashboardPage({ params }: PageProps) {
   // Map producers with their projects inside this cell
   const { data: dbProfileProjects } = await adminSupabase
     .from("profile_projects")
-    .select("profile_id, project_id, profiles(id, email, full_name, role)");
+    .select("profile_id, project_id, profiles(id, email, full_name, role, avatar_url)");
 
   const cellProfileProjects = (dbProfileProjects || []).filter((pp: any) =>
     cellProjIds.includes(pp.project_id) && pp.profiles?.role === "producer"
@@ -114,7 +144,7 @@ export default async function CellDashboardPage({ params }: PageProps) {
         producerId: pId,
         name: pp.profiles?.full_name || pp.profiles?.email?.split("@")[0] || "Продюсер",
         email: pp.profiles?.email || "",
-        photoUrl: null,
+        photoUrl: pp.profiles?.avatar_url || null,
         projects: [],
         revenueUah: 0,
         spendUah: 0,
