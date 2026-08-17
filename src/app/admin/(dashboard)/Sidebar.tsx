@@ -25,7 +25,8 @@ import {
   AlertTriangle,
   Lightbulb,
   Check,
-  Users
+  Users,
+  FlaskConical
 } from "lucide-react";
 import { signOutAction, submitCrmFeedbackAction, getCellsAction } from "../actions";
 import { useTheme } from "../ThemeProvider";
@@ -54,6 +55,9 @@ interface SidebarProps {
 // Deterministic premium icon assignment based on project attributes
 const getProjectIcon = (slug: string, index: number) => {
   const cleanSlug = slug.toLowerCase();
+  if (cleanSlug.includes("sandbox") || cleanSlug.includes("test")) {
+    return FlaskConical;
+  }
   if (cleanSlug.includes("main") || cleanSlug.includes("bw")) {
     return Crown;
   }
@@ -535,6 +539,44 @@ export default function Sidebar({
                         </div>
                       );
                     })}
+
+                    {/* Standalone / Sandbox / Unassigned Projects */}
+                    {allowedProjects.filter(p => p.slug !== "bw_main" && !cells.some(c => c.id === p.cell_id)).length > 0 && (
+                      <div className="space-y-1 pt-2.5 border-t border-white/5">
+                        <span className={`text-[10px] font-extrabold uppercase tracking-widest px-1 block ${
+                          isLight ? "text-neutral-400" : "text-white/30"
+                        }`}>
+                          🧪 Тестові / Інші
+                        </span>
+                        <div className="space-y-1 pl-1">
+                          {allowedProjects
+                            .filter(p => p.slug !== "bw_main" && !cells.some(c => c.id === p.cell_id))
+                            .map((proj, idx) => {
+                              const ProjIcon = getProjectIcon(proj.slug, idx);
+                              const isCurrent = activeProjectId === proj.id;
+                              return (
+                                <Link
+                                  key={proj.id}
+                                  href={`/admin/project/${proj.id}`}
+                                  onClick={(e) => handleLinkClick(e, `/admin/project/${proj.id}`)}
+                                  className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg border transition-all text-[11px] font-bold cursor-pointer ${
+                                    isCurrent
+                                      ? isLight
+                                        ? "bg-neutral-900 text-white border-neutral-900 font-extrabold shadow-sm"
+                                        : "bg-white text-black shadow-md border-white font-extrabold"
+                                      : isLight
+                                      ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-neutral-600 hover:text-neutral-950"
+                                      : "bg-white/5 hover:bg-white/10 border-white/5 text-white/70 hover:text-white"
+                                  }`}
+                                >
+                                  <ProjIcon className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                  <span className="truncate">{proj.name}</span>
+                                </Link>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   /* Collapsed View: Flat icons for 1-click navigation */

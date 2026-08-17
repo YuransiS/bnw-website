@@ -1,9 +1,12 @@
 "use client";
 
 import React, { useState, useTransition, useEffect } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createUserAction, editUserAction, deleteUserAction, toggleProjectActiveAction, createCellAction, updateCellAction, deleteCellAction, assignProjectCellAction } from "./actions";
 import { updateFeedbackStatusAction } from "../../actions";
-import { UserPlus, Trash2, Shield, User, Users, Loader2, Edit3, X, Save, CheckSquare, Square, Check, Briefcase, Layers, Network, GitBranch, Crown, Building2, ChevronRight, ChevronDown, Sparkles, Plus, Link2 } from "lucide-react";
+import { seedSandboxProjectAction } from "../../sandboxActions";
+import { UserPlus, Trash2, Shield, User, Users, Loader2, Edit3, X, Save, CheckSquare, Square, Check, Briefcase, Layers, Network, GitBranch, Crown, Building2, ChevronRight, ChevronDown, Sparkles, Plus, Link2, FlaskConical, RefreshCw } from "lucide-react";
 import { useTheme } from "../../ThemeProvider";
 
 interface Profile {
@@ -85,6 +88,31 @@ export default function SettingsForm({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const router = useRouter();
+  const [isSeedingSandbox, setIsSeedingSandbox] = useState(false);
+  const [sandboxMessage, setSandboxMessage] = useState<string | null>(null);
+
+  const handleSeedSandbox = async () => {
+    const confirmSeed = confirm("Перегенерувати тестові дані в проекті Sandbox (воронки, кліки, ліди, анкетні дані, витрати)?");
+    if (!confirmSeed) return;
+
+    setIsSeedingSandbox(true);
+    setSandboxMessage(null);
+    try {
+      const res = await seedSandboxProjectAction();
+      if (res.error) {
+        alert("Помилка генерації Sandbox: " + res.error);
+      } else {
+        setSandboxMessage("Дані Sandbox успішно оновлені!");
+        router.refresh();
+      }
+    } catch (err: any) {
+      alert("Помилка: " + err.message);
+    } finally {
+      setIsSeedingSandbox(false);
+    }
+  };
 
   const [newCellName, setNewCellName] = useState("");
   const [newCellLeader, setNewCellLeader] = useState("");
@@ -462,223 +490,278 @@ export default function SettingsForm({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Unified Create / Edit Form */}
-        <div className={`lg:col-span-1 p-6 rounded-2xl h-fit space-y-6 relative overflow-hidden ${cardClass}`}>
-          <div className={`absolute -top-12 -left-12 w-28 h-28 ${editingUser ? "bg-indigo-500/5" : "bg-emerald-500/5"} rounded-full blur-xl pointer-events-none`} />
+        {/* Left Column: Form & Sandbox Developer Tools */}
+        <div className="lg:col-span-1 space-y-6">
+          {/* Unified Create / Edit Form */}
+          <div className={`p-6 rounded-2xl h-fit space-y-6 relative overflow-hidden ${cardClass}`}>
+            <div className={`absolute -top-12 -left-12 w-28 h-28 ${editingUser ? "bg-indigo-500/5" : "bg-emerald-500/5"} rounded-full blur-xl pointer-events-none`} />
 
-          <div className="flex items-center justify-between">
-            <h2 className={`text-lg font-black uppercase tracking-tight flex items-center gap-2 ${isLight ? "text-neutral-900" : "text-white"}`}>
-              {editingUser ? (
-                <>
-                  <Edit3 className="w-5 h-5 text-indigo-400" />
-                  Редагувати
-                </>
-              ) : (
-                <>
-                  <UserPlus className="w-5 h-5 text-emerald-500" />
-                  Додати користувача
-                </>
+            <div className="flex items-center justify-between">
+              <h2 className={`text-lg font-black uppercase tracking-tight flex items-center gap-2 ${isLight ? "text-neutral-900" : "text-white"}`}>
+                {editingUser ? (
+                  <>
+                    <Edit3 className="w-5 h-5 text-indigo-400" />
+                    Редагувати
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="w-5 h-5 text-emerald-500" />
+                    Додати користувача
+                  </>
+                )}
+              </h2>
+              {editingUser && (
+                <button
+                  onClick={resetForm}
+                  className={`p-1 rounded-lg transition-all cursor-pointer ${
+                    isLight ? "text-neutral-400 hover:text-neutral-800 hover:bg-neutral-100" : "text-white/40 hover:text-white hover:bg-white/5"
+                  }`}
+                  title="Скасувати редагування"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               )}
-            </h2>
-            {editingUser && (
-              <button
-                onClick={resetForm}
-                className={`p-1 rounded-lg transition-all cursor-pointer ${
-                  isLight ? "text-neutral-400 hover:text-neutral-800 hover:bg-neutral-100" : "text-white/40 hover:text-white hover:bg-white/5"
-                }`}
-                title="Скасувати редагування"
-              >
-                <X className="w-4 h-4" />
-              </button>
+            </div>
+
+            {error && (
+              <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-semibold leading-relaxed">
+                {error}
+              </div>
             )}
+
+            {success && (
+              <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold leading-relaxed">
+                {success}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div>
+                <label className={`block text-[10px] font-bold uppercase tracking-widest mb-1.5 ${textMutedClass}`}>
+                  Ім'я та Прізвище
+                </label>
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Ім'я Прізвище"
+                  className={`w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all text-sm ${inputClass}`}
+                />
+              </div>
+
+              <div>
+                <label className={`block text-[10px] font-bold uppercase tracking-widest mb-1.5 ${textMutedClass}`}>
+                  Електронна пошта
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="email@bnwprod.com"
+                  className={`w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all text-sm ${inputClass}`}
+                  required
+                />
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className={`block text-[10px] font-bold uppercase tracking-widest ${textMutedClass}`}>
+                    Пароль
+                  </label>
+                  {editingUser && (
+                    <span className={`text-[9px] italic ${isLight ? "text-neutral-400" : "text-white/30"}`}>
+                      Залиште порожнім, щоб не змінювати
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={editingUser ? "Новий пароль (необов'язково)" : "Мінімум 6 символів"}
+                  className={`w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all text-sm ${inputClass}`}
+                  required={!editingUser}
+                />
+              </div>
+
+              <div>
+                <label className={`block text-[10px] font-bold uppercase tracking-widest mb-2 ${textMutedClass}`}>
+                  Рівень доступу (Роль)
+                </label>
+                <div className={`space-y-1 p-1 rounded-xl ${rolePanelClass}`}>
+                  {[
+                    { key: "pending", label: "Очікує схвалення (Pending)" },
+                    { key: "founder", label: "Фаундер (Founder)" },
+                    { key: "cell_leader", label: "Керівник ячейки (Cell Leader)" },
+                    { key: "producer", label: "Операційний продюсер (Producer)" },
+                    { key: "rop", label: "Керівник ВП (РОП)" },
+                    { key: "sales", label: "Відділ продажів (Sales)" },
+                    { key: "expert", label: "Експерт / Партнер (Expert)" },
+                    { key: "marketer", label: "Маркетолог (Marketer)" },
+                    { key: "developer", label: "Розробник (Developer)" }
+                  ].map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => {
+                        setRole(item.key);
+                        if (item.key === "pending") {
+                          setSelectedProjects([]);
+                        }
+                      }}
+                      className={`w-full py-2 px-3 rounded-lg text-xs font-semibold cursor-pointer text-left transition-all flex items-center justify-between ${
+                        role === item.key
+                          ? activeRoleBtnClass
+                          : inactiveRoleBtnClass
+                      }`}
+                    >
+                      <span>{item.label}</span>
+                      {role === item.key && <Check className="w-3.5 h-3.5" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {role === "cell_leader" && (
+                <div className={`space-y-2 border-t pt-4 animate-in fade-in slide-in-from-top-2 duration-300 ${borderClass}`}>
+                  <label className={`block text-[10px] font-bold uppercase tracking-widest ${textMutedClass}`}>
+                    Закріпити ячейку (Керування)
+                  </label>
+                  <select
+                    value={selectedCellId}
+                    onChange={(e) => setSelectedCellId(e.target.value)}
+                    className={`w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all text-sm ${inputClass}`}
+                  >
+                    <option value="" className={isLight ? "text-neutral-900 bg-white" : "text-white bg-[#0C0C0F]"}>-- Не призначено --</option>
+                    {cells.map((cell) => (
+                      <option
+                        key={cell.id}
+                        value={cell.id}
+                        className={isLight ? "text-neutral-900 bg-white" : "text-white bg-[#0C0C0F]"}
+                      >
+                        {cell.name} {cell.cell_leader_id && cell.cell_leader_id !== editingUser?.id ? "(Вже має керівника)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Project selection - show for all roles except pending */}
+              {role !== "pending" && (
+                <div className={`space-y-2 border-t pt-4 animate-in fade-in slide-in-from-top-2 duration-300 ${borderClass}`}>
+                  <label className={`block text-[10px] font-bold uppercase tracking-widest ${textMutedClass}`}>
+                    Прив'язати проекти (Доступ)
+                  </label>
+                  
+                  {projects.filter(p => p.is_active !== false).length === 0 ? (
+                    <p className={`text-xs italic ${textSubtleClass}`}>Немає активних проектів в БД.</p>
+                  ) : (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar p-1">
+                      {projects.filter(p => p.is_active !== false).map((proj) => {
+                        const isChecked = selectedProjects.includes(proj.id);
+                        return (
+                          <button
+                            key={proj.id}
+                            type="button"
+                            onClick={() => handleToggleProject(proj.id)}
+                            className={`w-full flex items-center gap-2.5 p-2 rounded-lg text-left transition-all cursor-pointer ${projectBtnClass}`}
+                          >
+                            {isChecked ? (
+                              <CheckSquare className="w-4 h-4 text-emerald-400 shrink-0" />
+                            ) : (
+                              <Square className={`w-4 h-4 shrink-0 ${isLight ? "text-neutral-300" : "text-white/20"}`} />
+                            )}
+                            <div className="min-w-0">
+                              <p className={`text-xs font-bold truncate ${isLight ? "text-neutral-800" : "text-white/90"}`}>{proj.name}</p>
+                              <p className={`text-[9px] font-semibold uppercase ${isLight ? "text-neutral-400" : "text-white/30"}`}>{proj.slug}</p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={isPending}
+                className={`w-full py-4 rounded-full text-black font-black transition-all cursor-pointer shadow-lg hover:scale-[1.01] active:scale-95 duration-300 flex items-center justify-center gap-2 text-sm mt-2 ${
+                  editingUser
+                    ? "bg-indigo-400 hover:bg-indigo-300 disabled:bg-indigo-800 shadow-indigo-500/10"
+                    : "bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-800 shadow-emerald-500/10"
+                }`}
+              >
+                {isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Збереження...
+                  </>
+                ) : editingUser ? (
+                  <>
+                    <Save className="w-4 h-4" />
+                    Зберегти зміни
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="w-4 h-4" />
+                    Створити обліковий запис
+                  </>
+                )}
+              </button>
+            </form>
           </div>
 
-          {error && (
-            <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-semibold leading-relaxed">
-              {error}
-            </div>
-          )}
-
-          {success && (
-            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold leading-relaxed">
-              {success}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className={`block text-[10px] font-bold uppercase tracking-widest mb-1.5 ${textMutedClass}`}>
-                Ім'я та Прізвище
-              </label>
-              <input
-                type="text"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                placeholder="Ім'я Прізвище"
-                className={`w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all text-sm ${inputClass}`}
-              />
-            </div>
-
-            <div>
-              <label className={`block text-[10px] font-bold uppercase tracking-widest mb-1.5 ${textMutedClass}`}>
-                Електронна пошта
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="email@bnwprod.com"
-                className={`w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all text-sm ${inputClass}`}
-                required
-              />
-            </div>
-
-            <div>
-              <div className="flex justify-between items-center mb-1.5">
-                <label className={`block text-[10px] font-bold uppercase tracking-widest ${textMutedClass}`}>
-                  Пароль
-                </label>
-                {editingUser && (
-                  <span className={`text-[9px] italic ${isLight ? "text-neutral-400" : "text-white/30"}`}>
-                    Залиште порожнім, щоб не змінювати
-                  </span>
-                )}
+          {/* Sandbox Developer Card */}
+          <div className={`p-6 rounded-2xl space-y-4 border ${
+            isLight ? "bg-emerald-50/50 border-emerald-200" : "bg-emerald-500/[0.03] border-emerald-500/20"
+          }`}>
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold">
+                <FlaskConical className="w-5 h-5" />
               </div>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={editingUser ? "Новий пароль (необов'язково)" : "Мінімум 6 символів"}
-                className={`w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all text-sm ${inputClass}`}
-                required={!editingUser}
-              />
-            </div>
-
-            <div>
-              <label className={`block text-[10px] font-bold uppercase tracking-widest mb-2 ${textMutedClass}`}>
-                Рівень доступу (Роль)
-              </label>
-              <div className={`space-y-1 p-1 rounded-xl ${rolePanelClass}`}>
-                {[
-                  { key: "pending", label: "Очікує схвалення (Pending)" },
-                  { key: "founder", label: "Фаундер (Founder)" },
-                  { key: "cell_leader", label: "Керівник ячейки (Cell Leader)" },
-                  { key: "producer", label: "Операційний продюсер (Producer)" },
-                  { key: "rop", label: "Керівник ВП (РОП)" },
-                  { key: "sales", label: "Відділ продажів (Sales)" },
-                  { key: "expert", label: "Експерт / Партнер (Expert)" },
-                  { key: "marketer", label: "Маркетолог (Marketer)" },
-                  { key: "developer", label: "Розробник (Developer)" }
-                ].map((item) => (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => {
-                      setRole(item.key);
-                      if (item.key === "pending") {
-                        setSelectedProjects([]);
-                      }
-                    }}
-                    className={`w-full py-2 px-3 rounded-lg text-xs font-semibold cursor-pointer text-left transition-all flex items-center justify-between ${
-                      role === item.key
-                        ? activeRoleBtnClass
-                        : inactiveRoleBtnClass
-                    }`}
-                  >
-                    <span>{item.label}</span>
-                    {role === item.key && <Check className="w-3.5 h-3.5" />}
-                  </button>
-                ))}
+              <div>
+                <h3 className={`text-sm font-black uppercase tracking-tight flex items-center gap-2 ${isLight ? "text-neutral-900" : "text-white"}`}>
+                  🧪 Розробницький Sandbox
+                </h3>
+                <p className={`text-[11px] ${isLight ? "text-neutral-500" : "text-white/40"}`}>
+                  Повноцінний симулятор справжнього проекту з кліками, анкетними даними, воронками та фінансами.
+                </p>
               </div>
             </div>
 
-            {role === "cell_leader" && (
-              <div className={`space-y-2 border-t pt-4 animate-in fade-in slide-in-from-top-2 duration-300 ${borderClass}`}>
-                <label className={`block text-[10px] font-bold uppercase tracking-widest ${textMutedClass}`}>
-                  Закріпити ячейку (Керування)
-                </label>
-                <select
-                  value={selectedCellId}
-                  onChange={(e) => setSelectedCellId(e.target.value)}
-                  className={`w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all text-sm ${inputClass}`}
-                >
-                  <option value="" className={isLight ? "text-neutral-900 bg-white" : "text-white bg-[#0C0C0F]"}>-- Не призначено --</option>
-                  {cells.map((cell) => (
-                    <option
-                      key={cell.id}
-                      value={cell.id}
-                      className={isLight ? "text-neutral-900 bg-white" : "text-white bg-[#0C0C0F]"}
-                    >
-                      {cell.name} {cell.cell_leader_id && cell.cell_leader_id !== editingUser?.id ? "(Вже має керівника)" : ""}
-                    </option>
-                  ))}
-                </select>
+            {sandboxMessage && (
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
+                {sandboxMessage}
               </div>
             )}
 
-            {/* Project selection - show for all roles except pending */}
-            {role !== "pending" && (
-              <div className={`space-y-2 border-t pt-4 animate-in fade-in slide-in-from-top-2 duration-300 ${borderClass}`}>
-                <label className={`block text-[10px] font-bold uppercase tracking-widest ${textMutedClass}`}>
-                  Прив'язати проекти (Доступ)
-                </label>
-                
-                {projects.filter(p => p.is_active !== false).length === 0 ? (
-                  <p className={`text-xs italic ${textSubtleClass}`}>Немає активних проектів в БД.</p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Link
+                href="/admin/project/e0000000-0000-4000-8000-000000000001"
+                className="px-3.5 py-2 rounded-xl bg-emerald-500 text-black font-extrabold text-xs hover:bg-emerald-400 transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-500/10"
+              >
+                <FlaskConical className="w-3.5 h-3.5" /> Відкрити Sandbox
+              </Link>
+              <button
+                type="button"
+                onClick={handleSeedSandbox}
+                disabled={isSeedingSandbox}
+                className="px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-white font-bold text-xs hover:bg-white/10 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isSeedingSandbox ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                    Генерація даних...
+                  </>
                 ) : (
-                  <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar p-1">
-                    {projects.filter(p => p.is_active !== false).map((proj) => {
-                      const isChecked = selectedProjects.includes(proj.id);
-                      return (
-                        <button
-                          key={proj.id}
-                          type="button"
-                          onClick={() => handleToggleProject(proj.id)}
-                          className={`w-full flex items-center gap-2.5 p-2 rounded-lg text-left transition-all cursor-pointer ${projectBtnClass}`}
-                        >
-                          {isChecked ? (
-                            <CheckSquare className="w-4 h-4 text-emerald-400 shrink-0" />
-                          ) : (
-                            <Square className={`w-4 h-4 shrink-0 ${isLight ? "text-neutral-300" : "text-white/20"}`} />
-                          )}
-                          <div className="min-w-0">
-                            <p className={`text-xs font-bold truncate ${isLight ? "text-neutral-800" : "text-white/90"}`}>{proj.name}</p>
-                            <p className={`text-[9px] font-semibold uppercase ${isLight ? "text-neutral-400" : "text-white/30"}`}>{proj.slug}</p>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
+                    Перегенерувати дані
+                  </>
                 )}
-              </div>
-            )}
-            <button
-              type="submit"
-              disabled={isPending}
-              className={`w-full py-4 rounded-full text-black font-black transition-all cursor-pointer shadow-lg hover:scale-[1.01] active:scale-95 duration-300 flex items-center justify-center gap-2 text-sm mt-2 ${
-                editingUser
-                  ? "bg-indigo-400 hover:bg-indigo-300 disabled:bg-indigo-800 shadow-indigo-500/10"
-                  : "bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-800 shadow-emerald-500/10"
-              }`}
-            >
-              {isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Збереження...
-                </>
-              ) : editingUser ? (
-                <>
-                  <Save className="w-4 h-4" />
-                  Зберегти зміни
-                </>
-              ) : (
-                <>
-                  <UserPlus className="w-4 h-4" />
-                  Створити обліковий запис
-                </>
-              )}
-            </button>
-          </form>
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Right Section: Interactive Tree View OR Staff Table */}

@@ -71,6 +71,16 @@ export const DEFAULT_PROJECT_LANDINGS: Record<string, ProjectLandingItem[]> = {
   ],
   sergiy: [
     { label: "Основний", url: "https://sergiy-chernyavskyy.vercel.app/", path: "/", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20", type: "free", parameters: [] }
+  ],
+  sandbox: [
+    { label: "Головний (Sandbox)", url: "https://sandbox.bnw.internal/", path: "/", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "free", parameters: [] },
+    { label: "Інтенсив (Тест)", url: "https://sandbox.bnw.internal/intensive", path: "/intensive", badgeColor: "bg-teal-500/10 text-teal-400 border border-teal-500/20", type: "free", parameters: [] },
+    { label: "Вебінар (Тест)", url: "https://sandbox.bnw.internal/web", path: "/web", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20", type: "free", parameters: [] },
+    { label: "VSL Офер", url: "https://sandbox.bnw.internal/vsl", path: "/vsl", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20", type: "free", parameters: [] },
+    { label: "Трипваєр 990₴", url: "https://sandbox.bnw.internal/tripwire", path: "/tripwire", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20", type: "paid", parameters: [] },
+    { label: "Анкета / Діагностика", url: "https://sandbox.bnw.internal/diagnostics", path: "/diagnostics", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "quiz", parameters: [] },
+    { label: "Оплата Курсу", url: "https://sandbox.bnw.internal/checkout", path: "/checkout", badgeColor: "bg-orange-500/10 text-orange-400 border border-orange-500/20", type: "paid", parameters: [] },
+    { label: "Дякуємо (Thank You)", url: "https://sandbox.bnw.internal/thank-you", path: "/thank-you", badgeColor: "bg-green-500/10 text-green-400 border border-green-500/20", type: "thank_you", parameters: [] }
   ]
 };
 
