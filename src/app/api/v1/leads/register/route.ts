@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     // 2. Аутентификация проекта в реестре
     const { data: project, error: authError } = await supabaseAdmin
       .from('projects')
-      .select('id, name')
+      .select('id, name, default_currency')
       .eq('slug', project_slug)
       .eq('api_key_hash', api_key)
       .maybeSingle();
@@ -229,19 +229,18 @@ export async function POST(req: Request) {
     const rawVisitorUuid = m.visitor_uuid || m.visitor_id || m.visitorId || metadata?.visitor_uuid || metadata?.visitor_id || metadata?.visitorId || lead?.visitor_uuid || lead?.visitor_id || lead?.visitorId || null;
     const visitor_uuid = rawVisitorUuid && isValidUuid(rawVisitorUuid) ? rawVisitorUuid : null;
 
-    // Ensure currency is resolved and set in metadata
+    // Guarantee currency is resolved and explicitly set in metadata
     const meta = metadata || {};
-    const reqCurrency = lead.currency || meta.currency || null;
-    if (reqCurrency) {
-      meta.currency = reqCurrency;
-    }
+    const rawCurr = lead.currency || meta.currency || meta.raw_row?.currency || meta.lead?.currency || project.default_currency || 'UAH';
+    const resolvedCurrency = String(rawCurr).trim().toUpperCase();
+    meta.currency = resolvedCurrency;
 
     // Fetch today's NBU rates and store in metadata for exact conversion
     try {
       const { getExchangeRates } = await import('@/lib/exchange-rate');
       const todayRates = await getExchangeRates();
       const amount = Number(lead.amount || 0);
-      const currency = String(reqCurrency || 'uah').toLowerCase().trim();
+      const currencyLower = resolvedCurrency.toLowerCase();
 
       meta.usd_rate = todayRates.usdRate;
       meta.eur_to_usd = todayRates.eurToUsd;
@@ -249,10 +248,10 @@ export async function POST(req: Request) {
       let usdAmount = amount;
       let uahAmount = amount;
 
-      if (currency === 'uah' || currency === '₴') {
+      if (currencyLower === 'uah' || currencyLower === '₴') {
         usdAmount = amount / todayRates.usdRate;
         uahAmount = amount;
-      } else if (currency === 'eur' || currency === '€') {
+      } else if (currencyLower === 'eur' || currencyLower === '€') {
         usdAmount = amount * todayRates.eurToUsd;
         uahAmount = amount * todayRates.eurRate;
       } else {
