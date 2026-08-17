@@ -708,20 +708,29 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
         item.metadata?.currency ||
         item.metadata?.lead?.currency ||
         item.metadata?.raw_row?.currency ||
-        ""
+        "uah"
       ).trim().toLowerCase();
 
       const isEur = ["eur", "€"].includes(metaCurrency);
       const isUsd = ["usd", "$"].includes(metaCurrency);
-      const isUah = ["uah", "₴"].includes(metaCurrency);
+      const isUah = isEur || isUsd ? false : true;
 
       const isProjectAlwaysTripwire = ["sofia", "valeria"].includes(activeSlug);
 
-      if ((item.status === "Купив курс" || statusMapper.normalize(item.status) === "closed_won") && !isProjectAlwaysTripwire) {
+      const normStatus = statusMapper.normalize(item.status);
+      const itemStatusLower = String(item.status || "").toLowerCase().trim();
+      const isPaidOrder = 
+        item.status === "Купив курс" || 
+        item.status === "Купив(-ла) Трипвайер" || 
+        normStatus === "closed_won" || 
+        ["approved", "paid", "success", "оплачено", "completed", "купив курс", "купив(-ла) трипвайер"].includes(itemStatusLower) ||
+        itemStatusLower.includes("оплач");
+
+      if (isPaidOrder && !isProjectAlwaysTripwire) {
         if (isUsd) { usdCoursePaid += amt; usdCourseCount++; }
         else if (isEur) { eurCoursePaid += amt; eurCourseCount++; }
         else if (isUah) { uahCoursePaid += amt; uahCourseCount++; }
-      } else if (item.status === "Купив(-ла) Трипвайер" || ((item.status === "Купив курс" || statusMapper.normalize(item.status) === "closed_won") && isProjectAlwaysTripwire)) {
+      } else if (item.status === "Купив(-ла) Трипвайер" || (isPaidOrder && isProjectAlwaysTripwire)) {
         if (isUsd) { usdTripwirePaid += amt; usdTripwireCount++; }
         else if (isEur) { eurTripwirePaid += amt; eurTripwireCount++; }
         else if (isUah) { uahTripwirePaid += amt; uahTripwireCount++; }

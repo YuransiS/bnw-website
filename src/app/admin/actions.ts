@@ -797,29 +797,34 @@ export async function getUnifiedCRMData(
     });
     const totalCostsSpend = filteredCosts.reduce((sum: number, c: any) => sum + Number(c.spend_usd || c.spend || 0), 0);
 
-    // Fetch all paid orders for the project and selected period to calculate exact historical NBU blended revenues
-    const paidStatuses = [
-      'closed_won', 'approved', 'aprooved', 'оплачено', 'купив курс', 'купив_курс', 
-      'купив трипвайєр', 'купив трипвайер', 'купив(-ла) трипвайер', 'оплачено полностью'
-    ];
+    // Helper for robust case-insensitive paid status detection
+    const isPaidOrderStatus = (status: string) => {
+      const s = String(status || "").toLowerCase().trim();
+      return (
+        ["closed_won", "approved", "aprooved", "paid", "success", "оплачено", "completed", "купив курс", "купив_курс", "купив трипвайєр", "купив трипвайер", "купив(-ла) трипвайер", "оплачено полностью"].includes(s) ||
+        s.includes("оплач") ||
+        s.includes("approved") ||
+        s.includes("closed_won")
+      );
+    };
 
-    let paidOrdersQuery = adminSupabase
+    let rawPaidOrdersQuery = adminSupabase
       .from("unified_orders")
-      .select("amount, created_at, status, metadata")
+      .select("id, amount, created_at, status, metadata")
       .eq("project_id", activeProject.id)
-      .in("status", paidStatuses)
       .gt("amount", 0);
 
     if (startDate) {
       const startStr = parseClientDateRange(startDate, false).toISOString();
-      paidOrdersQuery = paidOrdersQuery.gte("created_at", startStr);
+      rawPaidOrdersQuery = rawPaidOrdersQuery.gte("created_at", startStr);
     }
     if (endDate) {
       const endStr = parseClientDateRange(endDate, true).toISOString();
-      paidOrdersQuery = paidOrdersQuery.lte("created_at", endStr);
+      rawPaidOrdersQuery = rawPaidOrdersQuery.lte("created_at", endStr);
     }
 
-    const { data: paidOrders } = await paidOrdersQuery;
+    const { data: rawPaidOrders } = await rawPaidOrdersQuery;
+    const paidOrders = (rawPaidOrders || []).filter((o: any) => isPaidOrderStatus(o.status));
 
     const { getExchangeRates } = await import("@/lib/exchange-rate");
     const todayRates = await getExchangeRates();
@@ -846,10 +851,12 @@ export async function getUnifiedCRMData(
     let blendedCourseRevenueUah = 0;
     let blendedTripwireRevenueUsd = 0;
     let blendedTripwireRevenueUah = 0;
+    let exactCourseCount = 0;
+    let exactTripwireCount = 0;
 
     (paidOrders || []).forEach((o: any) => {
       const amount = Number(o.amount || 0);
-      const currency = String(o.metadata?.currency || o.metadata?.lead?.currency || "uah").toLowerCase().trim();
+      const currency = String(o.metadata?.currency || o.metadata?.lead?.currency || o.metadata?.raw_row?.currency || activeProject.default_currency || "uah").toLowerCase().trim();
       const dateStr = o.created_at ? o.created_at.split("T")[0] : "";
       
       const usdRate = Number(o.metadata?.usd_rate) || (dateStr && localRateMap[dateStr]?.usdRate) || todayRates.usdRate;
@@ -877,25 +884,30 @@ export async function getUnifiedCRMData(
 
       const isTripwire = 
         (o.metadata?.original_sheet && ['Практикум', 'Practicum_Leads', 'Заявки на практикум', 'Miні-курс'].includes(o.metadata.original_sheet)) ||
-        (o.metadata?.target_sheet && ['Практикум', 'Practicum_Leads', 'Заявки на практикум', 'Miні-курс'].includes(o.metadata.target_sheet));
+        (o.metadata?.target_sheet && ['Практикум', 'Practicum_Leads', 'Заявки на практикум', 'Miні-курс'].includes(o.metadata.target_sheet)) ||
+        ['sofia', 'valeria'].includes(activeProject.slug);
 
       if (isTripwire) {
         blendedTripwireRevenueUsd += usdVal;
         blendedTripwireRevenueUah += uahVal;
+        exactTripwireCount++;
       } else {
         blendedCourseRevenueUsd += usdVal;
         blendedCourseRevenueUah += uahVal;
+        exactCourseCount++;
       }
     });
 
     const totalBlendedRevenueUsd = blendedCourseRevenueUsd + blendedTripwireRevenueUsd;
     const totalBlendedRevenueUah = blendedCourseRevenueUah + blendedTripwireRevenueUah;
+    const exactTotalSales = exactCourseCount + exactTripwireCount;
 
     const blendedProfitUsd = totalBlendedRevenueUsd - totalCostsSpend;
     const blendedProfitUah = totalBlendedRevenueUah - (totalCostsSpend * todayRates.usdRate);
 
-    const blendedAovUsd = totalSales > 0 ? totalBlendedRevenueUsd / totalSales : 0;
-    const blendedAovUah = totalSales > 0 ? totalBlendedRevenueUah / totalSales : 0;
+    const effectiveSalesCount = exactTotalSales > 0 ? exactTotalSales : (paidLeadsCount + paidTripwiresCount);
+    const blendedAovUsd = effectiveSalesCount > 0 ? totalBlendedRevenueUsd / effectiveSalesCount : 0;
+    const blendedAovUah = effectiveSalesCount > 0 ? totalBlendedRevenueUah / effectiveSalesCount : 0;
 
     const roi = totalCostsSpend > 0 ? (totalBlendedRevenueUsd / totalCostsSpend) * 100 : 0;
 
@@ -905,7 +917,7 @@ export async function getUnifiedCRMData(
 
     const conversionRate = totalClicks > 0 ? (totalLeads / totalClicks) * 100 : 0;
     const cpl = totalLeads > 0 ? totalCostsSpend / totalLeads : 0;
-    const leadToSaleConv = totalLeads > 0 ? (totalSales / totalLeads) * 100 : 0;
+    const leadToSaleConv = totalLeads > 0 ? (effectiveSalesCount / totalLeads) * 100 : 0;
 
     const singleProjectStats = {
       totalLeads,
@@ -925,9 +937,9 @@ export async function getUnifiedCRMData(
       eurTripwireRevenue,
       netProfitUsd: blendedProfitUsd,
       roi,
-      totalSales,
-      paidLeadsCount,
-      paidTripwiresCount,
+      totalSales: effectiveSalesCount,
+      paidLeadsCount: exactCourseCount > 0 ? exactCourseCount : paidLeadsCount,
+      paidTripwiresCount: exactTripwireCount > 0 ? exactTripwireCount : paidTripwiresCount,
       leadToSaleConv,
       leadToSaleConvUsd: totalLeads > 0 ? (usdSalesCount / totalLeads) * 100 : 0,
       leadToSaleConvUah: totalLeads > 0 ? (uahSalesCount / totalLeads) * 100 : 0,
@@ -2538,7 +2550,7 @@ export async function syncProjectPagesAction(projectId: string) {
     }
 
   } catch (err: any) {
-    console.error(`Page discovery sync failed for project ${projectId}:`, err.message);
+    console.warn(`[Page Discovery Warning] Sync skipped for project ${projectId}:`, err.message);
     return { error: err.message || "Failed to synchronize pages" };
   }
 }
