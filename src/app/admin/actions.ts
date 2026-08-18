@@ -2962,36 +2962,30 @@ export async function pingAllProjectsAction() {
 
       const latencyMs = Math.round(performance.now() - start);
 
-      // Save discovered landings into DB if available
-      if (isLive && discoveredPages.length > 0) {
-        for (const p of discoveredPages) {
-          const rawPath = p.path || p.url || "/";
-          let normalizedPath = rawPath;
-          if (rawPath.startsWith("http")) {
-            try {
-              normalizedPath = new URL(rawPath).pathname;
-            } catch {
-              normalizedPath = rawPath;
-            }
-          }
-          if (!normalizedPath.startsWith("/")) normalizedPath = "/" + normalizedPath;
-          normalizedPath = normalizedPath.toLowerCase();
-
+      // Save discovered landings into DB
+      const pagesToPersist = discoveredPages.length > 0 ? discoveredPages : defaultLandings;
+      for (const p of pagesToPersist) {
+        const rawPath = p.path || p.url || "/";
+        let normalizedPath = rawPath;
+        if (rawPath.startsWith("http")) {
           try {
-            await adminSupabase.from("project_landings").upsert({
-              project_id: proj.id,
-              label: p.label || normalizedPath,
-              url: p.url || `${domain}${normalizedPath}`,
-              path: normalizedPath,
-              type: p.type || "free",
-              badge_color: p.badgeColor || "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
-              parameters: p.parameters || [],
-              is_active: true,
-              last_ping_at: new Date().toISOString()
-            }, { onConflict: "project_id,path" });
-          } catch (landErr) {
-            // Non-blocking fallback
+            normalizedPath = new URL(rawPath).pathname;
+          } catch {
+            normalizedPath = rawPath;
           }
+        }
+        if (!normalizedPath.startsWith("/")) normalizedPath = "/" + normalizedPath;
+
+        try {
+          await adminSupabase.from("discovered_pages").upsert({
+            project_id: proj.id,
+            path: normalizedPath,
+            title: p.label || p.title || normalizedPath,
+            source: discoveredPages.length > 0 ? "external" : "config",
+            last_seen_at: new Date().toISOString()
+          }, { onConflict: "project_id,path" });
+        } catch (landErr) {
+          // Non-blocking fallback
         }
       }
 
