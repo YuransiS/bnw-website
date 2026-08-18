@@ -642,19 +642,46 @@ export default function FunnelsTab({
 
   // Funnel Analytics Calculator
   const getFunnelStats = (funnel: Funnel) => {
-    const startDateTime = new Date(funnel.start_date + "T00:00:00").getTime();
-    const endDateTime = funnel.end_date 
-      ? new Date(funnel.end_date + "T23:59:59").getTime()
-      : null;
+    const parseSafeTs = (dStr: string | null | undefined, isEnd = false): number | null => {
+      if (!dStr) return null;
+      const clean = String(dStr).trim();
+      if (clean.includes(".")) {
+        const parts = clean.split(".");
+        if (parts.length === 3) {
+          const day = parseInt(parts[0], 10);
+          const month = parseInt(parts[1], 10) - 1;
+          const year = parseInt(parts[2], 10);
+          if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+            return new Date(year, month, day, isEnd ? 23 : 0, isEnd ? 59 : 0, isEnd ? 59 : 0).getTime();
+          }
+        }
+      }
+      if (clean.includes("-")) {
+        const parts = clean.split("-");
+        if (parts.length === 3) {
+          const year = parseInt(parts[0], 10);
+          const month = parseInt(parts[1], 10) - 1;
+          const day = parseInt(parts[2], 10);
+          if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+            return new Date(year, month, day, isEnd ? 23 : 0, isEnd ? 59 : 0, isEnd ? 59 : 0).getTime();
+          }
+        }
+      }
+      const d = new Date(clean);
+      return isNaN(d.getTime()) ? null : d.getTime();
+    };
+
+    const startDateTime = parseSafeTs(funnel.start_date, false);
+    const endDateTime = parseSafeTs(funnel.end_date, true);
     
     // Filter leads created in the active range, matching campaign or landing slugs
     const matchedLeads = leadsList.filter((lead: any) => {
-      const leadTime = new Date(lead.created_at).getTime();
-      if (leadTime < startDateTime) return false;
+      const leadTime = new Date(lead.created_at || lead.createdAt).getTime();
+      if (startDateTime && leadTime < startDateTime) return false;
       if (endDateTime && leadTime > endDateTime) return false;
 
       const leadCampaign = String(lead.utm_campaign || lead.utmCampaign || "").trim().toLowerCase();
-      const leadLanding = String(lead.landing || lead.page_path || lead.page_url || lead.target_sheet || lead.metadata?.target_sheet || "").trim().toLowerCase();
+      const leadLanding = String(lead.landing || lead.page_path || lead.page_url || lead.target_sheet || lead.targetSheet || lead.metadata?.target_sheet || "").trim().toLowerCase();
       const visitedLandings = (lead.visited_landings || lead.visitedLandings || []).map((l: string) => String(l).toLowerCase());
 
       const hasCampaigns = Array.isArray(funnel.campaign_ids) && funnel.campaign_ids.length > 0;
@@ -678,28 +705,50 @@ export default function FunnelsTab({
     let revenue = 0;
     let salesCount = 0;
     matchedLeads.forEach((lead: any) => {
-      if (lead.status === "closed_won" || lead.status === "Купив курс" || lead.status === "Купив(-ла) Трипвайер") {
-        revenue += Number(lead.amount || 0);
+      const s = String(lead.status || "").toLowerCase().trim();
+      const isPaid = (
+        ["closed_won", "approved", "aprooved", "paid", "success", "оплачено", "completed", "купив курс", "купив_курс", "купив трипвайєр", "купив трипвайер", "купив(-ла) трипвайер", "оплачено полностью"].includes(s) ||
+        s.includes("оплач") ||
+        s.includes("approved") ||
+        s.includes("closed_won") ||
+        s.includes("успішно")
+      );
+
+      const leadAmt = Number(
+        lead.uahPaid ||
+        lead.uah_paid ||
+        lead.uahTripwirePaid ||
+        lead.uah_tripwire_paid ||
+        (lead.usdPaid || lead.usd_paid ? (Number(lead.usdPaid || lead.usd_paid) * 41.8) : 0) ||
+        lead.amount ||
+        0
+      );
+
+      if (isPaid || leadAmt > 0) {
+        revenue += leadAmt;
         salesCount++;
       }
     });
 
     // Calculate surveys/quizzes count
     const quizzesCount = matchedLeads.filter(
-      (l: any) => l.diagnosticsComment && l.diagnosticsComment.trim().length > 0
+      (l: any) => (l.diagnosticsComment && l.diagnosticsComment.trim().length > 0) || (l.diagnostics_comment && l.diagnostics_comment.trim().length > 0)
     ).length;
 
     // Sum Ad Spends from daily traffic costs in the active range
     let spend = 0;
     costsList.forEach((c: any) => {
-      const isMatched = funnel.campaign_ids.some((id) => 
-        String(c.campaign_name || "").toLowerCase().includes(id.toLowerCase())
-      );
+      const hasCampaigns = Array.isArray(funnel.campaign_ids) && funnel.campaign_ids.length > 0;
+      const isMatched = hasCampaigns
+        ? funnel.campaign_ids.some((id) => String(c.campaign_name || "").toLowerCase().includes(id.toLowerCase()))
+        : true;
       if (!isMatched) return;
       
-      const costDate = new Date(c.date + "T12:00:00").getTime();
-      if (costDate < startDateTime) return;
-      if (endDateTime && costDate > endDateTime) return;
+      const costDate = parseSafeTs(c.date, false);
+      if (costDate) {
+        if (startDateTime && costDate < startDateTime) return;
+        if (endDateTime && costDate > endDateTime) return;
+      }
       
       // Spend in UAH
       spend += Number(c.spend || 0);
@@ -713,7 +762,7 @@ export default function FunnelsTab({
       if (tx.funnel_id === funnel.id) {
         const amt = Number(tx.amount || 0);
         const isUAH = tx.currency === "UAH";
-        const amtUAH = isUAH ? amt : amt * 41; // Conversion rate to UAH
+        const amtUAH = isUAH ? amt : amt * 41.8;
         if (tx.type === "expense") {
           manualSpendUAH += amtUAH;
         } else {
@@ -733,9 +782,10 @@ export default function FunnelsTab({
     // Click sum from campaigns
     let totalClicks = 0;
     campaignsList.forEach((c: any) => {
-      const isMatched = funnel.campaign_ids.some((id) => 
-        String(c.campaign_name || "").toLowerCase().includes(id.toLowerCase())
-      );
+      const hasCampaigns = Array.isArray(funnel.campaign_ids) && funnel.campaign_ids.length > 0;
+      const isMatched = hasCampaigns
+        ? funnel.campaign_ids.some((id) => String(c.campaign_name || "").toLowerCase().includes(id.toLowerCase()))
+        : true;
       if (isMatched) {
         totalClicks += Number(c.clicks || 0);
       }

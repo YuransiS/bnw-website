@@ -818,34 +818,42 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
     const totalPaidAmount = usdCoursePaid + uahCoursePaid + eurCoursePaid + usdTripwirePaid + uahTripwirePaid + eurTripwirePaid;
     const hasPayment = totalPaidAmount > 0 || normalizedGroupLeads.some((o: any) => {
       const norm = statusMapper.normalize(o.status);
-      return norm === "closed_won" || o.status === "Купив курс" || o.status === "Купив(-ла) Трипвайер";
+      return norm === "closed_won" || o.status === "Купив курс" || o.status === "Купив(-ла) Трипвайер" || o.status === "Approved";
     });
+
+    const hasAttemptedAmount = (usdAttempted > 0 || uahAttempted > 0 || eurAttempted > 0);
 
     const hasCheckout = normalizedGroupLeads.some((o: any) => {
       const norm = statusMapper.normalize(o.status);
-      const isPaidStatus = norm === "closed_won" || o.status === "Купив курс" || o.status === "Купив(-ла) Трипвайер";
+      const isPaidStatus = norm === "closed_won" || o.status === "Купив курс" || o.status === "Купив(-ла) Трипвайер" || o.status === "Approved";
       if (isPaidStatus) return false;
 
       const amt = Number(o.amount || 0);
       const s = String(o.status || "").toLowerCase();
       const meta = o.metadata || {};
-      const url = String(o.page_url || meta.page_url || "").toLowerCase();
+      const raw = meta.raw_row || {};
+      const url = String(o.page_url || meta.page_url || raw.page_url || "").toLowerCase();
       
       const isExplicitCheckoutStatus = 
-        s === "⏳ очікується оплата" || 
-        s === "очікується оплата" || 
-        s === "очікує оплати" || 
+        s.includes("очікується оплата") || 
+        s.includes("очікує оплати") || 
+        s.includes("перехід до оплати") ||
+        s.includes("клик на форму оплати") ||
+        s.includes("почато оплату") ||
         s.includes("checkout") || 
-        s.includes("кошик");
+        s.includes("кошик") ||
+        s.includes("expired") ||
+        s.includes("відхилено") ||
+        s.includes("failed") ||
+        s.includes("pending");
 
-      const hasPaymentIntentMeta = Boolean(meta.payment_intent || meta.wfp_order_id || meta.mono_invoice_id || meta.checkout_started);
-      const isCheckoutPage = url.includes("/checkout") || url.includes("/pay") || url.includes("/order") || url.includes("wayforpay");
+      const hasPaymentIntentMeta = Boolean(meta.payment_intent || meta.wfp_order_id || meta.mono_invoice_id || meta.checkout_started || raw.order_id || raw.raw_payload);
+      const isCheckoutPage = url.includes("/checkout") || url.includes("/pay") || url.includes("/order") || url.includes("wayforpay") || (amt > 0);
 
-      // An unpaid checkout MUST have an amount > 0 or explicit payment intent/checkout status
-      return (amt > 0 || hasPaymentIntentMeta || isExplicitCheckoutStatus) && (isExplicitCheckoutStatus || hasPaymentIntentMeta || (amt > 0 && isCheckoutPage));
+      return isExplicitCheckoutStatus || hasPaymentIntentMeta || (amt > 0 && isCheckoutPage);
     });
 
-    const isUnpaidIntent = !hasPayment && hasCheckout;
+    const isUnpaidIntent = !hasPayment && (hasCheckout || hasAttemptedAmount);
 
     // 2. Tag Hierarchy Engine (Levels 1, 2, 3)
     const derivedTagsSet = new Set<string>();

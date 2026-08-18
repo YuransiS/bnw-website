@@ -557,21 +557,23 @@ export async function getUnifiedCRMData(
         
         let q = query;
         let aq = aggQuery;
-        funnels.forEach(funnel => {
+        funnels.forEach((funnel: any) => {
           const campaignIds = funnel.campaign_ids || [];
           const landingSlugs = funnel.landing_slugs || [];
           campaignIds.forEach((c: string) => {
-            if (c.trim()) {
+            if (c && c.trim()) {
               q = q.not("utm_campaign", "ilike", `%${c.trim()}%`);
               aq = aq.not("utm_campaign", "ilike", `%${c.trim()}%`);
             }
           });
           landingSlugs.forEach((s: string) => {
-            if (s.trim()) {
+            if (s && s.trim() && s.trim() !== "/") {
               q = q.not("page_path", "ilike", `%${s.trim()}%`);
               q = q.not("page_url", "ilike", `%${s.trim()}%`);
+              q = q.not("visited_landings", "cs", `{"${s.trim()}"}`);
               aq = aq.not("page_path", "ilike", `%${s.trim()}%`);
               aq = aq.not("page_url", "ilike", `%${s.trim()}%`);
+              aq = aq.not("visited_landings", "cs", `{"${s.trim()}"}`);
             }
           });
         });
@@ -591,19 +593,35 @@ export async function getUnifiedCRMData(
           const orConditions: string[] = [];
           
           campaignIds.forEach((c: string) => {
-            if (c.trim()) orConditions.push(`utm_campaign.ilike.%${c.trim()}%`);
+            if (c && c.trim()) orConditions.push(`utm_campaign.ilike.%${c.trim()}%`);
           });
 
           landingSlugs.forEach((s: string) => {
-            if (s.trim()) {
+            if (s && s.trim()) {
               orConditions.push(`page_path.ilike.%${s.trim()}%`);
               orConditions.push(`page_url.ilike.%${s.trim()}%`);
+              orConditions.push(`visited_landings.cs.{"${s.trim()}"}`);
             }
           });
 
           const funnelName = funnel.name ? funnel.name.trim() : "";
           if (funnelName) {
             orConditions.push(`target_sheet.ilike.%${funnelName}%`);
+          }
+
+          if (funnel.start_date) {
+            const sDate = parseClientDateRange(funnel.start_date, false);
+            if (sDate) {
+              query = query.gte("created_at", sDate.toISOString());
+              aggQuery = aggQuery.gte("created_at", sDate.toISOString());
+            }
+          }
+          if (funnel.end_date) {
+            const eDate = parseClientDateRange(funnel.end_date, true);
+            if (eDate) {
+              query = query.lte("created_at", eDate.toISOString());
+              aggQuery = aggQuery.lte("created_at", eDate.toISOString());
+            }
           }
 
           if (orConditions.length > 0) {

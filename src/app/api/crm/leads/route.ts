@@ -239,7 +239,75 @@ async function handleQueryLeads(request: Request) {
       }
     }
     if (sourceFilter !== "all") {
-      query = query.eq("target_sheet", sourceFilter);
+      if (sourceFilter === "unassigned") {
+        const { data: projectFunnels } = await adminSupabase
+          .from("funnels")
+          .select("*")
+          .eq("project_id", activeProject.id);
+        const funnels = projectFunnels || [];
+
+        funnels.forEach((funnel: any) => {
+          const campaignIds = funnel.campaign_ids || [];
+          const landingSlugs = funnel.landing_slugs || [];
+          campaignIds.forEach((c: string) => {
+            if (c && c.trim()) {
+              query = query.not("utm_campaign", "ilike", `%${c.trim()}%`);
+            }
+          });
+          landingSlugs.forEach((s: string) => {
+            if (s && s.trim() && s.trim() !== "/") {
+              query = query.not("page_path", "ilike", `%${s.trim()}%`);
+              query = query.not("page_url", "ilike", `%${s.trim()}%`);
+              query = query.not("visited_landings", "cs", `{"${s.trim()}"}`);
+            }
+          });
+        });
+      } else {
+        const { data: funnel } = await adminSupabase
+          .from("funnels")
+          .select("*")
+          .eq("id", sourceFilter)
+          .maybeSingle();
+
+        if (funnel) {
+          const campaignIds = funnel.campaign_ids || [];
+          const landingSlugs = funnel.landing_slugs || [];
+
+          const orConditions: string[] = [];
+
+          campaignIds.forEach((c: string) => {
+            if (c && c.trim()) orConditions.push(`utm_campaign.ilike.%${c.trim()}%`);
+          });
+
+          landingSlugs.forEach((s: string) => {
+            if (s && s.trim()) {
+              orConditions.push(`page_path.ilike.%${s.trim()}%`);
+              orConditions.push(`page_url.ilike.%${s.trim()}%`);
+              orConditions.push(`visited_landings.cs.{"${s.trim()}"}`);
+            }
+          });
+
+          const funnelName = funnel.name ? funnel.name.trim() : "";
+          if (funnelName) {
+            orConditions.push(`target_sheet.ilike.%${funnelName}%`);
+          }
+
+          if (funnel.start_date) {
+            const sDate = parseClientDateRange(funnel.start_date, false);
+            if (sDate) query = query.gte("created_at", sDate.toISOString());
+          }
+          if (funnel.end_date) {
+            const eDate = parseClientDateRange(funnel.end_date, true);
+            if (eDate) query = query.lte("created_at", eDate.toISOString());
+          }
+
+          if (orConditions.length > 0) {
+            query = query.or(orConditions.join(","));
+          }
+        } else {
+          query = query.eq("target_sheet", sourceFilter);
+        }
+      }
     }
     if (unpaidIntentOnly) {
       query = query.eq("is_unpaid_intent", true);

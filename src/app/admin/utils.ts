@@ -17,20 +17,39 @@ export const getUkraineOffset = (year: number, month: number, day: number): stri
   return "+02:00";
 };
 
-export const parseClientDateRange = (dateStr: string, isEnd: boolean): Date => {
-  if (!dateStr) return new Date();
-  const parts = dateStr.split("-");
-  if (parts.length === 3) {
-    const year = parseInt(parts[0], 10);
-    const month = parseInt(parts[1], 10) - 1;
-    const day = parseInt(parts[2], 10);
-    if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
-      const offset = getUkraineOffset(year, month, day);
-      const hourStr = isEnd ? "23:59:59" : "00:00:00";
-      const isoStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}T${hourStr}${offset}`;
-      return new Date(isoStr);
+export const parseSafeDate = (dateStr: string | null | undefined, isEnd = false): Date | null => {
+  if (!dateStr) return null;
+  const clean = String(dateStr).trim();
+  if (clean.includes(".")) {
+    const parts = clean.split(".");
+    if (parts.length === 3) {
+      const day = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const year = parseInt(parts[2], 10);
+      if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+        return new Date(year, month, day, isEnd ? 23 : 0, isEnd ? 59 : 0, isEnd ? 59 : 0);
+      }
     }
   }
+  if (clean.includes("-")) {
+    const parts = clean.split("-");
+    if (parts.length === 3) {
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+        return new Date(year, month, day, isEnd ? 23 : 0, isEnd ? 59 : 0, isEnd ? 59 : 0);
+      }
+    }
+  }
+  const d = new Date(clean);
+  return isNaN(d.getTime()) ? null : d;
+};
+
+export const parseClientDateRange = (dateStr: string, isEnd: boolean): Date => {
+  if (!dateStr) return new Date();
+  const safe = parseSafeDate(dateStr, isEnd);
+  if (safe) return safe;
   return new Date(dateStr);
 };
 
