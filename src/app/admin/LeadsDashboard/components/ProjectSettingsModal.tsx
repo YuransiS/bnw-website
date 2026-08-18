@@ -13,14 +13,18 @@ import {
   Link as LinkIcon,
   DollarSign,
   User,
-  ShieldAlert
+  ShieldAlert,
+  Key,
+  Copy,
+  Check
 } from "lucide-react";
 import { useTheme } from "../../ThemeProvider";
 import {
   updateProjectSettingsAction,
   getMetaAdAccountsAction,
   getMetaAccountCampaignsAction,
-  bindProjectAdAccountAction
+  bindProjectAdAccountAction,
+  updateMetaTokenAction
 } from "../../actions";
 
 interface ProjectSettingsModalProps {
@@ -64,6 +68,12 @@ export default function ProjectSettingsModal({
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [apiWarning, setApiWarning] = useState<string | null>(null);
+
+  // Meta Token Editor States
+  const [showTokenEditor, setShowTokenEditor] = useState(false);
+  const [newTokenInput, setNewTokenInput] = useState("");
+  const [isUpdatingToken, setIsUpdatingToken] = useState(false);
+  const [copiedError, setCopiedError] = useState(false);
 
   // Sync state when project changes
   useEffect(() => {
@@ -419,9 +429,82 @@ export default function ProjectSettingsModal({
               </div>
 
               {apiWarning && (
-                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[11px] flex items-center gap-2 font-medium">
-                  <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
-                  <span>Повідомлення Meta API: {apiWarning} (використовуються збережені акаунти системи)</span>
+                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-300 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2 text-xs">
+                      <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
+                      <div>
+                        <span className="font-extrabold text-amber-200 block">Потрібно оновити токен Meta Graph API</span>
+                        <span className="text-[11px] text-amber-300/80 block mt-0.5">
+                          {apiWarning.includes("Session has expired") || apiWarning.includes("Error validating access token")
+                            ? "Термін дії поточного токена Meta завершився. Передайте повідомлення розробнику або оновіть токен нижче."
+                            : `Meta API: ${apiWarning}`}
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(`Помилка Meta Token на проекті ${project.name}: ${apiWarning}`);
+                        setCopiedError(true);
+                        setTimeout(() => setCopiedError(false), 2500);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 text-[10px] font-bold flex items-center gap-1 shrink-0 transition-all cursor-pointer"
+                    >
+                      {copiedError ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedError ? "Скопійовано!" : "Скопіювати"}</span>
+                    </button>
+                  </div>
+
+                  {["admin", "superman", "founder", "developer"].includes(userRole) && (
+                    <div className="pt-2 border-t border-amber-500/20">
+                      <button
+                        type="button"
+                        onClick={() => setShowTokenEditor(!showTokenEditor)}
+                        className="text-[11px] font-bold text-amber-200 hover:text-white flex items-center gap-1 cursor-pointer transition-all"
+                      >
+                        <Key className="w-3 h-3" />
+                        <span>{showTokenEditor ? "Приховати оновлення токена" : "Вставити новий токен Meta (System User / User Token)..."}</span>
+                      </button>
+
+                      {showTokenEditor && (
+                        <div className="mt-2 space-y-2 p-3 rounded-xl bg-black/40 border border-white/10">
+                          <input
+                            type="password"
+                            value={newTokenInput}
+                            onChange={(e) => setNewTokenInput(e.target.value)}
+                            placeholder="EAAWcjCyZ..."
+                            className="w-full px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white text-xs font-mono focus:border-emerald-500 focus:outline-none"
+                          />
+                          <div className="flex justify-between items-center text-[10px] text-white/50">
+                            <span>Рекомендовано: System User Token з правами ads_read, read_insights (Never Expire)</span>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!newTokenInput.trim()) return;
+                                setIsUpdatingToken(true);
+                                const res = await updateMetaTokenAction(newTokenInput.trim());
+                                setIsUpdatingToken(false);
+                                if (res.error) {
+                                  alert(`Помилка: ${res.error}`);
+                                } else {
+                                  alert(res.message || "Токен оновлено!");
+                                  setNewTokenInput("");
+                                  setShowTokenEditor(false);
+                                  loadMetaAdAccounts();
+                                }
+                              }}
+                              disabled={isUpdatingToken || !newTokenInput.trim()}
+                              className="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-black transition-all disabled:opacity-40 cursor-pointer"
+                            >
+                              {isUpdatingToken ? "Перевірка..." : "Зберегти токен"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

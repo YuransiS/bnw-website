@@ -177,11 +177,6 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const metaToken = process.env.META_ACCESS_TOKEN;
-    if (!metaToken) {
-      return NextResponse.json({ error: "Missing META_ACCESS_TOKEN" }, { status: 500 });
-    }
-
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!supabaseUrl || !supabaseKey) {
@@ -191,6 +186,23 @@ export async function GET(req: Request) {
     const supabase = createClient(supabaseUrl, supabaseKey, {
       auth: { persistSession: false }
     });
+
+    // 0. Resolve dynamic token from DB first, then fallback to env
+    let metaToken = process.env.META_ACCESS_TOKEN;
+    const { data: dbTokenRow } = await supabase
+      .from("ad_spend_mappings")
+      .select("rule_value")
+      .eq("rule_type", "meta_token")
+      .eq("project_slug", "global")
+      .maybeSingle();
+
+    if (dbTokenRow?.rule_value && dbTokenRow.rule_value.trim().length > 10) {
+      metaToken = dbTokenRow.rule_value.trim();
+    }
+
+    if (!metaToken) {
+      return NextResponse.json({ error: "Missing META_ACCESS_TOKEN in DB or ENV" }, { status: 500 });
+    }
 
     const apiVersion = process.env.META_API_VERSION || "v25.0";
 

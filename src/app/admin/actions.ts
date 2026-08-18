@@ -3079,6 +3079,90 @@ export async function updateProjectSettingsAction(
 }
 
 /**
+ * Resolves the effective Meta Access Token from DB (ad_spend_mappings) or env
+ */
+export async function getEffectiveMetaToken(adminSupabase: any): Promise<string | null> {
+  try {
+    const { data: dbToken } = await adminSupabase
+      .from("ad_spend_mappings")
+      .select("rule_value")
+      .eq("rule_type", "meta_token")
+      .eq("project_slug", "global")
+      .maybeSingle();
+
+    if (dbToken?.rule_value && dbToken.rule_value.trim().length > 10) {
+      return dbToken.rule_value.trim();
+    }
+  } catch (err) {
+    console.warn("Could not query DB for meta_token:", err);
+  }
+
+  return process.env.META_ACCESS_TOKEN || null;
+}
+
+/**
+ * Updates or sets the global Meta Access Token in ad_spend_mappings
+ */
+export async function updateMetaTokenAction(newToken: string) {
+  try {
+    const supabase = await createClient();
+    const adminSupabase = createAdminClient();
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Unauthorized");
+
+    const { data: profile } = await adminSupabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile || !["admin", "superman", "founder", "developer"].includes(profile.role)) {
+      throw new Error("Only developers, founders and admins can update Meta tokens");
+    }
+
+    const cleanToken = (newToken || "").trim();
+    if (!cleanToken) throw new Error("Токен не може бути порожнім");
+
+    // Test token with Meta Graph API
+    const testUrl = `https://graph.facebook.com/v25.0/me?access_token=${cleanToken}`;
+    const testRes = await fetch(testUrl);
+    if (!testRes.ok) {
+      const errJson = await testRes.json().catch(() => ({}));
+      throw new Error(errJson.error?.message || `Meta API HTTP ${testRes.status}: Недійсний токен`);
+    }
+
+    const { data: existing } = await adminSupabase
+      .from("ad_spend_mappings")
+      .select("id")
+      .eq("rule_type", "meta_token")
+      .eq("project_slug", "global")
+      .maybeSingle();
+
+    if (existing) {
+      const { error: updErr } = await adminSupabase
+        .from("ad_spend_mappings")
+        .update({ rule_value: cleanToken })
+        .eq("id", existing.id);
+      if (updErr) throw updErr;
+    } else {
+      const { error: insErr } = await adminSupabase
+        .from("ad_spend_mappings")
+        .insert({
+          project_slug: "global",
+          rule_type: "meta_token",
+          rule_value: cleanToken
+        });
+      if (insErr) throw insErr;
+    }
+
+    return { success: true, message: "Токен Meta Graph API успішно перевірено та оновлено в системі!" };
+  } catch (err: any) {
+    return { error: err.message || "Failed to update Meta token" };
+  }
+}
+
+/**
  * Fetches all accessible Meta Ad Accounts via Meta Graph API with DB fallback
  */
 export async function getMetaAdAccountsAction() {
@@ -3092,7 +3176,8 @@ export async function getMetaAdAccountsAction() {
     // 1. Get current mappings and known accounts from DB
     const { data: mappings } = await adminSupabase
       .from("ad_spend_mappings")
-      .select("project_slug, rule_value");
+      .select("project_slug, rule_value")
+      .neq("rule_type", "meta_token");
 
     const mappingMap = new Map((mappings || []).map((m: any) => [m.project_slug, m.rule_value]));
 
@@ -3110,7 +3195,7 @@ export async function getMetaAdAccountsAction() {
     let accountsList: any[] = [];
     let apiWarning: string | null = null;
 
-    const token = process.env.META_ACCESS_TOKEN;
+    const token = await getEffectiveMetaToken(adminSupabase);
     if (token) {
       try {
         const url = `https://graph.facebook.com/v25.0/me/adaccounts?fields=name,account_id,id,account_status,currency,amount_spent&limit=50&access_token=${token}`;
@@ -3180,7 +3265,7 @@ export async function getMetaAccountCampaignsAction(adAccountId: string) {
     if (!user) throw new Error("Unauthorized");
 
     const cleanAccountId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
-    const token = process.env.META_ACCESS_TOKEN;
+    const token = await getEffectiveMetaToken(adminSupabase);
     let campaigns: any[] = [];
     let apiWarning: string | null = null;
 
