@@ -16,7 +16,8 @@ import {
   ChevronDown,
   Wallet,
   Globe,
-  Plus
+  Plus,
+  Settings
 } from "lucide-react";
 
 import { useTheme } from "../ThemeProvider";
@@ -57,6 +58,7 @@ import { getFunnelsAction } from "../actions";
 import LeadJourneyModal from "./components/LeadJourneyModal";
 import AddLeadModal from "./components/AddLeadModal";
 import UnresolvedOrdersModal from "./components/UnresolvedOrdersModal";
+import ProjectSettingsModal from "./components/ProjectSettingsModal";
 
 interface LeadsDashboardProps {
   initialData: any;
@@ -152,6 +154,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const [selectedLanding, setSelectedLanding] = useState<string>("all");
 
   const [activeQuizLeadId, setActiveQuizLeadId] = useState<string | null>(null);
+  const [showProjectSettingsModal, setShowProjectSettingsModal] = useState(false);
 
   // Reference to track last fetched parameters to prevent duplicate/redundant client-side fetches
   const lastFetchedParamsRef = React.useRef<string>("");
@@ -745,6 +748,16 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
               $ USD
             </button>
           </div>
+          {viewType === "single" && activeProject && ["admin", "superman", "founder", "cell_leader", "producer", "developer"].includes(role) && (
+            <button
+              onClick={() => setShowProjectSettingsModal(true)}
+              className="px-3 py-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white/80 hover:text-white text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
+              title="Налаштування проекту та прив'язка кабінету Meta Ads"
+            >
+              <Settings className="w-3.5 h-3.5 text-emerald-450" />
+              <span>Кабінет Meta Ads</span>
+            </button>
+          )}
           {unresolvedOrders.length > 0 && (
             <button
               onClick={() => setShowUnresolvedModal(true)}
@@ -980,6 +993,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         {activeTab === "funnels" && viewType === "single" && (
           <FunnelsTab
             projectId={activeProject?.id || ""}
+            activeProject={activeProject}
+            userRole={role}
             campaignsList={dashboardData.campaignsData || []}
             leadsList={processedLeads}
             costsList={dashboardData.costs || []}
@@ -1250,6 +1265,17 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           onClose={() => setShowAddTransaction(false)}
           onSuccess={fetchFinanceData}
           isLight={isLight}
+        />
+      )}
+
+      {/* Project Settings & Meta Ads Modal */}
+      {showProjectSettingsModal && activeProject && (
+        <ProjectSettingsModal
+          isOpen={showProjectSettingsModal}
+          onClose={() => setShowProjectSettingsModal(false)}
+          project={activeProject}
+          userRole={role}
+          onProjectUpdated={() => handleRefresh()}
         />
       )}
 

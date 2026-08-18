@@ -16,11 +16,14 @@ import {
 import {
   Plus, Target, Calendar, Link as LinkIcon, RefreshCw, BarChart2, Layers, AlertCircle,
   Search, Sparkles, ArrowLeft, Edit3, Trash2, CheckCircle, TrendingUp, DollarSign,
-  ChevronRight, Eye, Award, X
+  ChevronRight, Eye, Award, X, Settings, Megaphone
 } from "lucide-react";
+import ProjectSettingsModal from "../components/ProjectSettingsModal";
 
 interface FunnelsTabProps {
   projectId: string;
+  activeProject?: any;
+  userRole?: string;
   campaignsList: any[]; // Existing UTM campaigns
   leadsList: any[];     // Existing leads
   costsList?: any[];    // Raw daily cost records
@@ -151,6 +154,8 @@ const FUNNEL_TYPES = [
 
 export default function FunnelsTab({
   projectId,
+  activeProject,
+  userRole = "producer",
   campaignsList,
   leadsList,
   costsList = [],
@@ -168,6 +173,9 @@ export default function FunnelsTab({
   // Selected funnel details view state
   const [selectedFunnel, setSelectedFunnel] = useState<Funnel | null>(null);
 
+  // Meta Settings Modal state
+  const [showMetaModal, setShowMetaModal] = useState(false);
+
   // Discovered Pages & Multiselect State
   const [discoveredPages, setDiscoveredPages] = useState<any[]>([]);
   const [selectedPages, setSelectedPages] = useState<string[]>([]);
@@ -177,6 +185,7 @@ export default function FunnelsTab({
   // Campaigns Multiselect State
   const [selectedCampaigns, setSelectedCampaigns] = useState<string[]>([]);
   const [searchCampaignQuery, setSearchCampaignQuery] = useState("");
+  const [manualCampaignInput, setManualCampaignInput] = useState("");
   
   // Creation/Editing Form State
   const [showForm, setShowForm] = useState(false);
@@ -1216,11 +1225,61 @@ export default function FunnelsTab({
             {wizardStep === 4 && (
               <div className="space-y-4 animate-in fade-in duration-200">
                 <div className="space-y-2">
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-white/50 block">Рекламні Кампанії (Meta / Facebook Ads)</label>
-                    <p className="text-[10px] text-white/40 mt-0.5">
-                      Оберіть рекламні кампанії Facebook, трафік з яких належить до цієї воронки (необов'язково).
-                    </p>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <label className="text-[10px] uppercase font-bold text-white/50 block">Рекламні Кампанії (Meta / Facebook Ads)</label>
+                      <p className="text-[10px] text-white/40 mt-0.5">
+                        Оберіть або додайте рекламні кампанії Meta, бюджет і витрати яких зараховуватимуться до цієї воронки.
+                      </p>
+                    </div>
+                    {activeProject && (
+                      <button
+                        type="button"
+                        onClick={() => setShowMetaModal(true)}
+                        className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white border border-white/10 text-[10px] font-bold flex items-center gap-1.5 cursor-pointer transition-all shrink-0"
+                      >
+                        <Settings className="w-3 h-3 text-emerald-450" />
+                        <span>Кабінет Meta</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Manual Campaign Input Field */}
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={manualCampaignInput}
+                      onChange={(e) => setManualCampaignInput(e.target.value)}
+                      placeholder="Введіть назву кампанії або UTM мітку (напр. MINIK, WIDE)..."
+                      className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-xs focus:outline-none focus:border-emerald-500 text-white placeholder-white/30"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          if (manualCampaignInput.trim()) {
+                            const val = manualCampaignInput.trim();
+                            if (!selectedCampaigns.includes(val)) {
+                              setSelectedCampaigns([...selectedCampaigns, val]);
+                            }
+                            setManualCampaignInput("");
+                          }
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (manualCampaignInput.trim()) {
+                          const val = manualCampaignInput.trim();
+                          if (!selectedCampaigns.includes(val)) {
+                            setSelectedCampaigns([...selectedCampaigns, val]);
+                          }
+                          setManualCampaignInput("");
+                        }
+                      }}
+                      className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-black text-xs font-black rounded-xl cursor-pointer transition-all shrink-0"
+                    >
+                      + Додати
+                    </button>
                   </div>
                   
                   {campaignsList.length > 0 ? (
@@ -1233,14 +1292,17 @@ export default function FunnelsTab({
                           type="text"
                           value={searchCampaignQuery}
                           onChange={(e) => setSearchCampaignQuery(e.target.value)}
-                          placeholder="Пошук рекламних кампаній..."
+                          placeholder="Пошук серед знайдених кампаній..."
                           className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 rounded-xl text-xs focus:outline-none focus:border-emerald-500 text-white placeholder-white/30"
                         />
                       </div>
 
                       <div className="border border-white/10 rounded-xl overflow-hidden bg-black/35">
                         <div className="max-h-48 overflow-y-auto divide-y divide-white/5 custom-scrollbar text-xs">
-                          {Array.from(new Set(campaignsList.map((c: any) => String(c.campaign_name || '').trim()).filter(Boolean)))
+                          {Array.from(new Set([
+                            ...campaignsList.map((c: any) => String(c.campaign_name || '').trim()),
+                            ...selectedCampaigns
+                          ].filter(Boolean)))
                             .filter((campName) => campName.toLowerCase().includes(searchCampaignQuery.toLowerCase()))
                             .map((campName) => {
                               const isSelected = selectedCampaigns.includes(campName);
@@ -1299,12 +1361,12 @@ export default function FunnelsTab({
                       )}
                     </>
                   ) : (
-                    <div className="p-5 text-center rounded-xl bg-white/[0.02] border border-white/10 space-y-2">
+                    <div className="p-4 text-center rounded-xl bg-white/[0.02] border border-white/10 space-y-2">
                       <p className="text-xs text-white/70 font-semibold">
-                        Рекламні кампанії з кабінету Meta Ads підтягнуться автоматично після синхронізації витрат.
+                        Кампанії з Meta Ads ще не синхронізовано для цього проєкту.
                       </p>
                       <p className="text-[11px] text-white/40">
-                        Цей крок необов'язковий — воронка рахуватиме лідів за обраними лендінгами та датами.
+                        Ви можете додати ключове слово/назву кампанії вручну через поле вище або підв'язати рекламний кабінет Meta Ads.
                       </p>
                     </div>
                   )}
@@ -1952,6 +2014,21 @@ export default function FunnelsTab({
               >
                 <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
               </button>
+              {activeProject && (
+                <button
+                  type="button"
+                  onClick={() => setShowMetaModal(true)}
+                  className={`px-3.5 py-2 rounded-xl border flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer ${
+                    isLight 
+                      ? "bg-white border-neutral-300 text-neutral-800 hover:bg-neutral-100" 
+                      : "bg-white/5 border-white/10 text-white/80 hover:text-white hover:bg-white/10"
+                  }`}
+                  title="Налаштувати рекламний кабінет Meta Ads для цього проєкту"
+                >
+                  <Megaphone className="w-3.5 h-3.5 text-emerald-450" />
+                  <span>Кабінет Meta Ads</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handleOpenCreate}
@@ -2085,6 +2162,19 @@ export default function FunnelsTab({
             )}
           </div>
         </div>
+      )}
+
+      {/* Meta Ad Account Settings Modal */}
+      {showMetaModal && activeProject && (
+        <ProjectSettingsModal
+          isOpen={showMetaModal}
+          onClose={() => setShowMetaModal(false)}
+          project={activeProject}
+          userRole={userRole}
+          onProjectUpdated={() => {
+            if (onFinanceRefresh) onFinanceRefresh();
+          }}
+        />
       )}
     </div>
   );
