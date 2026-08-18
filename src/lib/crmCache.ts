@@ -836,32 +836,38 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
       const isPaidStatus = norm === "closed_won" || o.status === "Купив курс" || o.status === "Купив(-ла) Трипвайер" || o.status === "Approved";
       if (isPaidStatus) return false;
 
-      const amt = Number(o.amount || 0);
-      const s = String(o.status || "").toLowerCase();
+      const amt = Number(o.amount || o.metadata?.raw_row?.amount || o.metadata?.raw_row?.raw_payload?.amount || 0);
+      const s = String(o.status || "").toLowerCase().trim();
       const meta = o.metadata || {};
       const raw = meta.raw_row || {};
+      const rawOrderId = String(raw.order_id || meta.wfp_order_id || meta.mono_invoice_id || "").trim();
       const url = String(o.page_url || meta.page_url || raw.page_url || "").toLowerCase();
       
       const isExplicitCheckoutStatus = 
-        s.includes("очікується оплата") || 
-        s.includes("очікує оплати") || 
         s.includes("перехід до оплати") ||
         s.includes("клик на форму оплати") ||
+        s.includes("очікується оплата") || 
+        s.includes("очікує оплати") || 
         s.includes("почато оплату") ||
-        s.includes("checkout") || 
         s.includes("кошик") ||
         s.includes("expired") ||
-        s.includes("відхилено") ||
-        s.includes("failed") ||
-        s.includes("pending");
+        s.includes("відхилено");
 
-      const hasPaymentIntentMeta = Boolean(meta.payment_intent || meta.wfp_order_id || meta.mono_invoice_id || meta.checkout_started || raw.order_id || raw.raw_payload);
-      const isCheckoutPage = url.includes("/checkout") || url.includes("/pay") || url.includes("/order") || url.includes("wayforpay") || (amt > 0);
+      const hasGatewayOrderId = Boolean(
+        rawOrderId && 
+        rawOrderId !== "null" && 
+        rawOrderId !== "undefined" && 
+        !rawOrderId.startsWith("TRG_") && 
+        !rawOrderId.startsWith("ELT_") && 
+        rawOrderId.length > 3
+      );
+      const hasExplicitPaymentMeta = Boolean(meta.payment_intent || meta.wfp_order_id || meta.mono_invoice_id || meta.checkout_started);
+      const isCheckoutUrl = url.includes("/checkout") || url.includes("/pay") || url.includes("/order") || url.includes("wayforpay");
 
-      return isExplicitCheckoutStatus || hasPaymentIntentMeta || (amt > 0 && isCheckoutPage);
+      return (isExplicitCheckoutStatus || hasGatewayOrderId || hasExplicitPaymentMeta || (amt > 0 && isCheckoutUrl));
     });
 
-    const isUnpaidIntent = !hasPayment && (hasCheckout || hasAttemptedAmount);
+    const isUnpaidIntent = !hasPayment && (hasCheckout || (hasAttemptedAmount && hasCheckout));
 
     // 2. Tag Hierarchy Engine (Levels 1, 2, 3)
     const derivedTagsSet = new Set<string>();

@@ -556,13 +556,6 @@ export const LeadsTab = React.memo(function LeadsTab({
                           <span className="text-emerald-450 font-black">
                             {formatDualCurrency(lead.usdPaid, lead.uahPaid, lead.eurPaid)}
                           </span>
-                        ) : lead.usdAttempted > 0 || lead.uahAttempted > 0 || lead.eurAttempted > 0 ? (
-                          <span
-                            className="inline-flex items-center gap-1 text-amber-500/80 text-[11px] font-extrabold"
-                            title="Спроба оплати (Unpaid Intent)"
-                          >
-                            ⏳ {formatDualCurrency(lead.usdAttempted, lead.uahAttempted, lead.eurAttempted)}
-                          </span>
                         ) : (
                           <span className="text-white/20">—</span>
                         )}
@@ -651,13 +644,6 @@ export const LeadsTab = React.memo(function LeadsTab({
                       {lead.usdPaid > 0 || lead.uahPaid > 0 || lead.eurPaid > 0 ? (
                         <span className="text-emerald-455 font-black text-xs block">
                           {formatDualCurrency(lead.usdPaid, lead.uahPaid, lead.eurPaid)}
-                        </span>
-                      ) : lead.usdAttempted > 0 || lead.uahAttempted > 0 || lead.eurAttempted > 0 ? (
-                        <span
-                          className="inline-flex items-center gap-1 text-amber-500/80 text-[10px] font-extrabold"
-                          title="Спроба оплати (Unpaid Intent)"
-                        >
-                          ⏳ {formatDualCurrency(lead.usdAttempted, lead.uahAttempted, lead.eurAttempted)}
                         </span>
                       ) : (
                         <span className="text-white/20 text-xs block">—</span>
