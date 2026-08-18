@@ -8,6 +8,7 @@ import { cookies, headers } from "next/headers";
 import { devLogger } from "@/utils/logger";
 import { rebuildProjectCache } from "@/lib/crmCache";
 import { parseClientDateRange, statusPriority } from "./utils";
+import { DEFAULT_PROJECT_LANDINGS } from "@/lib/projectLandings";
 
 // Memory cache for Superman Global Hub mode
 let globalSupermanSummaryCache: {
@@ -2507,14 +2508,104 @@ export async function getDiscoveredPagesAction(projectId: string) {
   try {
     await checkProjectAccess(projectId);
     const adminSupabase = createAdminClient();
-    const { data: pages, error } = await adminSupabase
+
+    // 1. Fetch project info to get slug
+    const { data: project } = await adminSupabase
+      .from("projects")
+      .select("id, slug, name")
+      .eq("id", projectId)
+      .maybeSingle();
+
+    const { data: dbPages } = await adminSupabase
       .from("discovered_pages")
       .select("*")
       .eq("project_id", projectId)
       .order("path", { ascending: true });
 
-    if (error) throw error;
-    return { success: true, pages: pages || [] };
+    // 2. Map existing pages
+    const pagesMap = new Map<string, any>();
+
+    (dbPages || []).forEach((p: any) => {
+      const pathVal = p.path || p.slug || "/";
+      pagesMap.set(pathVal, {
+        id: p.id || `db-${pathVal}`,
+        path: pathVal,
+        slug: pathVal,
+        title: p.title || pathVal,
+        type: p.source === "external" ? "discovered" : "discovered",
+        source: p.source || "auto"
+      });
+    });
+
+    // 3. Merge with DEFAULT_PROJECT_LANDINGS
+    if (project?.slug && DEFAULT_PROJECT_LANDINGS[project.slug]) {
+      DEFAULT_PROJECT_LANDINGS[project.slug].forEach((land) => {
+        const pathVal = land.path || "/";
+        if (!pagesMap.has(pathVal)) {
+          pagesMap.set(pathVal, {
+            id: `default-${pathVal}`,
+            path: pathVal,
+            slug: pathVal,
+            title: land.label || pathVal,
+            type: "discovered",
+            source: "config"
+          });
+        }
+      });
+    }
+
+    // 4. Also discover distinct paths from crm_leads_cache
+    const { data: cachePaths } = await adminSupabase
+      .from("crm_leads_cache")
+      .select("page_path, visited_landings")
+      .eq("project_id", projectId)
+      .limit(100);
+
+    (cachePaths || []).forEach((c: any) => {
+      if (c.page_path && typeof c.page_path === "string" && c.page_path.startsWith("/")) {
+        if (!pagesMap.has(c.page_path)) {
+          pagesMap.set(c.page_path, {
+            id: `cache-${c.page_path}`,
+            path: c.page_path,
+            slug: c.page_path,
+            title: c.page_path,
+            type: "traffic",
+            source: "leads"
+          });
+        }
+      }
+      if (Array.isArray(c.visited_landings)) {
+        c.visited_landings.forEach((v: string) => {
+          if (v && typeof v === "string" && v.startsWith("/")) {
+            if (!pagesMap.has(v)) {
+              pagesMap.set(v, {
+                id: `cache-${v}`,
+                path: v,
+                slug: v,
+                title: v,
+                type: "traffic",
+                source: "leads"
+              });
+            }
+          }
+        });
+      }
+    });
+
+    // Fallback: If still empty, ensure at least "/" is present
+    if (pagesMap.size === 0) {
+      pagesMap.set("/", {
+        id: "root-page",
+        path: "/",
+        slug: "/",
+        title: "Головна сторінка (/)",
+        type: "discovered",
+        source: "auto"
+      });
+    }
+
+    const pages = Array.from(pagesMap.values());
+    return { success: true, pages };
   } catch (err: any) {
     return { error: err.message || "Failed to fetch discovered pages" };
   }

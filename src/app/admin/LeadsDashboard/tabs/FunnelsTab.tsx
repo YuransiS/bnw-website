@@ -1032,6 +1032,13 @@ export default function FunnelsTab({
                         alert("Будь ласка, вкажіть дату старту воронки");
                         return;
                       }
+                      if (discoveredPages.length === 0) {
+                        getDiscoveredPagesAction(projectId).then((pagesRes) => {
+                          if (pagesRes && !("error" in pagesRes)) {
+                            setDiscoveredPages(pagesRes.pages || []);
+                          }
+                        });
+                      }
                       setWizardStep(3);
                     }}
                     className="px-4 py-2 rounded-xl bg-white hover:bg-neutral-100 text-black font-extrabold cursor-pointer"
@@ -1078,51 +1085,61 @@ export default function FunnelsTab({
                   </div>
 
                   <div className="border border-white/10 rounded-xl overflow-hidden bg-black/35 max-h-48 overflow-y-auto divide-y divide-white/5 custom-scrollbar text-xs">
-                    {discoveredPages
-                      .filter((p) => {
-                        const q = searchPageQuery.toLowerCase();
-                        return (p.slug || "").toLowerCase().includes(q) || (p.title || "").toLowerCase().includes(q);
-                      })
-                      .map((p) => {
-                        const isSelected = selectedPages.includes(p.slug);
-                        const isDirect = p.type === "discovered";
-                        const depth = (p.slug.match(/\//g) || []).length;
-                        const displayLabel = p.slug || "/";
+                    {discoveredPages.length === 0 ? (
+                      <div className="p-4 text-center text-white/40 text-xs">
+                        Не знайдено збережених сторінок. Натисніть «Синхронізувати» або додайте маршрути вручну.
+                      </div>
+                    ) : (
+                      discoveredPages
+                        .filter((p) => {
+                          const pathKey = p.path || p.slug || "/";
+                          const q = searchPageQuery.toLowerCase();
+                          return pathKey.toLowerCase().includes(q) || (p.title || "").toLowerCase().includes(q);
+                        })
+                        .map((p) => {
+                          const pathKey = p.path || p.slug || "/";
+                          const isSelected = selectedPages.includes(pathKey);
+                          const isDirect = p.type === "discovered" || p.source === "auto" || p.source === "config";
+                          const depth = (pathKey.match(/\//g) || []).length;
+                          const displayLabel = pathKey;
 
-                        return (
-                          <div
-                            key={p.slug}
-                            onClick={() => {
-                              if (isSelected) {
-                                setSelectedPages(selectedPages.filter((path) => path !== p.slug));
-                              } else {
-                                setSelectedPages([...selectedPages, p.slug]);
-                              }
-                            }}
-                            className={`flex justify-between items-center px-3 py-2.5 cursor-pointer transition-all hover:bg-white/5 ${
-                              isSelected ? "bg-emerald-500/5 hover:bg-emerald-500/10" : ""
-                            }`}
-                          >
-                            <div className="flex items-center gap-2.5">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => {}}
-                                className="rounded border-white/10 bg-white/5 text-emerald-500 focus:ring-emerald-500/20 w-3.5 h-3.5"
-                              />
-                              <span className={`font-bold ${isSelected ? "text-emerald-450" : "text-white"} ${depth > 1 ? "text-white/60 font-semibold" : ""}`}>
-                                {displayLabel}
+                          return (
+                            <div
+                              key={p.id || pathKey}
+                              onClick={() => {
+                                if (isSelected) {
+                                  setSelectedPages(selectedPages.filter((path) => path !== pathKey));
+                                } else {
+                                  setSelectedPages([...selectedPages, pathKey]);
+                                }
+                              }}
+                              className={`flex justify-between items-center px-3 py-2.5 cursor-pointer transition-all hover:bg-white/5 ${
+                                isSelected ? "bg-emerald-500/5 hover:bg-emerald-500/10" : ""
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => {}}
+                                  className="rounded border-white/10 bg-white/5 text-emerald-500 focus:ring-emerald-500/20 w-3.5 h-3.5"
+                                />
+                                <span className={`font-bold ${isSelected ? "text-emerald-450" : "text-white"} ${depth > 1 ? "text-white/60 font-semibold" : ""}`}>
+                                  {displayLabel}
+                                </span>
+                                {p.title && p.title !== pathKey && (
+                                  <span className="text-[10px] text-white/40 italic">({p.title})</span>
+                                )}
+                              </div>
+                              <span className={`text-[8px] border px-1.5 py-0.5 rounded uppercase font-black ${
+                                isDirect ? "bg-emerald-500/10 text-emerald-450 border-emerald-500/20" : "bg-purple-500/10 text-purple-400 border-purple-500/20"
+                              }`}>
+                                {isDirect ? "Auto" : "Traffic"}
                               </span>
-                              {p.title && <span className="text-[10px] text-white/40 italic">({p.title})</span>}
                             </div>
-                            <span className={`text-[8px] border px-1.5 py-0.5 rounded uppercase font-black ${
-                              isDirect ? "bg-emerald-500/10 text-emerald-450 border-emerald-500/20" : "bg-purple-500/10 text-purple-400 border-purple-500/20"
-                            }`}>
-                              {isDirect ? "Auto" : "Traffic"}
-                            </span>
-                          </div>
-                        );
-                      })}
+                          );
+                        })
+                    )}
                   </div>
                 </div>
 
