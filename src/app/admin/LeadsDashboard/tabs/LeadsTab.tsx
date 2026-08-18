@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Grid, Plus, Search, ChevronDown, Calendar, X, XCircle, Copy, Check, AlertCircle } from "lucide-react";
+import { Grid, Plus, Search, ChevronDown, Calendar, X, XCircle, Copy, Check, AlertCircle, Users } from "lucide-react";
 import { useTheme } from "../../ThemeProvider";
 import { formatDualCurrency, formatLocaleNumber } from "@/app/admin/utils";
 import { LeadItem } from "../types";
@@ -147,11 +147,11 @@ export const LeadsTab = React.memo(function LeadsTab({
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-lg font-black uppercase tracking-tight text-white flex items-center gap-2">
-            <Grid className="w-5 h-5 text-emerald-500" />
-            База даних лідів холдингу
+            <Users className="w-5 h-5 text-emerald-500" />
+            База лідів проекту
           </h2>
           <p className="text-white/40 text-xs mt-1 font-semibold">
-            Повний список клієнтів із автоматичним дедуплікуванням (DSU)
+            Консолідована база клієнтів із автоматичним дедуплікуванням (DSU) та фільтрами за воронками
           </p>
         </div>
         <button
@@ -502,9 +502,21 @@ export const LeadsTab = React.memo(function LeadsTab({
                             </button>
                           )}
                         </div>
-                        <div className="flex flex-wrap gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           {lead.telegram && renderSocialsLink(lead.telegram, "tg")}
                           {lead.instagram && renderSocialsLink(lead.instagram, "ig")}
+                          {lead.diagnosticsComment && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openLeadModal(lead);
+                              }}
+                              className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-purple-500/10 border border-purple-500/20 text-purple-400 hover:bg-purple-500/20 cursor-pointer flex items-center gap-0.5"
+                              title="Переглянути відповіді на анкету"
+                            >
+                              📋 Анкета
+                            </button>
+                          )}
                         </div>
                       </td>
 

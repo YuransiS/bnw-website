@@ -838,8 +838,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           </button>
         )}
 
-        {/* Landings & Satellites Registry Tab */}
-        {["admin", "superman", "founder", "developer", "cell_leader", "producer"].includes(role) && (
+        {/* Landings & Registry Tab - Global Center */}
+        {viewType === "all" && ["admin", "superman", "founder", "developer", "cell_leader", "producer"].includes(role) && (
           <button
             onClick={() => setActiveTab("landings_registry")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
@@ -852,8 +852,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           </button>
         )}
 
-        {/* Project Analytics Tab - Superman & Producer */}
-        {viewType === "single" && (role === "admin" || role === "superman" || role === "producer") && (
+        {/* Project General Analytics Tab - Permanent return button for ALL roles */}
+        {viewType === "single" && role !== "expert" && (
           <button
             onClick={() => setActiveTab("analytics")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
@@ -863,40 +863,27 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             }`}
           >
             <BarChart4 className="w-4 h-4" />
-            Зведений огляд
+            📊 Загальна аналітика
           </button>
         )}
 
-        {/* Project Traffic & Costs Tab - Superman, Admin, Founder, Developer & Producer */}
-        {viewType === "single" && (role === "admin" || role === "superman" || role === "founder" || role === "developer" || role === "producer") && (
+        {/* Project Landings Tab - Scoped to this project */}
+        {viewType === "single" && role !== "expert" && (
           <button
-            onClick={() => setActiveTab("traffic")}
+            onClick={() => setActiveTab("landings_registry")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === "traffic"
+              activeTab === "landings_registry"
                 ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
                 : "text-white/40 hover:text-white hover:bg-white/5"
             }`}
           >
-            <Activity className="w-4 h-4 text-emerald-450" />🚥 Трафік
+            <Globe className="w-4 h-4" />
+            🌐 Лендінги
           </button>
         )}
 
-        {/* Quizzes Tab - All approved */}
-        {viewType === "single" && (
-          <button
-            onClick={() => setActiveTab("quizzes")}
-            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === "quizzes"
-                ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
-                : "text-white/40 hover:text-white hover:bg-white/5"
-            }`}
-          >
-            <ClipboardCheck className="w-4 h-4 text-emerald-455" />📋 Заявки
-          </button>
-        )}
-
-        {/* Leads Tab - All approved */}
-        {viewType === "single" && (
+        {/* Unified Leads Tab - All approved users */}
+        {viewType === "single" && role !== "expert" && (
           <button
             onClick={() => setActiveTab("leads")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
@@ -905,13 +892,13 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                 : "text-white/40 hover:text-white hover:bg-white/5"
             }`}
           >
-            <Grid className="w-4 h-4" />
-            📂 Всі ліди
+            <Users className="w-4 h-4" />
+            👥 Ліди
           </button>
         )}
 
-        {/* Project Funnels Tab - Superman, Admin, Founder, Cell Leader, Producer, Developer */}
-        {viewType === "single" && ["admin", "superman", "founder", "cell_leader", "producer", "developer"].includes(role) && (
+        {/* Project Funnels Tab - Superman, Admin, Founder, Cell Leader, Producer, Developer, Marketer */}
+        {viewType === "single" && ["admin", "superman", "founder", "cell_leader", "producer", "developer", "marketer"].includes(role) && (
           <button
             onClick={() => setActiveTab("funnels")}
             className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
@@ -921,7 +908,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             }`}
           >
             <Layers className="w-4 h-4" />
-            Воронки
+            🎯 Воронки
           </button>
         )}
 
@@ -935,7 +922,23 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                 : "text-white/40 hover:text-white hover:bg-white/5"
             }`}
           >
-            <Wallet className="w-4 h-4 text-emerald-400" />💳 Фінанси
+            <Wallet className="w-4 h-4 text-emerald-400" />
+            💳 Фінанси
+          </button>
+        )}
+
+        {/* Project Traffic & Costs Tab */}
+        {viewType === "single" && ["admin", "superman", "founder", "developer", "producer", "marketer"].includes(role) && (
+          <button
+            onClick={() => setActiveTab("traffic")}
+            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
+              activeTab === "traffic"
+                ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
+                : "text-white/40 hover:text-white hover:bg-white/5"
+            }`}
+          >
+            <Activity className="w-4 h-4 text-emerald-450" />
+            🚥 Трафік
           </button>
         )}
 
@@ -949,7 +952,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
                 : "text-red-400 hover:text-red-300 hover:bg-white/5"
             }`}
           >
-            <AlertCircle className="w-4 h-4 animate-pulse" />🐞 Діагностика
+            <AlertCircle className="w-4 h-4 animate-pulse" />
+            🐞 Діагностика
           </button>
         )}
       </div>
@@ -1186,6 +1190,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             activeSlug={activeSlug}
             allowedProjects={dashboardData.allowedProjects || []}
             userRole={role}
+            viewType={viewType}
           />
         )}
       </div>

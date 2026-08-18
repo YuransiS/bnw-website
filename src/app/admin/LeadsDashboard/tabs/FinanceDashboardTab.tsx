@@ -972,9 +972,9 @@ export default function FinanceDashboardTab({
               </form>
             </div>
 
-            {/* Form 3: Custom Categories Management */}
+            {/* Form 3: Categories Management */}
             <div className={`p-6 rounded-2xl border ${cardClass} space-y-4 lg:col-span-3`}>
-              <h3 className="text-sm font-bold uppercase tracking-wider text-emerald-400">Кастомні категорії витрат та доходів</h3>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-emerald-400">Категорії витрат та доходів</h3>
               <p className={`text-[11px] ${textMutedClass}`}>Категорії для деталізації P&L та Cashflow.</p>
 
               <div className="flex flex-wrap gap-2 pt-1">

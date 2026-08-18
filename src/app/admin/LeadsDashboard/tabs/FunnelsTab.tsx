@@ -45,66 +45,80 @@ interface Funnel {
   created_at: string;
 }
 
+const ALL_COMMON_STAGES = [
+  "Трафік Meta / Ads",
+  "Лендінг реєстрації",
+  "Чат-бот Telegram (видача матеріалів)",
+  "Прогрів та лідмагніт",
+  "Участь в ефірах / вебінарі",
+  "Виконання домашніх завдань",
+  "Заповнення анкети діагностики",
+  "Кваліфікація ліда відділом продажів",
+  "Дзвінок / Стратегічна сесія",
+  "Купівля трипваєра",
+  "Продаж основного курсу",
+  "Оплата замовлення",
+  "Онбординг студента"
+];
+
 const FUNNEL_TYPES = [
   {
     id: "Інтенсив",
     label: "Інтенсив",
     defaultStages: [
-      "Реєстрація на інтенсив",
+      "Трафік Meta / Ads",
+      "Лендінг реєстрації",
+      "Чат-бот Telegram",
       "Участь в інтенсиві (День 1-3)",
-      "Домашні завдання",
       "Анкета / Офер",
-      "Оплата (Заявка)"
+      "Оплата (Заявка)",
+      "Онбординг студента"
     ]
   },
   {
     id: "Вебінар",
     label: "Вебінар",
     defaultStages: [
-      "Підписка в бот",
-      "Реєстрація на вебінар",
+      "Трафік Meta / Ads",
+      "Лендінг реєстрації",
+      "Чат-бот нагадування",
       "Перегляд вебінару",
       "Анкета діагностики",
-      "Оплата (Заявка)"
+      "Дзвінок відділу продажів",
+      "Оплата замовлення"
     ]
   },
   {
     id: "Автовеб",
     label: "Автовеб",
     defaultStages: [
+      "Трафік Meta / Ads",
+      "Лендінг реєстрації",
       "Підписка в бот",
-      "Реєстрація на автовеб",
       "Перегляд ефіру",
-      "Анкета діагностики",
-      "Оплата (Заявка)"
-    ]
-  },
-  {
-    id: "Марафон",
-    label: "Марафон",
-    defaultStages: [
-      "Підписка на марафон",
-      "Участь у марафоні",
-      "Виконання завдань",
+      "Додивився до оффера",
       "Анкета діагностики",
       "Оплата (Заявка)"
     ]
   },
   {
     id: "VSL",
-    label: "VSL",
+    label: "VSL + Трипваєр",
     defaultStages: [
+      "Трафік Meta / Ads",
       "Перехід на VSL",
-      "Перегляд відео",
-      "Клік по кнопці оферу",
+      "Купівля трипваєра",
       "Анкета діагностики",
-      "Оплата (Заявка)"
+      "Кваліфікація ліда",
+      "Дзвінок / Сесія",
+      "Оплата основного курсу"
     ]
   },
   {
     id: "Діагностика",
     label: "Діагностика",
     defaultStages: [
+      "Трафік / Лідмагніт",
       "Заявка на діагностику",
       "Кваліфікація ліда",
       "Проведення розбору",
@@ -113,11 +127,22 @@ const FUNNEL_TYPES = [
     ]
   },
   {
+    id: "Марафон",
+    label: "Марафон",
+    defaultStages: [
+      "Трафік та промо",
+      "Підписка на марафон",
+      "Участь та домашні завдання",
+      "Фінальний вебінар",
+      "Оплата основного продукту"
+    ]
+  },
+  {
     id: "Трипваєр",
     label: "Трипваєр",
     defaultStages: [
-      "Перехід на лендінг",
-      "Купівля трипваєру",
+      "Трафік на сайт",
+      "Купівля трипваєра",
       "Допродаж основного курсу",
       "Оплата основного продукту"
     ]
@@ -230,6 +255,22 @@ export default function FunnelsTab({
       setError(err.message || "Failed to load funnels");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const [isSyncingPages, setIsSyncingPages] = useState(false);
+  const handleSyncPages = async () => {
+    setIsSyncingPages(true);
+    try {
+      await syncProjectPagesAction(projectId);
+      const pagesRes = await getDiscoveredPagesAction(projectId);
+      if (pagesRes && !("error" in pagesRes)) {
+        setDiscoveredPages(pagesRes.pages || []);
+      }
+    } catch (err) {
+      console.error("Error syncing project pages:", err);
+    } finally {
+      setIsSyncingPages(false);
     }
   };
 
@@ -693,471 +734,518 @@ export default function FunnelsTab({
         </div>
       )}
 
-      {/* VIEW 1: CREATION / EDITING WIZARD */}
+      {/* VIEW 1: CREATION / EDITING WIZARD MODAL */}
       {showForm && (
-        <form onSubmit={handleSubmit} className="bg-neutral-900 border border-white/5 p-6 rounded-2xl space-y-4 max-w-2xl text-xs text-white">
-          <div className="flex justify-between items-center border-b border-white/5 pb-2">
-            <h3 className="font-bold text-sm uppercase tracking-wider text-emerald-400">
-              {editingFunnel ? "Редагування" : "Створення"} воронки (Крок {wizardStep} з 5)
-            </h3>
-            <button 
-              type="button" 
-              onClick={() => { setShowForm(false); setEditingFunnel(null); }}
-              className="text-white/40 hover:text-white cursor-pointer"
-            >
-              Скасувати
-            </button>
-          </div>
-
-          {/* STEP 1: Назва, тип та нотатки */}
-          {wizardStep === 1 && (
-            <div className="space-y-4 animate-in fade-in duration-200">
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-white/50">Назва воронки *</label>
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Марафон Липень 2026"
-                  className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] uppercase font-bold text-white/50 block">Тип воронки</label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
-                  {FUNNEL_TYPES.map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => handleSelectFunnelType(t.id)}
-                      className={`py-2 px-1 rounded-lg border font-bold text-center transition-all cursor-pointer text-xs ${
-                        funnelType === t.id
-                          ? "bg-emerald-500/10 border-emerald-500 text-emerald-450 shadow-sm"
-                          : "bg-white/5 border-white/5 text-white/50 hover:border-white/10 hover:text-white"
-                      }`}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-white/50">Опис / Нотатки</label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Додаткова інформація..."
-                  rows={2}
-                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white"
-                />
-              </div>
-
-              <div className="flex justify-end pt-2">
-                <button
-                  type="button"
-                  onClick={() => setWizardStep(2)}
-                  disabled={!name.trim()}
-                  className="px-4 py-2 rounded-xl bg-white hover:bg-neutral-100 text-black font-extrabold cursor-pointer disabled:opacity-50"
-                >
-                  Далі
-                </button>
-              </div>
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+          <form
+            onSubmit={handleSubmit}
+            className="bg-neutral-900 border border-white/10 p-6 rounded-3xl space-y-4 w-full max-w-2xl max-h-[90vh] overflow-y-auto custom-scrollbar text-xs text-white shadow-2xl"
+          >
+            <div className="flex justify-between items-center border-b border-white/5 pb-2">
+              <h3 className="font-bold text-sm uppercase tracking-wider text-emerald-400">
+                {editingFunnel ? "Редагування" : "Створення"} воронки (Крок {wizardStep} з 5)
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => { setShowForm(false); setEditingFunnel(null); }}
+                className="p-1 text-white/40 hover:text-white cursor-pointer rounded-lg hover:bg-white/5 transition-all"
+              >
+                Скасувати
+              </button>
             </div>
-          )}
 
-          {/* STEP 2: Дати та Фінансові Плани */}
-          {wizardStep === 2 && (
-            <div className="space-y-4 animate-in fade-in duration-200">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* STEP 1: Назва, тип та нотатки */}
+            {wizardStep === 1 && (
+              <div className="space-y-4 animate-in fade-in duration-200">
                 <div className="space-y-1">
-                  <label className="text-[10px] uppercase font-bold text-white/50">Дата старту *</label>
-                  <input
-                    type="date"
-                    required
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase font-bold text-white/50 flex justify-between">
-                    <span>Дата завершення</span>
-                    <span className="text-[9px] text-emerald-400 font-bold">(необов'язково)</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white"
-                  />
-                  <p className="text-[9px] text-white/40 pt-0.5">
-                    Необов'язково. Якщо не вказано — воронка триватиме безперервно до натискання «Завершити кампанію».
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-white/5 pt-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase font-bold text-white/50">Плановий бюджет (витрати) в ₴</label>
-                  <input
-                    type="number"
-                    value={plannedSpend}
-                    onChange={(e) => setPlannedSpend(e.target.value)}
-                    placeholder="50000"
-                    className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase font-bold text-white/50">Планова виручка (доходи) в ₴</label>
-                  <input
-                    type="number"
-                    value={plannedRevenue}
-                    onChange={(e) => setPlannedRevenue(e.target.value)}
-                    placeholder="150000"
-                    className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-between pt-2">
-                <button
-                  type="button"
-                  onClick={() => setWizardStep(1)}
-                  className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white cursor-pointer"
-                >
-                  Назад
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setWizardStep(3)}
-                  disabled={!startDate}
-                  className="px-4 py-2 rounded-xl bg-white hover:bg-neutral-100 text-black font-extrabold cursor-pointer disabled:opacity-50"
-                >
-                  Далі
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 3: Активні сторінки */}
-          {wizardStep === 3 && (
-            <div className="space-y-4 animate-in fade-in duration-200">
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <label className="text-[10px] uppercase font-bold text-white/50">Лендінги / Сторінки проекту</label>
-                  <span className="text-[9px] bg-emerald-500/10 text-emerald-450 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <Sparkles className="w-2.5 h-2.5" />
-                    Autoсинхронізація
-                  </span>
-                </div>
-                
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-white/40">
-                    <Search className="w-3.5 h-3.5" />
-                  </span>
+                  <label className="text-[10px] uppercase font-bold text-white/50">Назва воронки *</label>
                   <input
                     type="text"
-                    value={searchPageQuery}
-                    onChange={(e) => setSearchPageQuery(e.target.value)}
-                    placeholder="Пошук сторінки (наприклад: /intensive)..."
-                    className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 rounded-xl text-xs focus:outline-none focus:border-emerald-500 text-white placeholder-white/30"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Марафон Липень 2026"
+                    className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white"
                   />
                 </div>
 
-                <div className="border border-white/10 rounded-xl overflow-hidden bg-black/35">
-                  <div className="max-h-40 overflow-y-auto divide-y divide-white/5 custom-scrollbar text-xs">
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-white/50 block">Тип воронки</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
+                    {FUNNEL_TYPES.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => handleSelectFunnelType(t.id)}
+                        className={`py-2 px-1 rounded-lg border font-bold text-center transition-all cursor-pointer text-xs ${
+                          funnelType === t.id
+                            ? "bg-emerald-500/10 border-emerald-500 text-emerald-450 shadow-sm"
+                            : "bg-white/5 border-white/5 text-white/50 hover:border-white/10 hover:text-white"
+                        }`}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-white/50 block">Опис або нотатки (Необов'язково)</label>
+                  <textarea
+                    rows={2}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Коментар або особливості запуску..."
+                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white text-xs"
+                  />
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!name.trim()) {
+                        alert("Будь ласка, вкажіть назву воронки");
+                        return;
+                      }
+                      setWizardStep(2);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-white hover:bg-neutral-100 text-black font-extrabold cursor-pointer"
+                  >
+                    Далі
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 2: Дати та Фінансові цілі */}
+            {wizardStep === 2 && (
+              <div className="space-y-4 animate-in fade-in duration-200">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-white/50">Дата старту *</label>
+                    <input
+                      type="date"
+                      required
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-center">
+                      <label className="text-[10px] uppercase font-bold text-white/50">Дата завершення</label>
+                      {endDate && (
+                        <button
+                          type="button"
+                          onClick={() => setEndDate("")}
+                          className="text-[9px] text-red-400 hover:underline cursor-pointer"
+                        >
+                          Очистити (Безстрокова)
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      placeholder="Опціонально"
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white text-xs"
+                    />
+                    <p className="text-[9px] text-white/30">
+                      Необов'язково. Якщо не вказано, воронка активна постійно (можна завершити кнопкою).
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-white/5">
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-white/50">Плановий дохід ($ USD)</label>
+                    <input
+                      type="number"
+                      value={plannedRevenue}
+                      onChange={(e) => setPlannedRevenue(e.target.value)}
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-white/50">Планові витрати ($ USD)</label>
+                    <input
+                      type="number"
+                      value={plannedSpend}
+                      onChange={(e) => setPlannedSpend(e.target.value)}
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-between pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setWizardStep(1)}
+                    className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white cursor-pointer"
+                  >
+                    Назад
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!startDate) {
+                        alert("Будь ласка, вкажіть дату старту воронки");
+                        return;
+                      }
+                      setWizardStep(3);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-white hover:bg-neutral-100 text-black font-extrabold cursor-pointer"
+                  >
+                    Далі
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 3: Прив'язка лендінгів та сторінок сайту */}
+            {wizardStep === 3 && (
+              <div className="space-y-4 animate-in fade-in duration-200">
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <label className="text-[10px] uppercase font-bold text-white/50 block">Лендінги та сторінки проекту</label>
+                      <p className="text-[10px] text-white/40 mt-0.5">
+                        Оберіть сторінки, через які ліди потрапляють у цю воронку
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSyncPages}
+                      disabled={isSyncingPages}
+                      className="text-[10px] text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 cursor-pointer bg-white/5 px-2.5 py-1 rounded-lg"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isSyncingPages ? "animate-spin" : ""}`} />
+                      {isSyncingPages ? "Опитую..." : "Синхронізувати"}
+                    </button>
+                  </div>
+
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-white/40">
+                      <Search className="w-3.5 h-3.5" />
+                    </span>
+                    <input
+                      type="text"
+                      value={searchPageQuery}
+                      onChange={(e) => setSearchPageQuery(e.target.value)}
+                      placeholder="Пошук сторінки за назвою або URL..."
+                      className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 rounded-xl text-xs focus:outline-none focus:border-emerald-500 text-white placeholder-white/30"
+                    />
+                  </div>
+
+                  <div className="border border-white/10 rounded-xl overflow-hidden bg-black/35 max-h-48 overflow-y-auto divide-y divide-white/5 custom-scrollbar text-xs">
                     {discoveredPages
-                      .filter((p) =>
-                        String(p.path).toLowerCase().includes(searchPageQuery.toLowerCase()) ||
-                        String(p.title || "").toLowerCase().includes(searchPageQuery.toLowerCase())
-                      )
+                      .filter((p) => {
+                        const q = searchPageQuery.toLowerCase();
+                        return (p.slug || "").toLowerCase().includes(q) || (p.title || "").toLowerCase().includes(q);
+                      })
                       .map((p) => {
-                        const isSelected = selectedPages.includes(p.path);
-                        const isDirect = p.source === "direct_register";
-                        const segments = p.path.split("/").filter(Boolean);
-                        const depth = segments.length;
-                        const lastSegment = segments[segments.length - 1] || "/";
-                        const displayLabel = depth <= 1 ? p.path : `└─ /${lastSegment}`;
+                        const isSelected = selectedPages.includes(p.slug);
+                        const isDirect = p.type === "discovered";
+                        const depth = (p.slug.match(/\//g) || []).length;
+                        const displayLabel = p.slug || "/";
 
                         return (
                           <div
-                            key={p.id}
+                            key={p.slug}
                             onClick={() => {
                               if (isSelected) {
-                                setSelectedPages(selectedPages.filter((path) => path !== p.path));
+                                setSelectedPages(selectedPages.filter((path) => path !== p.slug));
                               } else {
-                                setSelectedPages([...selectedPages, p.path]);
+                                setSelectedPages([...selectedPages, p.slug]);
                               }
                             }}
-                            style={{ paddingLeft: depth > 1 ? `${(depth - 1) * 1.25 + 0.75}rem` : '0.75rem' }}
-                            className={`flex justify-between items-center pr-3 py-2 cursor-pointer transition-all hover:bg-white/5 ${
+                            className={`flex justify-between items-center px-3 py-2.5 cursor-pointer transition-all hover:bg-white/5 ${
                               isSelected ? "bg-emerald-500/5 hover:bg-emerald-500/10" : ""
                             }`}
                           >
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2.5">
                               <input
                                 type="checkbox"
                                 checked={isSelected}
-                                readOnly
+                                onChange={() => {}}
                                 className="rounded border-white/10 bg-white/5 text-emerald-500 focus:ring-emerald-500/20 w-3.5 h-3.5"
                               />
                               <span className={`font-bold ${isSelected ? "text-emerald-450" : "text-white"} ${depth > 1 ? "text-white/60 font-semibold" : ""}`}>
                                 {displayLabel}
                               </span>
-                              {p.title && <span className="text-[10px] text-white/40">({p.title})</span>}
+                              {p.title && <span className="text-[10px] text-white/40 italic">({p.title})</span>}
                             </div>
-                            <div>
-                              <span className={`text-[8px] border px-1.5 py-0.5 rounded uppercase font-bold ${
-                                isDirect ? "bg-emerald-500/10 text-emerald-450 border-emerald-500/20" : "bg-purple-500/10 text-purple-400 border-purple-500/20"
-                              }`}>
-                                {isDirect ? "Виявлено" : "Трафік"}
-                              </span>
-                            </div>
+                            <span className={`text-[8px] border px-1.5 py-0.5 rounded uppercase font-black ${
+                              isDirect ? "bg-emerald-500/10 text-emerald-450 border-emerald-500/20" : "bg-purple-500/10 text-purple-400 border-purple-500/20"
+                            }`}>
+                              {isDirect ? "Auto" : "Traffic"}
+                            </span>
                           </div>
                         );
                       })}
                   </div>
                 </div>
 
-                {selectedPages.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 p-2 bg-white/[0.02] border border-white/5 rounded-xl">
-                    {selectedPages.map((path) => (
-                      <span
-                        key={path}
-                        onClick={() => setSelectedPages(selectedPages.filter((p) => p !== path))}
-                        className="bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-450 px-2 py-0.5 rounded-lg font-bold flex items-center gap-1 cursor-pointer transition-all text-[10px]"
-                      >
-                        {path} <span className="text-white/40">×</span>
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                <div className="space-y-1 pt-1">
-                  <label className="text-[10px] uppercase font-bold text-white/50 block">Інші сторінки сайту вручну (через кому)</label>
-                  <input
-                    type="text"
-                    value={manualPageInput}
-                    onChange={(e) => setManualPageInput(e.target.value)}
-                    placeholder="marathon_page, web_landing_new"
-                    className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white placeholder-white/30"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-between pt-2">
-                <button
-                  type="button"
-                  onClick={() => setWizardStep(2)}
-                  className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white cursor-pointer"
-                >
-                  Назад
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setWizardStep(4)}
-                  className="px-4 py-2 rounded-xl bg-white hover:bg-neutral-100 text-black font-extrabold cursor-pointer"
-                >
-                  Далі
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 4: Рекламні Кампанії */}
-          {wizardStep === 4 && (
-            <div className="space-y-4 animate-in fade-in duration-200">
-              <div className="space-y-2">
-                <div>
-                  <label className="text-[10px] uppercase font-bold text-white/50 block">Рекламні Кампанії (Meta / Facebook Ads)</label>
-                  <p className="text-[10px] text-white/40 mt-0.5">
-                    Оберіть рекламні кампанії Facebook, трафік з яких належить до цієї воронки (необов'язково).
-                  </p>
-                </div>
-                
-                {campaignsList.length > 0 ? (
-                  <>
-                    <div className="relative">
-                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-white/40">
-                        <Search className="w-3.5 h-3.5" />
-                      </span>
-                      <input
-                        type="text"
-                        value={searchCampaignQuery}
-                        onChange={(e) => setSearchCampaignQuery(e.target.value)}
-                        placeholder="Пошук рекламних кампаній..."
-                        className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 rounded-xl text-xs focus:outline-none focus:border-emerald-500 text-white placeholder-white/30"
-                      />
-                    </div>
-
-                    <div className="border border-white/10 rounded-xl overflow-hidden bg-black/35">
-                      <div className="max-h-48 overflow-y-auto divide-y divide-white/5 custom-scrollbar text-xs">
-                        {Array.from(new Set(campaignsList.map((c: any) => String(c.campaign_name || '').trim()).filter(Boolean)))
-                          .filter((campName) => campName.toLowerCase().includes(searchCampaignQuery.toLowerCase()))
-                          .map((campName) => {
-                            const isSelected = selectedCampaigns.includes(campName);
-                            const stats = campaignsList.find((c) => c.campaign_name === campName);
-                            const spendUSD = stats ? Number(stats.spend || 0) : 0;
-                            const leadsCount = stats ? Number(stats.leads_count || 0) : 0;
-
-                            return (
-                              <div
-                                key={campName}
-                                onClick={() => {
-                                  if (isSelected) {
-                                    setSelectedCampaigns(selectedCampaigns.filter((c) => c !== campName));
-                                  } else {
-                                    setSelectedCampaigns([...selectedCampaigns, campName]);
-                                  }
-                                }}
-                                className={`flex justify-between items-center px-3 py-2.5 cursor-pointer transition-all hover:bg-white/5 ${
-                                  isSelected ? "bg-emerald-500/5 hover:bg-emerald-500/10" : ""
-                                }`}
-                              >
-                                <div className="flex items-center gap-2.5">
-                                  <input
-                                    type="checkbox"
-                                    checked={isSelected}
-                                    onChange={() => {}}
-                                    className="rounded border-white/10 bg-white/5 text-emerald-500 focus:ring-emerald-500/20 w-3.5 h-3.5"
-                                  />
-                                  <span className={`font-bold ${isSelected ? "text-emerald-400" : "text-white"}`}>
-                                    {campName}
-                                  </span>
-                                </div>
-                                {spendUSD > 0 && (
-                                  <span className="text-[9px] bg-white/5 px-2 py-0.5 rounded font-black text-white/50">
-                                    Витрати: ${Math.round(spendUSD).toLocaleString()} ({leadsCount} лід.)
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          })}
-                      </div>
-                    </div>
-
-                    {selectedCampaigns.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 p-2 bg-white/[0.02] border border-white/5 rounded-xl">
-                        {selectedCampaigns.map((camp) => (
-                          <span
-                            key={camp}
-                            onClick={() => setSelectedCampaigns(selectedCampaigns.filter((c) => c !== camp))}
-                            className="bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-450 px-2 py-0.5 rounded-lg font-bold flex items-center gap-1 cursor-pointer transition-all text-[10px]"
-                          >
-                            {camp} <span className="text-white/40">×</span>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="p-5 text-center rounded-xl bg-white/[0.02] border border-white/10 space-y-2">
-                    <p className="text-xs text-white/70 font-semibold">
-                      Рекламні кампанії з кабінету Meta Ads підтягнуться автоматично після синхронізації витрат.
-                    </p>
-                    <p className="text-[11px] text-white/40">
-                      Цей крок необов'язковий — воронка рахуватиме лідів за обраними лендінгами та датами.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-between pt-2">
-                <button
-                  type="button"
-                  onClick={() => setWizardStep(3)}
-                  className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white cursor-pointer"
-                >
-                  Назад
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setWizardStep(5)}
-                  className="px-4 py-2 rounded-xl bg-white hover:bg-neutral-100 text-black font-extrabold cursor-pointer"
-                >
-                  Далі
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 5: Етапи Шляху Клієнта */}
-          {wizardStep === 5 && (
-            <div className="space-y-4 animate-in fade-in duration-200">
-              <div className="space-y-2">
-                <label className="text-[10px] uppercase font-bold text-white/50 block">Етапи шляху клієнта у воронці</label>
-                <p className="text-[10px] text-white/40">Налаштуйте кроки, які проходить лід у межах цієї маркетингової воронки</p>
-                
-                <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-                  {stages.map((stage, index) => (
-                    <div key={index} className="flex justify-between items-center bg-white/5 border border-white/5 p-2 rounded-xl">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[9px] bg-white/5 w-4 h-4 rounded-full flex items-center justify-center font-bold text-white/40">
-                          {index + 1}
-                        </span>
-                        <input
-                          type="text"
-                          value={stage}
-                          onChange={(e) => {
-                            const newStages = [...stages];
-                            newStages[index] = e.target.value;
-                            setStages(newStages);
-                          }}
-                          className="bg-transparent border-none font-bold text-white focus:outline-none text-xs w-48 focus:border-b focus:border-emerald-500 focus:ring-0 p-0"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveStage(index)}
-                        className="text-red-400 hover:text-red-300 p-1 cursor-pointer"
-                        title="Видалити етап"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="flex gap-2 pt-2 border-t border-white/5">
-                  <input
-                    type="text"
-                    value={newStageName}
-                    onChange={(e) => setNewStageName(e.target.value)}
-                    placeholder="Наприклад: Замовлення дзвінка"
-                    className="flex-1 px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white text-xs placeholder-white/30"
-                  />
+                <div className="flex justify-between pt-2">
                   <button
                     type="button"
-                    onClick={handleAddStage}
-                    className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-white font-bold rounded-xl flex items-center gap-1 cursor-pointer"
+                    onClick={() => setWizardStep(2)}
+                    className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white cursor-pointer"
                   >
-                    <Plus className="w-3.5 h-3.5" /> Додати етап
+                    Назад
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWizardStep(4)}
+                    className="px-4 py-2 rounded-xl bg-white hover:bg-neutral-100 text-black font-extrabold cursor-pointer"
+                  >
+                    Далі
                   </button>
                 </div>
               </div>
+            )}
 
-              <div className="flex justify-between pt-4 border-t border-white/5">
-                <button
-                  type="button"
-                  onClick={() => setWizardStep(4)}
-                  className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white cursor-pointer"
-                >
-                  Назад
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-                >
-                  {isSubmitting ? "Збереження..." : editingFunnel ? "Оновити воронку" : "Створити воронку"}
-                </button>
+            {/* STEP 4: Рекламні Кампанії */}
+            {wizardStep === 4 && (
+              <div className="space-y-4 animate-in fade-in duration-200">
+                <div className="space-y-2">
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-white/50 block">Рекламні Кампанії (Meta / Facebook Ads)</label>
+                    <p className="text-[10px] text-white/40 mt-0.5">
+                      Оберіть рекламні кампанії Facebook, трафік з яких належить до цієї воронки (необов'язково).
+                    </p>
+                  </div>
+                  
+                  {campaignsList.length > 0 ? (
+                    <>
+                      <div className="relative">
+                        <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-white/40">
+                          <Search className="w-3.5 h-3.5" />
+                        </span>
+                        <input
+                          type="text"
+                          value={searchCampaignQuery}
+                          onChange={(e) => setSearchCampaignQuery(e.target.value)}
+                          placeholder="Пошук рекламних кампаній..."
+                          className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 rounded-xl text-xs focus:outline-none focus:border-emerald-500 text-white placeholder-white/30"
+                        />
+                      </div>
+
+                      <div className="border border-white/10 rounded-xl overflow-hidden bg-black/35">
+                        <div className="max-h-48 overflow-y-auto divide-y divide-white/5 custom-scrollbar text-xs">
+                          {Array.from(new Set(campaignsList.map((c: any) => String(c.campaign_name || '').trim()).filter(Boolean)))
+                            .filter((campName) => campName.toLowerCase().includes(searchCampaignQuery.toLowerCase()))
+                            .map((campName) => {
+                              const isSelected = selectedCampaigns.includes(campName);
+                              const stats = campaignsList.find((c) => c.campaign_name === campName);
+                              const spendUSD = stats ? Number(stats.spend || 0) : 0;
+                              const leadsCount = stats ? Number(stats.leads_count || 0) : 0;
+
+                              return (
+                                <div
+                                  key={campName}
+                                  onClick={() => {
+                                    if (isSelected) {
+                                      setSelectedCampaigns(selectedCampaigns.filter((c) => c !== campName));
+                                    } else {
+                                      setSelectedCampaigns([...selectedCampaigns, campName]);
+                                    }
+                                  }}
+                                  className={`flex justify-between items-center px-3 py-2.5 cursor-pointer transition-all hover:bg-white/5 ${
+                                    isSelected ? "bg-emerald-500/5 hover:bg-emerald-500/10" : ""
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2.5">
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={() => {}}
+                                      className="rounded border-white/10 bg-white/5 text-emerald-500 focus:ring-emerald-500/20 w-3.5 h-3.5"
+                                    />
+                                    <span className={`font-bold ${isSelected ? "text-emerald-400" : "text-white"}`}>
+                                      {campName}
+                                    </span>
+                                  </div>
+                                  {spendUSD > 0 && (
+                                    <span className="text-[9px] bg-white/5 px-2 py-0.5 rounded font-black text-white/50">
+                                      Витрати: ${Math.round(spendUSD).toLocaleString()} ({leadsCount} лід.)
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                        </div>
+                      </div>
+
+                      {selectedCampaigns.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 p-2 bg-white/[0.02] border border-white/5 rounded-xl">
+                          {selectedCampaigns.map((camp) => (
+                            <span
+                              key={camp}
+                              onClick={() => setSelectedCampaigns(selectedCampaigns.filter((c) => c !== camp))}
+                              className="bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-450 px-2 py-0.5 rounded-lg font-bold flex items-center gap-1 cursor-pointer transition-all text-[10px]"
+                            >
+                              {camp} <span className="text-white/40">×</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="p-5 text-center rounded-xl bg-white/[0.02] border border-white/10 space-y-2">
+                      <p className="text-xs text-white/70 font-semibold">
+                        Рекламні кампанії з кабінету Meta Ads підтягнуться автоматично після синхронізації витрат.
+                      </p>
+                      <p className="text-[11px] text-white/40">
+                        Цей крок необов'язковий — воронка рахуватиме лідів за обраними лендінгами та датами.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-between pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setWizardStep(3)}
+                    className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white cursor-pointer"
+                  >
+                    Назад
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWizardStep(5)}
+                    className="px-4 py-2 rounded-xl bg-white hover:bg-neutral-100 text-black font-extrabold cursor-pointer"
+                  >
+                    Далі
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
-        </form>
+            )}
+
+            {/* STEP 5: Етапи Шляху Клієнта */}
+            {wizardStep === 5 && (
+              <div className="space-y-4 animate-in fade-in duration-200">
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-white/50 block">Етапи шляху клієнта у воронці</label>
+                    <p className="text-[10px] text-white/40 mt-0.5">
+                      Послідовні кроки ліда від першого кліку до покупки. Оберіть потрібні або додайте власні.
+                    </p>
+                  </div>
+                  
+                  {/* Active stages list */}
+                  <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                    {stages.map((stage, index) => (
+                      <div key={index} className="flex justify-between items-center bg-white/5 border border-white/10 p-2.5 rounded-xl">
+                        <div className="flex items-center gap-2.5 flex-1 mr-2">
+                          <span className="text-[10px] bg-emerald-500/20 text-emerald-400 w-5 h-5 rounded-full flex items-center justify-center font-bold shrink-0">
+                            {index + 1}
+                          </span>
+                          <input
+                            type="text"
+                            value={stage}
+                            onChange={(e) => {
+                              const newStages = [...stages];
+                              newStages[index] = e.target.value;
+                              setStages(newStages);
+                            }}
+                            className="bg-transparent border-none font-bold text-white focus:outline-none text-xs w-full focus:border-b focus:border-emerald-500 focus:ring-0 p-0"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveStage(index)}
+                          className="text-red-400 hover:text-red-300 p-1 rounded-lg hover:bg-white/5 cursor-pointer transition-all shrink-0"
+                          title="Видалити етап"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                    {stages.length === 0 && (
+                      <p className="text-center text-white/40 py-4 italic text-xs">Немає обраних етапів. Додайте нижче або оберіть з рекомендованих.</p>
+                    )}
+                  </div>
+
+                  {/* Recommended stages pool pills */}
+                  <div className="space-y-1.5 pt-2 border-t border-white/5">
+                    <span className="text-[9px] uppercase font-bold text-white/40 block">
+                      Швидке додавання популярних дій ліда:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+                      {ALL_COMMON_STAGES.map((s) => {
+                        const isAdded = stages.includes(s);
+                        return (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => {
+                              if (isAdded) {
+                                setStages(stages.filter((st) => st !== s));
+                              } else {
+                                setStages([...stages, s]);
+                              }
+                            }}
+                            className={`px-2.5 py-1 rounded-lg border text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                              isAdded
+                                ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
+                                : "bg-white/5 border-white/5 text-white/50 hover:text-white hover:border-white/15"
+                            }`}
+                          >
+                            <span>{isAdded ? "✓" : "+"}</span> {s}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Add custom stage */}
+                  <div className="flex gap-2 pt-2 border-t border-white/5">
+                    <input
+                      type="text"
+                      value={newStageName}
+                      onChange={(e) => setNewStageName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddStage();
+                        }
+                      }}
+                      placeholder="Введіть свій етап..."
+                      className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white text-xs placeholder-white/30"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddStage}
+                      className="px-3.5 py-2 bg-neutral-800 hover:bg-neutral-700 text-white font-bold rounded-xl flex items-center gap-1 cursor-pointer transition-all"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Додати
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex justify-between pt-4 border-t border-white/5">
+                  <button
+                    type="button"
+                    onClick={() => setWizardStep(4)}
+                    className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white cursor-pointer"
+                  >
+                    Назад
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {isSubmitting ? "Збереження..." : editingFunnel ? "Оновити воронку" : "Створити воронку"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </form>
+        </div>
       )}
 
       {/* VIEW 2: SINGLE FUNNEL FULL-SCREEN DASHBOARD */}
@@ -1682,7 +1770,8 @@ export default function FunnelsTab({
               return (
                 <div 
                   key={funnel.id} 
-                  className="bg-neutral-900 border border-white/5 p-6 rounded-2xl space-y-4 text-xs text-white relative overflow-hidden group hover:border-white/10 transition-all duration-300"
+                  onClick={() => setSelectedFunnel(funnel)}
+                  className="bg-neutral-900 border border-white/5 p-6 rounded-2xl space-y-4 text-xs text-white relative overflow-hidden group hover:border-emerald-500/40 hover:shadow-2xl cursor-pointer transition-all duration-300"
                 >
                   <div className="flex justify-between items-start">
                     <div>

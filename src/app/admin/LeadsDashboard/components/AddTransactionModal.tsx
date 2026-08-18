@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { X, Check, Plus, Calendar, DollarSign, RefreshCw, Layers } from "lucide-react";
+import React, { useState, useEffect, useMemo } from "react";
+import { X, Check, Plus, Calendar, DollarSign, RefreshCw, Layers, CreditCard, ChevronDown } from "lucide-react";
 import { createTransactionAction, createCustomCategoryAction } from "../../(dashboard)/project/financeActions";
 
 interface AddTransactionModalProps {
@@ -15,6 +15,21 @@ interface AddTransactionModalProps {
   isLight: boolean;
   preselectedFunnelId?: string | null;
 }
+
+// Standard accounts specified by company workflow
+const DEFAULT_EXPENSE_ACCOUNTS = [
+  { name: "Особиста картка", defaultCurrency: "UAH" },
+  { name: "Картка ФОП", defaultCurrency: "UAH" },
+  { name: "Рахунок ФОП", defaultCurrency: "UAH" },
+  { name: "Рахунок виконавця", defaultCurrency: "UAH" },
+];
+
+const DEFAULT_INCOME_ACCOUNTS = [
+  { name: "Рахунок ФОП", defaultCurrency: "UAH" },
+  { name: "WayForPay", defaultCurrency: "UAH" },
+  { name: "Рахунок виконавця", defaultCurrency: "UAH" },
+  { name: "PayPal виконавця", defaultCurrency: "USD" },
+];
 
 export default function AddTransactionModal({
   projectId,
@@ -33,40 +48,73 @@ export default function AddTransactionModal({
   const [showCustomCategory, setShowCustomCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [accountId, setAccountId] = useState("");
+  const [accountName, setAccountName] = useState("");
   const [funnelId, setFunnelId] = useState<string | null>(preselectedFunnelId);
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState("UAH");
-  const [exchangeRate, setExchangeRate] = useState("1.0");
+  
+  // Rate input: e.g. 1 USD ($) = 41.80 UAH (₴)
+  const [uahRate, setUahRate] = useState("41.80");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  // Get active list of categories
-  const categoriesList = type === "income" 
-    ? [...defaultCategories.income, ...customCategories.filter(c => c.type === "income").map(c => c.name)]
-    : [...defaultCategories.expense, ...customCategories.filter(c => c.type === "expense").map(c => c.name)];
+  // Deduplicate categories list
+  const categoriesList = useMemo(() => {
+    const raw = type === "income"
+      ? [...(defaultCategories?.income || []), ...customCategories.filter(c => c.type === "income").map(c => c.name)]
+      : [...(defaultCategories?.expense || []), ...customCategories.filter(c => c.type === "expense").map(c => c.name)];
+    
+    // Clean and deduplicate via Set
+    return Array.from(new Set(raw.map(c => String(c || "").trim()))).filter(Boolean);
+  }, [type, defaultCategories, customCategories]);
 
-  // Auto-set account currency and default account
-  useEffect(() => {
-    if (accounts.length > 0 && !accountId) {
-      setAccountId(accounts[0].id);
-      setCurrency(accounts[0].currency);
+  // Combine DB accounts with standard workflow options
+  const activeAccountOptions = useMemo(() => {
+    const standardList = type === "expense" ? DEFAULT_EXPENSE_ACCOUNTS : DEFAULT_INCOME_ACCOUNTS;
+    
+    if (accounts && accounts.length > 0) {
+      return accounts;
     }
-  }, [accounts, accountId]);
+    
+    return standardList.map((acc, idx) => ({
+      id: `std_${idx}_${acc.name}`,
+      name: acc.name,
+      currency: acc.defaultCurrency
+    }));
+  }, [type, accounts]);
 
-  const handleAccountChange = (id: string) => {
-    setAccountId(id);
-    const acc = accounts.find(a => a.id === id);
-    if (acc) {
-      setCurrency(acc.currency);
-      // Auto-set reasonable exchange rates (UAH standard rate ~0.0227, USD/EUR ~1.0)
-      if (acc.currency === "UAH") {
-        setExchangeRate("0.0227");
+  // Auto-set account when step or type changes
+  useEffect(() => {
+    if (activeAccountOptions.length > 0 && (!accountId || !activeAccountOptions.some(a => a.id === accountId))) {
+      const defaultAcc = activeAccountOptions[0];
+      setAccountId(defaultAcc.id);
+      setAccountName(defaultAcc.name);
+      
+      // Auto-set currency based on account (FOP is always UAH by default)
+      if (defaultAcc.name.toLowerCase().includes("фоп") || defaultAcc.currency === "UAH") {
+        setCurrency("UAH");
+      } else if (defaultAcc.name.toLowerCase().includes("paypal")) {
+        setCurrency("USD");
       } else {
-        setExchangeRate("1.0");
+        setCurrency(defaultAcc.currency || "UAH");
       }
+    }
+  }, [activeAccountOptions, accountId]);
+
+  const handleAccountSelect = (acc: { id: string; name: string; currency: string }) => {
+    setAccountId(acc.id);
+    setAccountName(acc.name);
+    
+    // Set currency based on selected account
+    if (acc.name.toLowerCase().includes("фоп")) {
+      setCurrency("UAH");
+    } else if (acc.name.toLowerCase().includes("paypal")) {
+      setCurrency("USD");
+    } else {
+      setCurrency(acc.currency || "UAH");
     }
   };
 
@@ -86,9 +134,26 @@ export default function AddTransactionModal({
     }
   };
 
+  // Calculate equivalent in USD
+  const calculatedUsdAmount = useMemo(() => {
+    const num = Number(amount) || 0;
+    if (currency === "USD") return num;
+    if (currency === "EUR") return num * 1.08;
+    const rate = Number(uahRate) || 41.80;
+    return rate > 0 ? num / rate : num;
+  }, [amount, currency, uahRate]);
+
+  // Convert rate for database (exchangeRate to USD)
+  const exchangeRateForDb = useMemo(() => {
+    if (currency === "USD") return 1.0;
+    if (currency === "EUR") return 1.08;
+    const rate = Number(uahRate) || 41.80;
+    return rate > 0 ? 1 / rate : 0.0239;
+  }, [currency, uahRate]);
+
   const handleSubmit = async () => {
     if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
-      setErrorMsg("Будь ласка, вкажіть коректну суму");
+      setErrorMsg("Будь ласка, вкажіть коректну суму операції");
       return;
     }
     if (!category) {
@@ -96,7 +161,7 @@ export default function AddTransactionModal({
       return;
     }
     if (!accountId) {
-      setErrorMsg("Оберіть або створіть рахунок для транзакції");
+      setErrorMsg("Оберіть рахунок для транзакції");
       return;
     }
 
@@ -110,11 +175,11 @@ export default function AddTransactionModal({
         date,
         type,
         category,
-        description,
+        description: description || (accountName ? `[${accountName}]` : ""),
         accountId,
         currency,
         amount: Number(amount),
-        exchangeRate: Number(exchangeRate)
+        exchangeRate: exchangeRateForDb
       });
 
       if (res.error) {
@@ -131,28 +196,28 @@ export default function AddTransactionModal({
   };
 
   // UI styling references
-  const bgClass = isLight ? "bg-white border border-neutral-200 text-neutral-900 shadow-xl" : "bg-[#0C0C0F] border border-white/5 text-white shadow-[0_0_50px_rgba(0,0,0,0.8)]";
+  const bgClass = isLight ? "bg-white border border-neutral-200 text-neutral-900 shadow-xl" : "bg-[#0C0C0F] border border-white/10 text-white shadow-[0_0_50px_rgba(0,0,0,0.8)]";
   const inputClass = isLight ? "bg-white border border-neutral-300 text-neutral-900 focus:ring-emerald-500/20 focus:border-emerald-500" : "bg-white/5 border border-white/10 text-white focus:border-emerald-500 focus:ring-emerald-500/20";
   const btnNextClass = isLight ? "bg-neutral-900 hover:bg-neutral-800 text-white" : "bg-white hover:bg-neutral-100 text-black";
   const btnPrevClass = isLight ? "bg-neutral-100 hover:bg-neutral-200 text-neutral-700" : "bg-white/5 hover:bg-white/10 text-white";
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className={`w-full max-w-lg rounded-2xl overflow-hidden font-sans ${bgClass} transition-all duration-300`}>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
+      <div className={`w-full max-w-lg rounded-3xl overflow-hidden font-sans ${bgClass} transition-all duration-300`}>
         
         {/* Header */}
         <div className={`flex justify-between items-center px-6 py-4 border-b ${isLight ? 'border-neutral-200 bg-neutral-50' : 'border-white/5 bg-white/[0.01]'}`}>
           <div>
-            <h3 className="text-base font-bold tracking-tight">Додати операцію</h3>
-            <p className="text-[10px] text-neutral-400 mt-0.5">Крок {step} з 4</p>
+            <h3 className="text-base font-bold tracking-tight">Додати фінансову операцію</h3>
+            <p className="text-[10px] text-neutral-400 mt-0.5 font-medium">Крок {step} з 4</p>
           </div>
-          <button onClick={onClose} className="p-1 rounded-full hover:bg-white/10 text-neutral-400 hover:text-white transition-all cursor-pointer">
+          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/10 text-neutral-400 hover:text-white transition-all cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Wizard Steps */}
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-5">
           {errorMsg && (
             <div className="p-3 text-xs bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl">
               {errorMsg}
@@ -166,64 +231,78 @@ export default function AddTransactionModal({
               <div className="grid grid-cols-2 gap-4">
                 <button
                   type="button"
-                  onClick={() => setType("income")}
-                  className={`py-8 px-4 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-3 ${
+                  onClick={() => {
+                    setType("income");
+                    setCategory("");
+                  }}
+                  className={`py-8 px-4 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-3 ${
                     type === "income"
                       ? "bg-emerald-500/10 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.15)] text-emerald-400"
                       : "bg-white/5 border-white/5 text-neutral-400 hover:border-white/10"
                   }`}
                 >
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${type === "income" ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/5 text-neutral-400'}`}>
-                    <Plus className="w-5 h-5" />
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${type === "income" ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/5 text-neutral-400'}`}>
+                    <Plus className="w-6 h-6" />
                   </div>
-                  <span className="text-sm font-bold">Прихід (Дохід)</span>
+                  <div>
+                    <span className="text-sm font-black block">Дохід (Надходження)</span>
+                    <span className="text-[10px] opacity-60">Продаж курсів, трипваєри, підписки</span>
+                  </div>
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => setType("expense")}
-                  className={`py-8 px-4 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-3 ${
+                  onClick={() => {
+                    setType("expense");
+                    setCategory("");
+                  }}
+                  className={`py-8 px-4 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-3 ${
                     type === "expense"
                       ? "bg-rose-500/10 border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.15)] text-rose-400"
                       : "bg-white/5 border-white/5 text-neutral-400 hover:border-white/10"
                   }`}
                 >
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${type === "expense" ? 'bg-rose-500/20 text-rose-400' : 'bg-white/5 text-neutral-400'}`}>
-                    <X className="w-5 h-5" />
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${type === "expense" ? 'bg-rose-500/20 text-rose-400' : 'bg-white/5 text-neutral-400'}`}>
+                    <X className="w-6 h-6" />
                   </div>
-                  <span className="text-sm font-bold">Витрата (Расход)</span>
+                  <div>
+                    <span className="text-sm font-black block">Витрата (Списання)</span>
+                    <span className="text-[10px] opacity-60">Трафік, команда, сервіси, комісії</span>
+                  </div>
                 </button>
               </div>
             </div>
           )}
 
-          {/* STEP 2: Presets Categories Grid */}
+          {/* STEP 2: Categories Selection (Deduplicated & Clean Ukrainian) */}
           {step === 2 && (
             <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">Оберіть категорію</label>
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">
+                Оберіть категорію ({type === "income" ? "Дохід" : "Витрата"})
+              </label>
               
               {showCustomCategory ? (
-                <div className="space-y-3 p-4 rounded-xl border border-white/5 bg-white/[0.01]">
-                  <h4 className="text-xs font-semibold">Нова категорія ({type === "income" ? "Приходу" : "Витрати"})</h4>
+                <div className="space-y-3 p-4 rounded-2xl border border-white/10 bg-white/[0.02]">
+                  <h4 className="text-xs font-semibold">Нова категорія</h4>
                   <input
                     type="text"
                     value={newCategoryName}
                     onChange={(e) => setNewCategoryName(e.target.value)}
                     placeholder="Назва категорії..."
-                    className={`w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all ${inputClass}`}
+                    className={`w-full px-3 py-2 text-sm rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all ${inputClass}`}
                   />
                   <div className="flex gap-2">
                     <button
                       type="button"
                       onClick={handleAddCustomCategory}
-                      className="px-3 py-1.5 bg-emerald-500 text-black text-xs font-bold rounded-lg hover:bg-emerald-400 cursor-pointer"
+                      className="px-3.5 py-1.5 bg-emerald-500 text-black text-xs font-bold rounded-xl hover:bg-emerald-400 cursor-pointer"
                     >
                       Зберегти
                     </button>
                     <button
                       type="button"
                       onClick={() => setShowCustomCategory(false)}
-                      className="px-3 py-1.5 bg-white/5 text-neutral-300 text-xs font-semibold rounded-lg hover:bg-white/10 cursor-pointer"
+                      className="px-3.5 py-1.5 bg-white/5 text-neutral-300 text-xs font-semibold rounded-xl hover:bg-white/10 cursor-pointer"
                     >
                       Скасувати
                     </button>
@@ -238,7 +317,7 @@ export default function AddTransactionModal({
                       onClick={() => setCategory(cat)}
                       className={`px-4 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
                         category === cat
-                          ? "bg-white text-black font-extrabold border-white"
+                          ? "bg-white text-black font-extrabold border-white shadow-lg"
                           : "bg-white/5 border-white/5 text-neutral-400 hover:border-white/10 hover:text-white"
                       }`}
                     >
@@ -257,58 +336,73 @@ export default function AddTransactionModal({
             </div>
           )}
 
-          {/* STEP 3: Account, Currency and Funnel Binding */}
+          {/* STEP 3: Account & Funnel Binding */}
           {step === 3 && (
             <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
               {/* Account badges */}
               <div className="space-y-2">
-                <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">Счёт списания / получения</label>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">
+                  {type === "expense" ? "Рахунок списання" : "Рахунок отримання"}
+                </label>
                 <div className="grid grid-cols-2 gap-3">
-                  {accounts.length === 0 ? (
-                    <div className="col-span-2 p-4 text-center border border-dashed border-red-500/20 rounded-xl bg-red-500/5 text-xs text-red-400 font-medium">
-                      У вас немає доданих рахунків для цього проекту. Будь ласка, спочатку створіть рахунок у вкладці Налаштування розділу Фінанси.
-                    </div>
-                  ) : (
-                    accounts.map((acc) => (
-                      <button
-                        key={acc.id}
-                        type="button"
-                        onClick={() => handleAccountChange(acc.id)}
-                        className={`px-4 py-3 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
-                          accountId === acc.id
-                            ? "bg-white text-black border-white"
-                            : "bg-white/5 border-white/5 text-neutral-400 hover:border-white/10"
-                        }`}
-                      >
-                        <div>
-                          <div className="text-xs font-bold">{acc.name}</div>
-                          <div className={`text-[10px] mt-0.5 ${accountId === acc.id ? 'text-black/50' : 'text-neutral-500'}`}>Валюта рахунку</div>
+                  {activeAccountOptions.map((acc) => (
+                    <button
+                      key={acc.id}
+                      type="button"
+                      onClick={() => handleAccountSelect(acc)}
+                      className={`px-4 py-3 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                        accountId === acc.id
+                          ? "bg-white text-black border-white shadow-lg"
+                          : "bg-white/5 border-white/5 text-neutral-400 hover:border-white/10 hover:text-white"
+                      }`}
+                    >
+                      <div>
+                        <div className="text-xs font-bold">{acc.name}</div>
+                        <div className={`text-[10px] mt-0.5 ${accountId === acc.id ? 'text-black/60' : 'text-neutral-500'}`}>
+                          {acc.name.toLowerCase().includes("фоп") ? "Фіксовано UAH" : "Основна валюта"}
                         </div>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${accountId === acc.id ? 'bg-black/10 text-black' : 'bg-white/5 text-white/60'}`}>{acc.currency}</span>
-                      </button>
-                    ))
-                  )}
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-bold ${
+                        accountId === acc.id ? 'bg-black/10 text-black' : 'bg-white/5 text-white/60'
+                      }`}>
+                        {acc.currency || "UAH"}
+                      </span>
+                    </button>
+                  ))}
                 </div>
               </div>
 
               {/* Optional Funnel Bind */}
               {!preselectedFunnelId && funnels.length > 0 && (
-                <div className="space-y-2">
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">Прив'язка до воронки (Опціонально)</label>
+                <div className="space-y-2 pt-2 border-t border-white/5">
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">
+                    Прив'язка до воронки (Опціонально)
+                  </label>
                   <div className="relative">
                     <Layers className="absolute left-3.5 top-3.5 w-4 h-4 text-neutral-400 pointer-events-none" />
                     <select
                       value={funnelId || ""}
                       onChange={(e) => setFunnelId(e.target.value || null)}
-                      className={`w-full pl-10 pr-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all text-xs ${inputClass}`}
+                      className={`w-full appearance-none pl-10 pr-10 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all text-xs font-semibold cursor-pointer ${
+                        isLight
+                          ? "bg-white border border-neutral-300 text-neutral-900"
+                          : "bg-[#121217] border border-white/10 text-white"
+                      }`}
                     >
-                      <option value="">Загальнопроектна витрата (без прив'язки)</option>
+                      <option value="" className={isLight ? "bg-white text-neutral-900" : "bg-[#121217] text-white"}>
+                        Загальнопроектна операція (без прив'язки)
+                      </option>
                       {funnels.map((f) => (
-                        <option key={f.id} value={f.id}>{f.name}</option>
+                        <option key={f.id} value={f.id} className={isLight ? "bg-white text-neutral-900" : "bg-[#121217] text-white"}>
+                          🎯 {f.name}
+                        </option>
                       ))}
                     </select>
+                    <ChevronDown className="absolute right-3.5 top-3.5 w-4 h-4 text-neutral-400 pointer-events-none" />
                   </div>
-                  <p className="text-[9px] text-neutral-500">Якщо не привязувати до воронки, сума буде розділена порівну між усіма активними воронками проекту при розрахунку ROI.</p>
+                  <p className="text-[9px] text-neutral-500">
+                    Якщо не прив'язувати до воронки, витрати розподіляються пропорційно між усіма активними воронками проекту.
+                  </p>
                 </div>
               )}
             </div>
@@ -317,40 +411,80 @@ export default function AddTransactionModal({
           {/* STEP 4: Sum, rate and description details */}
           {step === 4 && (
             <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <div className="grid grid-cols-2 gap-4">
+              {/* Currency Selector */}
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">
+                  Валюта операції
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {["UAH", "USD", "EUR"].map((curr) => (
+                    <button
+                      key={curr}
+                      type="button"
+                      onClick={() => setCurrency(curr)}
+                      className={`py-2 px-3 rounded-xl border text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                        currency === curr
+                          ? "bg-white text-black border-white shadow-md"
+                          : "bg-white/5 border-white/5 text-neutral-400 hover:border-white/10"
+                      }`}
+                    >
+                      <span>{curr === "UAH" ? "₴" : curr === "USD" ? "$" : "€"}</span>
+                      <span>{curr}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Amount input */}
                 <div className="space-y-1.5">
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">Сумма в оригіналі ({currency})</label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                      placeholder="0.00"
-                      className={`w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 text-sm font-bold ${inputClass}`}
-                    />
-                  </div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">
+                    Сума в оригіналі ({currency}) *
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0.00"
+                    className={`w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 text-sm font-bold ${inputClass}`}
+                  />
                 </div>
 
                 {/* Exchange rate input */}
                 <div className="space-y-1.5">
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">Курс до USD ($)</label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={exchangeRate}
-                      onChange={(e) => setExchangeRate(e.target.value)}
-                      placeholder="1.00"
-                      className={`w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 text-sm font-bold ${inputClass}`}
-                    />
-                  </div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">
+                    Курс обміну (1 USD ($) =)
+                  </label>
+                  {currency === "UAH" ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-neutral-400 shrink-0">1$ =</span>
+                      <input
+                        type="number"
+                        step="any"
+                        value={uahRate}
+                        onChange={(e) => setUahRate(e.target.value)}
+                        placeholder="41.80"
+                        className={`w-full px-3 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 text-sm font-bold ${inputClass}`}
+                      />
+                      <span className="text-xs font-bold text-neutral-400 shrink-0">грн</span>
+                    </div>
+                  ) : (
+                    <div className="px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-xs font-mono font-bold text-emerald-400 flex items-center justify-between">
+                      <span>Пряма валюта:</span>
+                      <span>1 {currency} = {currency === "USD" ? "$1.00" : "$1.08"}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Date & Note details */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">Дата операції</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">
+                    Дата операції
+                  </label>
                   <input
                     type="date"
                     value={date}
@@ -359,21 +493,33 @@ export default function AddTransactionModal({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">Коментар / Джерело</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">
+                    Коментар / Призначення
+                  </label>
                   <input
                     type="text"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Наприклад: ЗП таргетолог / WFP комісія"
+                    placeholder="Напр. ЗП таргетолога або Оплата софту"
                     className={`w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs ${inputClass}`}
                   />
                 </div>
               </div>
 
-              {/* Informational badge */}
-              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl text-[10px] flex items-center justify-between font-medium">
-                <span>Еквівалент у базі USD ($):</span>
-                <strong className="text-sm font-extrabold">${(Number(amount || 0) * Number(exchangeRate || 1)).toFixed(2)}</strong>
+              {/* Informational calculation card */}
+              <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-2xl text-xs flex items-center justify-between font-medium">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-neutral-400 block">Еквівалент у базі:</span>
+                  <span className="font-bold text-white">
+                    {Number(amount || 0).toLocaleString("uk-UA")} {currency}
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] uppercase font-bold text-neutral-400 block">Враховано у P&L:</span>
+                  <strong className="text-base font-black text-emerald-400">
+                    ${calculatedUsdAmount.toFixed(2)} USD
+                  </strong>
+                </div>
               </div>
             </div>
           )}
@@ -405,7 +551,7 @@ export default function AddTransactionModal({
                   setErrorMsg("");
                   setStep(step + 1);
                 }}
-                className={`px-5 py-2 text-xs font-bold rounded-xl cursor-pointer transition-all ${btnNextClass}`}
+                className={`px-5 py-2.5 text-xs font-bold rounded-xl cursor-pointer transition-all ${btnNextClass}`}
               >
                 Далі
               </button>
@@ -414,7 +560,7 @@ export default function AddTransactionModal({
                 type="button"
                 disabled={isSubmitting}
                 onClick={handleSubmit}
-                className="px-6 py-2 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold rounded-xl cursor-pointer transition-all flex items-center gap-1.5 disabled:opacity-50"
+                className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-black rounded-xl cursor-pointer transition-all flex items-center gap-1.5 disabled:opacity-50 shadow-lg shadow-emerald-500/20"
               >
                 {isSubmitting ? (
                   <>
@@ -424,7 +570,7 @@ export default function AddTransactionModal({
                 ) : (
                   <>
                     <Check className="w-4 h-4" />
-                    Підтвердити
+                    Підтвердити операцію
                   </>
                 )}
               </button>
