@@ -63,6 +63,7 @@ export default function ProjectSettingsModal({
 
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [apiWarning, setApiWarning] = useState<string | null>(null);
 
   // Sync state when project changes
   useEffect(() => {
@@ -85,9 +86,13 @@ export default function ProjectSettingsModal({
 
   const loadMetaAdAccounts = async () => {
     setIsLoadingAccounts(true);
+    setApiWarning(null);
     try {
       const res = await getMetaAdAccountsAction();
       if (res.error) throw new Error(res.error);
+      if (res.apiWarning) {
+        setApiWarning(res.apiWarning);
+      }
       if (res.accounts) {
         setAdAccounts(res.accounts);
         const mappedAccount = res.mappings?.[project?.slug];
@@ -101,6 +106,7 @@ export default function ProjectSettingsModal({
       }
     } catch (err: any) {
       console.warn("Could not load Meta Ad Accounts:", err.message);
+      setFeedback({ type: "error", message: err.message || "Помилка завантаження акаунтів Meta" });
     } finally {
       setIsLoadingAccounts(false);
     }
@@ -412,29 +418,49 @@ export default function ProjectSettingsModal({
                 </button>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-3 items-center">
-                <select
-                  value={selectedAdAccount}
-                  onChange={(e) => handleAccountChange(e.target.value)}
-                  disabled={isLoadingAccounts}
-                  className="flex-1 w-full px-4 py-2.5 rounded-xl bg-crm-input-bg border border-crm-border text-crm-text text-xs font-bold focus:border-blue-500 focus:outline-none"
-                >
-                  <option value="">-- Оберіть рекламний кабінет Meta --</option>
-                  {adAccounts.map((acc) => (
-                    <option key={acc.id} value={acc.id}>
-                      {acc.name} ({acc.id}) — {acc.currency}
-                    </option>
-                  ))}
-                </select>
+              {apiWarning && (
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[11px] flex items-center gap-2 font-medium">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+                  <span>Повідомлення Meta API: {apiWarning} (використовуються збережені акаунти системи)</span>
+                </div>
+              )}
 
-                <button
-                  type="button"
-                  onClick={handleSaveMetaBinding}
-                  disabled={isSaving || !selectedAdAccount}
-                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-blue-500 hover:bg-blue-400 text-white text-xs font-black transition-all shadow-lg shadow-blue-500/20 disabled:opacity-40 shrink-0"
-                >
-                  {isSaving ? "Прив'язка..." : "Прив'язати кабінет"}
-                </button>
+              <div className="space-y-2">
+                <div className="flex flex-col sm:flex-row gap-3 items-center">
+                  <select
+                    value={selectedAdAccount}
+                    onChange={(e) => handleAccountChange(e.target.value)}
+                    disabled={isLoadingAccounts}
+                    className="flex-1 w-full px-4 py-2.5 rounded-xl bg-crm-input-bg border border-crm-border text-crm-text text-xs font-bold focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="">-- Оберіть рекламний кабінет зі списку --</option>
+                    {adAccounts.map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.name} ({acc.id}) {acc.currency ? `— ${acc.currency}` : ""}
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveMetaBinding}
+                    disabled={isSaving || !selectedAdAccount}
+                    className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-blue-500 hover:bg-blue-400 text-white text-xs font-black transition-all shadow-lg shadow-blue-500/20 disabled:opacity-40 shrink-0 cursor-pointer"
+                  >
+                    {isSaving ? "Прив'язка..." : "Прив'язати кабінет"}
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2 text-[11px] text-crm-muted">
+                  <span>Або введіть ID вручну:</span>
+                  <input
+                    type="text"
+                    value={selectedAdAccount}
+                    onChange={(e) => handleAccountChange(e.target.value)}
+                    placeholder="act_1451088823442765"
+                    className="px-3 py-1 rounded-lg bg-crm-input-bg border border-crm-border text-crm-text text-xs font-mono focus:border-blue-500 focus:outline-none w-52"
+                  />
+                </div>
               </div>
             </div>
 
