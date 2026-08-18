@@ -726,14 +726,44 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
         ["approved", "paid", "success", "оплачено", "completed", "купив курс", "купив(-ла) трипвайер"].includes(itemStatusLower) ||
         itemStatusLower.includes("оплач");
 
-      if (isPaidOrder && !isProjectAlwaysTripwire) {
-        if (isUsd) { usdCoursePaid += amt; usdCourseCount++; }
-        else if (isEur) { eurCoursePaid += amt; eurCourseCount++; }
-        else if (isUah) { uahCoursePaid += amt; uahCourseCount++; }
-      } else if (item.status === "Купив(-ла) Трипвайер" || (isPaidOrder && isProjectAlwaysTripwire)) {
-        if (isUsd) { usdTripwirePaid += amt; usdTripwireCount++; }
-        else if (isEur) { eurTripwirePaid += amt; eurTripwireCount++; }
-        else if (isUah) { uahTripwirePaid += amt; uahTripwireCount++; }
+      const pagePathLower = String(item.page_path || item.metadata?.raw_row?.page_path || "").toLowerCase();
+      const tariffLower = String(
+        item.metadata?.raw_row?.tariffName ||
+        item.metadata?.raw_row?.raw_payload?.tariffName ||
+        item.metadata?.tariff ||
+        item.metadata?.offer_title ||
+        ""
+      ).toLowerCase();
+      const origSheetLower = String(item.metadata?.original_sheet || item.metadata?.target_sheet || "").toLowerCase();
+
+      const isTripwireProduct = 
+        isProjectAlwaysTripwire ||
+        item.status === "Купив(-ла) Трипвайер" ||
+        pagePathLower.includes("minicourse") ||
+        pagePathLower.includes("intensive") ||
+        pagePathLower.includes("tripwire") ||
+        pagePathLower.includes("practicum") ||
+        tariffLower.includes("міні-курс") ||
+        tariffLower.includes("мини-курс") ||
+        tariffLower.includes("трипвайер") ||
+        tariffLower.includes("трипваер") ||
+        origSheetLower.includes("міні-курс") ||
+        origSheetLower.includes("практикум") ||
+        origSheetLower.includes("мини-курс") ||
+        (isUah && amt <= 2500) ||
+        (isUsd && amt <= 60) ||
+        (isEur && amt <= 60);
+
+      if (isPaidOrder) {
+        if (isTripwireProduct) {
+          if (isUsd) { usdTripwirePaid += amt; usdTripwireCount++; }
+          else if (isEur) { eurTripwirePaid += amt; eurTripwireCount++; }
+          else if (isUah) { uahTripwirePaid += amt; uahTripwireCount++; }
+        } else {
+          if (isUsd) { usdCoursePaid += amt; usdCourseCount++; }
+          else if (isEur) { eurCoursePaid += amt; eurCourseCount++; }
+          else if (isUah) { uahCoursePaid += amt; uahCourseCount++; }
+        }
       } else {
         if (isUsd) usdAttempted += amt;
         else if (isEur) eurAttempted += amt;

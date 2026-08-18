@@ -920,10 +920,33 @@ export async function getUnifiedCRMData(
         }
       }
 
+      const origSheetLower = String(o.metadata?.original_sheet || o.metadata?.target_sheet || "").toLowerCase();
+      const tariffLower = String(
+        o.metadata?.raw_row?.tariffName ||
+        o.metadata?.raw_row?.raw_payload?.tariffName ||
+        o.metadata?.tariff ||
+        o.metadata?.offer_title ||
+        ""
+      ).toLowerCase();
+      const pagePathLower = String(o.metadata?.page_path || o.metadata?.raw_row?.page_path || "").toLowerCase();
+
       const isTripwire = 
-        (o.metadata?.original_sheet && ['Практикум', 'Practicum_Leads', 'Заявки на практикум', 'Miні-курс'].includes(o.metadata.original_sheet)) ||
-        (o.metadata?.target_sheet && ['Практикум', 'Practicum_Leads', 'Заявки на практикум', 'Miні-курс'].includes(o.metadata.target_sheet)) ||
-        ['sofia', 'valeria'].includes(activeProject.slug);
+        ['sofia', 'valeria'].includes(activeProject.slug) ||
+        o.status === "Купив(-ла) Трипвайер" ||
+        pagePathLower.includes("minicourse") ||
+        pagePathLower.includes("intensive") ||
+        pagePathLower.includes("tripwire") ||
+        pagePathLower.includes("practicum") ||
+        tariffLower.includes("міні-курс") ||
+        tariffLower.includes("мини-курс") ||
+        tariffLower.includes("трипвайер") ||
+        tariffLower.includes("трипваер") ||
+        origSheetLower.includes("практикум") ||
+        origSheetLower.includes("міні-курс") ||
+        origSheetLower.includes("мини-курс") ||
+        (currency === 'uah' && amount <= 2500) ||
+        (currency === 'usd' && amount <= 60) ||
+        (currency === 'eur' && amount <= 60);
 
       if (isTripwire) {
         blendedTripwireRevenueUsd += usdVal;
