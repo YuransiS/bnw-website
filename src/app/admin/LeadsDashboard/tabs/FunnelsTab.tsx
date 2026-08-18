@@ -16,7 +16,7 @@ import {
 import {
   Plus, Target, Calendar, Link as LinkIcon, RefreshCw, BarChart2, Layers, AlertCircle,
   Search, Sparkles, ArrowLeft, Edit3, Trash2, CheckCircle, TrendingUp, DollarSign,
-  ChevronRight, Eye, Award
+  ChevronRight, Eye, Award, X
 } from "lucide-react";
 
 interface FunnelsTabProps {
@@ -443,98 +443,137 @@ export default function FunnelsTab({
     }
   };
 
-  // Quick Finish Funnel action
-  const handleFinishFunnel = async (funnel: Funnel) => {
-    const today = new Date().toISOString().split("T")[0];
-    const confirmFinish = confirm(`Завершити кампанію / воронку "${funnel.name}" сьогоднішнім числом (${today})?`);
-    if (!confirmFinish) return;
+  // Confirmation modal state
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    type: "finish" | "reopen" | "delete";
+    funnel: Funnel | null;
+    isLoading?: boolean;
+    error?: string | null;
+  }>({
+    isOpen: false,
+    type: "finish",
+    funnel: null,
+    isLoading: false,
+    error: null
+  });
 
-    try {
-      let parsedStages: string[] = [];
-      if (Array.isArray(funnel.stages)) {
-        parsedStages = funnel.stages as string[];
-      } else {
-        const metaStages = funnel.description?.match(/\[Stages:\s*([^\]]+)\]/);
-        if (metaStages && metaStages[1]) {
-          parsedStages = metaStages[1].split(",").map(s => s.trim());
-        }
-      }
-
-      const res = await updateFunnelAction(projectId, funnel.id, {
-        name: funnel.name,
-        startDate: funnel.start_date,
-        endDate: today,
-        campaignIds: funnel.campaign_ids,
-        landingSlugs: funnel.landing_slugs,
-        description: funnel.description,
-        plannedRevenue: funnel.planned_revenue || 0,
-        plannedSpend: funnel.planned_spend || 0,
-        stages: parsedStages
-      });
-
-      if (res.error) {
-        alert("Не вдалося завершити кампанію: " + res.error);
-      } else {
-        loadFunnels(funnel.id);
-      }
-    } catch (err: any) {
-      alert("Помилка: " + err.message);
-    }
+  // Open finish confirmation
+  const handleFinishFunnel = (funnel: Funnel) => {
+    setConfirmModal({
+      isOpen: true,
+      type: "finish",
+      funnel,
+      isLoading: false,
+      error: null
+    });
   };
 
-  // Re-open Completed Funnel action (remove end_date)
-  const handleReopenFunnel = async (funnel: Funnel) => {
-    const confirmReopen = confirm(`Відновити воронку "${funnel.name}" як активну (зняти дату завершення)?`);
-    if (!confirmReopen) return;
-
-    try {
-      let parsedStages: string[] = [];
-      if (Array.isArray(funnel.stages)) {
-        parsedStages = funnel.stages as string[];
-      } else {
-        const metaStages = funnel.description?.match(/\[Stages:\s*([^\]]+)\]/);
-        if (metaStages && metaStages[1]) {
-          parsedStages = metaStages[1].split(",").map(s => s.trim());
-        }
-      }
-
-      const res = await updateFunnelAction(projectId, funnel.id, {
-        name: funnel.name,
-        startDate: funnel.start_date,
-        endDate: null,
-        campaignIds: funnel.campaign_ids,
-        landingSlugs: funnel.landing_slugs,
-        description: funnel.description,
-        plannedRevenue: funnel.planned_revenue || 0,
-        plannedSpend: funnel.planned_spend || 0,
-        stages: parsedStages
-      });
-
-      if (res.error) {
-        alert("Не вдалося відновити воронку: " + res.error);
-      } else {
-        loadFunnels(funnel.id);
-      }
-    } catch (err: any) {
-      alert("Помилка: " + err.message);
-    }
+  // Open reopen confirmation
+  const handleReopenFunnel = (funnel: Funnel) => {
+    setConfirmModal({
+      isOpen: true,
+      type: "reopen",
+      funnel,
+      isLoading: false,
+      error: null
+    });
   };
 
-  // Delete Funnel
-  const handleDeleteFunnel = async (funnel: Funnel) => {
-    const confirmDelete = confirm(`Ви впевнені, що хочете остаточно видалити воронку "${funnel.name}"? Усі прив'язані транзакції буде відв'язано.`);
-    if (!confirmDelete) return;
+  // Open delete confirmation
+  const handleDeleteFunnel = (funnel: Funnel) => {
+    setConfirmModal({
+      isOpen: true,
+      type: "delete",
+      funnel,
+      isLoading: false,
+      error: null
+    });
+  };
+
+  // Execute confirmed action
+  const handleExecuteConfirmedAction = async () => {
+    const { type, funnel } = confirmModal;
+    if (!funnel) return;
+
+    setConfirmModal(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      const res = await deleteFunnelAction(projectId, funnel.id);
-      if (res.error) {
-        alert("Помилка видалення: " + res.error);
-      } else {
+      if (type === "finish") {
+        const today = new Date().toISOString().split("T")[0];
+        let parsedStages: string[] = [];
+        if (Array.isArray(funnel.stages)) {
+          parsedStages = funnel.stages as string[];
+        } else {
+          const metaStages = funnel.description?.match(/\[Stages:\s*([^\]]+)\]/);
+          if (metaStages && metaStages[1]) {
+            parsedStages = metaStages[1].split(",").map(s => s.trim());
+          }
+        }
+
+        const res = await updateFunnelAction(projectId, funnel.id, {
+          name: funnel.name,
+          startDate: funnel.start_date,
+          endDate: today,
+          campaignIds: funnel.campaign_ids || [],
+          landingSlugs: funnel.landing_slugs || [],
+          description: funnel.description || "",
+          plannedRevenue: funnel.planned_revenue || 0,
+          plannedSpend: funnel.planned_spend || 0,
+          stages: parsedStages
+        });
+
+        if (res.error) {
+          setConfirmModal(prev => ({ ...prev, isLoading: false, error: res.error }));
+          return;
+        }
+
+        // Close modal and refresh immediately
+        setConfirmModal({ isOpen: false, type: "finish", funnel: null });
+        await loadFunnels(funnel.id);
+      } else if (type === "reopen") {
+        let parsedStages: string[] = [];
+        if (Array.isArray(funnel.stages)) {
+          parsedStages = funnel.stages as string[];
+        } else {
+          const metaStages = funnel.description?.match(/\[Stages:\s*([^\]]+)\]/);
+          if (metaStages && metaStages[1]) {
+            parsedStages = metaStages[1].split(",").map(s => s.trim());
+          }
+        }
+
+        const res = await updateFunnelAction(projectId, funnel.id, {
+          name: funnel.name,
+          startDate: funnel.start_date,
+          endDate: null,
+          campaignIds: funnel.campaign_ids || [],
+          landingSlugs: funnel.landing_slugs || [],
+          description: funnel.description || "",
+          plannedRevenue: funnel.planned_revenue || 0,
+          plannedSpend: funnel.planned_spend || 0,
+          stages: parsedStages
+        });
+
+        if (res.error) {
+          setConfirmModal(prev => ({ ...prev, isLoading: false, error: res.error }));
+          return;
+        }
+
+        setConfirmModal({ isOpen: false, type: "reopen", funnel: null });
+        await loadFunnels(funnel.id);
+      } else if (type === "delete") {
+        const res = await deleteFunnelAction(projectId, funnel.id);
+        if (res.error) {
+          setConfirmModal(prev => ({ ...prev, isLoading: false, error: res.error }));
+          return;
+        }
+
+        setConfirmModal({ isOpen: false, type: "delete", funnel: null });
         setSelectedFunnel(null);
-        loadFunnels();
+        await loadFunnels();
       }
     } catch (err: any) {
-      alert("Помилка: " + err.message);
+      setConfirmModal(prev => ({ ...prev, isLoading: false, error: err.message || "Помилка дії" }));
     }
   };
 
@@ -718,10 +757,11 @@ export default function FunnelsTab({
   };
 
   // Determine funnel active state
+  // Determine funnel active state (if end_date is today or in past, it is completed)
   const isFunnelActive = (funnel: Funnel) => {
     if (!funnel.end_date) return true;
     const today = new Date().toISOString().split("T")[0];
-    return funnel.end_date >= today;
+    return funnel.end_date > today;
   };
 
   return (
@@ -731,6 +771,104 @@ export default function FunnelsTab({
         <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl flex items-center gap-2">
           <AlertCircle className="w-4 h-4 flex-shrink-0" />
           <span>{error}</span>
+        </div>
+      )}
+
+      {/* CONFIRMATION ACTION MODAL */}
+      {confirmModal.isOpen && confirmModal.funnel && (
+        <div className="fixed inset-0 z-[220] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-[#0C0C0F] border border-white/10 p-6 rounded-3xl space-y-5 w-full max-w-md text-white shadow-2xl">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black ${
+                  confirmModal.type === "finish" 
+                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                    : confirmModal.type === "reopen"
+                    ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+                    : "bg-rose-500/20 text-rose-400 border border-rose-500/30"
+                }`}>
+                  {confirmModal.type === "finish" ? (
+                    <CheckCircle className="w-5 h-5" />
+                  ) : confirmModal.type === "reopen" ? (
+                    <RefreshCw className="w-5 h-5" />
+                  ) : (
+                    <Trash2 className="w-5 h-5" />
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-black text-sm">
+                    {confirmModal.type === "finish" && "Завершити кампанію"}
+                    {confirmModal.type === "reopen" && "Відновити воронку"}
+                    {confirmModal.type === "delete" && "Видалити воронку"}
+                  </h3>
+                  <p className="text-[11px] text-white/40 mt-0.5">
+                    {confirmModal.funnel.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfirmModal({ isOpen: false, type: "finish", funnel: null })}
+                className="text-white/40 hover:text-white p-1 rounded-lg hover:bg-white/5 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-white/70 leading-relaxed">
+              {confirmModal.type === "finish" && (
+                <>Зафіксувати дату завершення кампанії сьогоднішнім днем ({new Date().toLocaleDateString("uk-UA")})? Воронка перейде у статус <b>Завершена</b>.</>
+              )}
+              {confirmModal.type === "reopen" && (
+                <>Відновити активність кампанії (зняти кінцеву дату)? Воронка знову стане <b>Активною</b> для обліку нових лідів.</>
+              )}
+              {confirmModal.type === "delete" && (
+                <>Ви впевнені, що бажаєте назавжди видалити цю воронку? Усі прив'язані транзакції буде відкріплено.</>
+              )}
+            </p>
+
+            {confirmModal.error && (
+              <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl">
+                {confirmModal.error}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-white/5">
+              <button
+                type="button"
+                disabled={confirmModal.isLoading}
+                onClick={() => setConfirmModal({ isOpen: false, type: "finish", funnel: null })}
+                className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-bold cursor-pointer transition-all"
+              >
+                Скасувати
+              </button>
+              <button
+                type="button"
+                disabled={confirmModal.isLoading}
+                onClick={handleExecuteConfirmedAction}
+                className={`px-5 py-2 rounded-xl text-xs font-black cursor-pointer transition-all flex items-center gap-1.5 ${
+                  confirmModal.type === "finish"
+                    ? "bg-emerald-500 hover:bg-emerald-400 text-black shadow-lg shadow-emerald-500/20"
+                    : confirmModal.type === "reopen"
+                    ? "bg-blue-500 hover:bg-blue-400 text-white shadow-lg shadow-blue-500/20"
+                    : "bg-rose-500 hover:bg-rose-400 text-white shadow-lg shadow-rose-500/20"
+                }`}
+              >
+                {confirmModal.isLoading ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    Обробка...
+                  </>
+                ) : (
+                  <>
+                    {confirmModal.type === "finish" && "Так, завершити"}
+                    {confirmModal.type === "reopen" && "Так, відновити"}
+                    {confirmModal.type === "delete" && "Так, видалити"}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
