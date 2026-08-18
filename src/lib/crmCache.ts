@@ -285,10 +285,18 @@ const isBlacklistedTelegram = (tg: string): boolean => {
   if (!tg) return true;
   const clean = tg.toLowerCase().replace("@", "").trim();
   if (clean.length < 3) return true;
+  
+  // Telegram usernames can ONLY contain latin letters, digits, and underscores
+  // If it has spaces, Cyrillic, dashes or special characters (e.g. "немає username", "нема"), reject
+  if (/[\s\-\–\/\\,.]/.test(clean)) return true;
+  if (/[а-яА-ЯіїєґІЇЄҐ]/.test(clean)) return true;
+  if (!/^[a-zA-Z0-9_]{3,32}$/.test(clean)) return true;
+
   const ignored = new Set([
     "test", "tg", "none", "null", "unknown", "no", "empty", "telegram",
     "невідомий", "неизвестно", "dummy", "qwerty", "asdfgh", "tbd", "na",
-    "user", "admin"
+    "user", "admin", "nousername", "no_username", "notg", "no_tg", "no_telegram",
+    "anon", "anonymous", "client", "guest", "undefined"
   ]);
   if (ignored.has(clean)) return true;
   if (/^\d+$/.test(clean) && clean.length >= 7) return true;

@@ -148,11 +148,13 @@ export async function POST(req: Request) {
     // 4. Поиск существующего профиля клиента строго внутри этого проекта
     let customerId: string | null = null;
     
-    // Формируем условия поиска
+    // Формируем условия поиска (только валидные идентификаторы)
     const orConditions: string[] = [];
-    if (phone) orConditions.push(`phone.eq.${phone}`);
-    if (email) orConditions.push(`email.eq.${email}`);
-    if (telegram) orConditions.push(`telegram.ilike.${telegram}`);
+    if (phone && phone.length >= 7) orConditions.push(`phone.eq.${phone}`);
+    if (email && email.includes("@") && email.length >= 5) orConditions.push(`email.eq.${email}`);
+    const cleanTg = telegram ? telegram.replace("@", "").trim() : "";
+    const isValidTg = cleanTg.length >= 3 && /^[a-zA-Z0-9_]+$/.test(cleanTg) && !cleanTg.toLowerCase().includes("user") && !cleanTg.toLowerCase().includes("none") && !cleanTg.toLowerCase().includes("test");
+    if (isValidTg) orConditions.push(`telegram.ilike.${cleanTg}`);
 
     if (orConditions.length > 0) {
       const { data: existingCustomer, error: searchError } = await supabaseAdmin

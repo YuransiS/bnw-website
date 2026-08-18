@@ -396,37 +396,43 @@ export default function LeadJourneyModal({
                           {touch.utm_source || "direct"}
                         </span>
                       </div>
-                      {touch.amount > 0 && (
-                        <div>
-                          <span className="text-white/30 font-bold uppercase text-[9px] block">Сума</span>
-                          <span className="text-emerald-455 font-black text-sm block mt-1">
-                            {(() => {
-                              const amt = Number(touch.amount || 0);
-                              const metaCurrency = String(
-                                touch.metadata?.currency ||
-                                  touch.metadata?.lead?.currency ||
-                                  touch.metadata?.raw_row?.currency ||
-                                  touch.metadata?.raw_row?.raw_payload?.currency ||
-                                  ""
-                              )
-                                .trim()
-                                .toLowerCase();
-                              const isExplicitEur = ["EUR", "eur", "€", "Eur"].includes(
-                                String(metaCurrency).trim()
-                              );
-                              if (isExplicitEur) return `${formatLocaleNumber(amt)} €`;
-                              const isExplicitUah = ["UAH", "uah", "грн", "грн.", "Uah"].includes(
-                                String(metaCurrency).trim()
-                              );
-                              const isExplicitUsd = ["USD", "usd", "Usd", "$"].includes(
-                                String(metaCurrency).trim()
-                              );
-                              const isUah = isExplicitUah || (!isExplicitUsd && !isExplicitEur && amt >= 500);
-                              return isUah ? `${formatLocaleNumber(amt)} ₴` : `$${formatLocaleNumber(amt)}`;
-                            })()}
-                          </span>
-                        </div>
-                      )}
+                      {(() => {
+                        const amt = Number(
+                          touch.amount ||
+                          touch.metadata?.raw_row?.amount ||
+                          touch.metadata?.raw_row?.raw_payload?.amount ||
+                          0
+                        );
+                        if (amt <= 0) return null;
+                        const metaCurrency = String(
+                          touch.metadata?.currency ||
+                            touch.metadata?.lead?.currency ||
+                            touch.metadata?.raw_row?.currency ||
+                            touch.metadata?.raw_row?.raw_payload?.currency ||
+                            ""
+                        )
+                          .trim()
+                          .toLowerCase();
+                        const isExplicitEur = ["EUR", "eur", "€", "Eur"].includes(
+                          String(metaCurrency).trim()
+                        );
+                        const isExplicitUah = ["UAH", "uah", "грн", "грн.", "Uah"].includes(
+                          String(metaCurrency).trim()
+                        );
+                        const isExplicitUsd = ["USD", "usd", "Usd", "$"].includes(
+                          String(metaCurrency).trim()
+                        );
+                        const isUah = isExplicitUah || (!isExplicitUsd && !isExplicitEur && amt >= 500);
+                        const formattedAmount = isExplicitEur ? `${formatLocaleNumber(amt)} €` : isUah ? `${formatLocaleNumber(amt)} ₴` : `$${formatLocaleNumber(amt)}`;
+                        return (
+                          <div>
+                            <span className="text-white/30 font-bold uppercase text-[9px] block">Сума</span>
+                            <span className="text-emerald-455 font-black text-sm block mt-1">
+                              {formattedAmount}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {(() => {
