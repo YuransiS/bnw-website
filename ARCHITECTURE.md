@@ -46,18 +46,15 @@
 
 ## 3. Схема данных (Supabase PostgreSQL)
 
-### Таблица `public.project_landings`
-Динамический реестр страниц, лендингов и URL-параметров проектов холдинга.
+### Таблица `public.discovered_pages`
+Динамический реестр страниц, лендингов и веб-роутов проектов холдинга, автоматически обновляемый через Discovery Protocol и конфигурации.
 * `id` (UUID, primary key)
 * `project_id` (UUID references `public.projects(id) ON DELETE CASCADE`)
-* `label` (TEXT) - Отображаемая метка страницы ("VSL-форма", "Практикум", "Антиботокс")
-* `url` (TEXT) - Полный URL лендинга
-* `path` (TEXT) - Нормализованный относительный путь (`/free-lection/vsl-form/`)
-* `type` (TEXT, 'free' | 'paid' | 'quiz' | 'thank_you' | 'other')
-* `parameters` (JSONB) - Зарегистрированные параметры запроса (`?p`, `?o`, `?utm_*`) с счетчиком наблюдений и описанием
-* `badge_color` (TEXT) - Цветовое оформление плашки в UI CRM
-* `is_active` (BOOLEAN, default true)
-* `last_ping_at` (TIMESTAMPTZ) - Время последнего отклика/ping от сайта
+* `path` (TEXT) - Нормализованный относительный путь (`/mini-course/ai`, `/diagnostic`)
+* `title` (TEXT) - Отображаемая метка страницы ("Міні-курс AI", "Головна")
+* `source` (VARCHAR) - Источник регистрации (`'config'`, `'external'`, `'traffic_auto_detect'`)
+* `last_seen_at` (TIMESTAMPTZ) - Время последней активности/валидации
+* `created_at` (TIMESTAMPTZ) - Время регистрации роута
 
 ### Поля сквозной аналитики и атрибуции (`traffic_clicks` & `unified_orders`)
 * `offer_id` (TEXT) — Идентификатор конкретного оффера (`?o=...` или `?offer=...`)
@@ -144,8 +141,13 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
 ```
 
 ### Сводные RPC функции
-* `public.get_projects_summary()` — Возвращает таблицу агрегированных метрик по всем активным проектам холдинга (`is_active = true`), включая выручку (USD, UAH, EUR), расходы, лиды и CPL. Использует функцию `public.normalize_status` и применяет SQL-дедупликацию `DISTINCT ON (project_id, order_id)` для отсеивания дублей транзакций.
-* `public.get_campaigns_summary()` — Возвращает таблицу ROI и окупаемости по рекламным кампаниям активных проектов холдинга. Исключает трипвайер-листы из выручки и применяет SQL-дедупликацию транзакций.
+* `public.get_project_aggregated_kpi(p_project_id, p_start_date, p_end_date)` — **Основная высокопроизводительная аналитическая процедура.** Выполняет полную дедупликацию, агрегацию выручки (курсы, трипваеры, подписки), расходов Meta Ads, OPEX и расчет ROI/CPL/Conversion Rate на стороне PostgreSQL за 10-30 мс, полностью устраняя необходимость выкачки тысяч строк в оперативную память Node.js.
+* `public.fn_is_status_paid(p_status)` — Каноническая функция проверки оплаченности статуса заказа (Single Source of Truth), синхронизированная между PostgreSQL и `statusMapper.ts`.
+* `public.fn_convert_to_uah(p_amount, p_currency, p_date)` / `public.fn_convert_to_usd(...)` — Канонический валютный шлюз для динамической конвертации сумм по историческим курсам НБУ из таблицы `exchange_rates`.
+* `public.fn_classify_order_type(p_metadata, p_amount, p_currency)` — Единая функция классификации заказов (`course`, `tripwire`, `subscription`, `lead`).
+* `public.get_projects_summary()` — Возвращает таблицу агрегированных метрик по всем активным проектам холдинга (`is_active = true`), включая выручку (USD, UAH, EUR), расходы, лиды и CPL. Использует функцию `public.fn_is_status_paid` и применяет SQL-дедупликацию `DISTINCT ON (project_id, order_id)`.
+* `public.get_superman_summary()` — Консолидированная сводка фаундера по проектам с единой валютной нормализацией и корректным учетом всех типов продуктов.
+* `public.get_producers_leaderboard()` — Рейтинг операционных продюсеров с расчетом совокупной выручки, окупаемости и ROI по всем закрепленным проектам.
 * `public.swap_crm_leads_cache(p_project_id)` — Функция атомарного свопа кэша из staging-таблицы в рабочую crm_leads_cache без zero-data downtime.
 * `public.get_crm_metrics(...)` — Функция бэкенд-агрегации сквозных финансовых показателей проектов на уровне БД с использованием static placeholders (EXECUTE ... USING).
 * `public.get_traffic_clicks_summary(...)` — Функция БД-свертки уникальных кликов по UTM-меткам.

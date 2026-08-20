@@ -19,7 +19,7 @@ import {
   X
 } from "lucide-react";
 import { useTheme } from "../../ThemeProvider";
-import { pingAllProjectsAction } from "../../actions";
+import { pingAllProjectsAction, getProjectLandingsRegistryAction } from "../../actions";
 import { DEFAULT_PROJECT_LANDINGS } from "@/lib/projectLandings";
 import ProjectSettingsModal from "../components/ProjectSettingsModal";
 
@@ -47,8 +47,11 @@ export default function LandingsRegistryTab({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
 
-  // Initialize with allowed projects and static defaults
+  // Load persistent landings registry from Supabase DB on mount
   useEffect(() => {
+    let isMounted = true;
+
+    // 1. Instant fallback layout while loading
     const initialList = (allowedProjects || []).map((p: any) => {
       const slug = p.slug;
       const defaultLandings = DEFAULT_PROJECT_LANDINGS[slug] || [];
@@ -66,11 +69,29 @@ export default function LandingsRegistryTab({
         latencyMs: 0,
         discoveredCount: defaultLandings.length,
         landings: defaultLandings,
-        message: "Очікує ручного чи авто-опитування",
+        message: "Синхронізація з базою...",
         lastPingAt: null
       };
     });
     setPingResults(initialList);
+
+    // 2. Fetch full persisted registry from Supabase
+    getProjectLandingsRegistryAction().then((res) => {
+      if (isMounted && res.results && res.results.length > 0) {
+        // Match with allowed projects
+        const allowedSlugs = new Set((allowedProjects || []).map((p: any) => p.slug));
+        const filtered = allowedSlugs.size > 0 
+          ? res.results.filter((r: any) => allowedSlugs.has(r.slug))
+          : res.results;
+        setPingResults(filtered);
+      }
+    }).catch((err) => {
+      console.warn("Could not load persistent landings registry:", err);
+    });
+
+    return () => {
+      isMounted = false;
+    };
   }, [allowedProjects]);
 
   const handlePingAll = async () => {

@@ -663,34 +663,22 @@ export async function getUnifiedCRMData(
     const to = from + pageSize - 1;
 
     const dbQueryStart = performance.now();
-    const [leadsRes, aggLeadsRes, trafficSummaryRes, costsRes, allProfilesRes, utmLeadsSummaryRes, funnelsRes, campaignsRes] = await Promise.all([
+    const startIso = startDate ? parseClientDateRange(startDate, false).toISOString() : null;
+    const endIso = endDate ? parseClientDateRange(endDate, true).toISOString() : null;
+
+    const [leadsRes, projectKpiRes, trafficSummaryRes, costsRes, allProfilesRes, utmLeadsSummaryRes, funnelsRes, campaignsRes] = await Promise.all([
       query.order("created_at", { ascending: false }).range(from, to),
-      (async () => {
-        const { data, count, error } = await aggQuery.range(0, 999);
-        if (error || !data) return { data: [], count: 0 };
-        if (!count || count <= 1000) return { data, count };
-
-        const pagesCount = Math.ceil(count / 1000);
-        const tasks = [];
-        for (let i = 1; i < pagesCount; i++) {
-          const fromIdx = i * 1000;
-          const toIdx = fromIdx + 999;
-          tasks.push(aggQuery.range(fromIdx, toIdx));
-        }
-
-        const results = await Promise.all(tasks);
-        const allRows = [...data];
-        for (const res of results) {
-          if (res.data) allRows.push(...res.data);
-        }
-        return { data: allRows, count };
-      })(),
+      adminSupabase.rpc("get_project_aggregated_kpi", {
+        p_project_id: activeProject.id,
+        p_start_date: startIso,
+        p_end_date: endIso
+      }),
       (() => {
         if (filters?.skipTraffic) return Promise.resolve({ data: [], error: null } as any);
         return adminSupabase.rpc("get_traffic_clicks_summary", {
           p_project_id: activeProject.id,
-          p_start_date: startDate ? parseClientDateRange(startDate, false).toISOString() : null,
-          p_end_date: endDate ? parseClientDateRange(endDate, true).toISOString() : null
+          p_start_date: startIso,
+          p_end_date: endIso
         });
       })(),
       (() => {
@@ -714,8 +702,8 @@ export async function getUnifiedCRMData(
         p_touch_count_filter: touchCountFilter,
         p_source_filter: sourceFilter,
         p_unpaid_intent_only: unpaidIntentOnly,
-        p_start_date: startDate ? parseClientDateRange(startDate, false).toISOString() : null,
-        p_end_date: endDate ? parseClientDateRange(endDate, true).toISOString() : null,
+        p_start_date: startIso,
+        p_end_date: endIso,
         p_selected_landing: selectedLanding,
         p_assigned_manager_id: isSalesFiltered ? user.id : null
       }),
@@ -737,7 +725,9 @@ export async function getUnifiedCRMData(
         funnelName: matchedFunnel ? matchedFunnel.name : null
       };
     });
-    const totalCount = leadsRes.count || aggLeadsRes.count || 0;
+
+    const kpiData = projectKpiRes.data || {};
+    const totalCount = Number(kpiData.total_leads || leadsRes.count || 0);
     const costs = costsRes.data || [];
     
     // Consolidate campaigns from both get_campaigns_summary and daily_traffic_and_costs
@@ -780,253 +770,63 @@ export async function getUnifiedCRMData(
     const campaignsData = Array.from(campaignMap.values());
     const profilesList = allProfilesRes.data || [];
 
-    const aggLeads = aggLeadsRes.data || [];
-
-    // Calculate aggregated metrics from aggLeads
-    const totalLeads = totalCount || aggLeads.length;
-
-    let totalApplications = 0;
-    let usdCourseRevenue = 0;
-    let uahCourseRevenue = 0;
-    let eurCourseRevenue = 0;
-    let usdTripwireRevenue = 0;
-    let uahTripwireRevenue = 0;
-    let eurTripwireRevenue = 0;
-
-    let usdCourseCount = 0;
-    let uahCourseCount = 0;
-    let eurCourseCount = 0;
-    let usdTripwireCount = 0;
-    let uahTripwireCount = 0;
-    let eurTripwireCount = 0;
-
-    aggLeads.forEach((l: any) => {
-      // Calculate applications (leads that filled form or paid)
-      if (l.status !== "Клик" && l.status !== "КликФормы") {
-        totalApplications++;
-      }
-
-      usdCourseRevenue += Number(l.usd_paid || 0);
-      uahCourseRevenue += Number(l.uah_paid || 0);
-      eurCourseRevenue += Number(l.eur_paid || 0);
-      
-      usdTripwireRevenue += Number(l.usd_tripwire_paid || 0);
-      uahTripwireRevenue += Number(l.uah_tripwire_paid || 0);
-      eurTripwireRevenue += Number(l.eur_tripwire_paid || 0);
-
-      usdCourseCount += Number(l.usd_course_count || 0);
-      uahCourseCount += Number(l.uah_course_count || 0);
-      eurCourseCount += Number(l.eur_course_count || 0);
-      usdTripwireCount += Number(l.usd_tripwire_count || 0);
-      uahTripwireCount += Number(l.uah_tripwire_count || 0);
-      eurTripwireCount += Number(l.eur_tripwire_count || 0);
-    });
-
-    const paidLeadsCount = usdCourseCount + uahCourseCount + eurCourseCount;
-    const paidTripwiresCount = usdTripwireCount + uahTripwireCount + eurTripwireCount;
-    const totalSales = paidLeadsCount + paidTripwiresCount;
-
-    const totalUsdRevenue = usdCourseRevenue + usdTripwireRevenue;
-    const totalUahRevenue = uahCourseRevenue + uahTripwireRevenue;
-    const totalEurRevenue = eurCourseRevenue + eurTripwireRevenue;
-
-    const usdSalesCount = usdCourseCount + usdTripwireCount;
-    const uahSalesCount = uahCourseCount + uahTripwireCount;
-    const eurSalesCount = eurCourseCount + eurTripwireCount;
-
-    const aovUsd = usdSalesCount > 0 ? totalUsdRevenue / usdSalesCount : 0;
-    const aovUah = uahSalesCount > 0 ? totalUahRevenue / uahSalesCount : 0;
-    const aovEur = eurSalesCount > 0 ? totalEurRevenue / eurSalesCount : 0;
-
-    // Filter costs
-    const filteredCosts = costs.filter((c: any) => {
-      if (startDate) {
-        const cDate = parseClientDateRange(c.date, false);
-        const start = parseClientDateRange(startDate, false);
-        if (cDate < start) return false;
-      }
-      if (endDate) {
-        const cDate = parseClientDateRange(c.date, true);
-        const end = parseClientDateRange(endDate, true);
-        if (cDate > end) return false;
-      }
-      return true;
-    });
-    const totalCostsSpend = filteredCosts.reduce((sum: number, c: any) => sum + Number(c.spend_usd || c.spend || 0), 0);
-
-    // Helper for robust case-insensitive paid status detection
-    const isPaidOrderStatus = (status: string) => {
-      const s = String(status || "").toLowerCase().trim();
-      return (
-        ["closed_won", "approved", "aprooved", "paid", "success", "оплачено", "completed", "купив курс", "купив_курс", "купив трипвайєр", "купив трипвайер", "купив(-ла) трипвайер", "оплачено полностью"].includes(s) ||
-        s.includes("оплач") ||
-        s.includes("approved") ||
-        s.includes("closed_won")
-      );
-    };
-
-    let rawPaidOrdersQuery = adminSupabase
-      .from("unified_orders")
-      .select("id, amount, created_at, status, metadata")
-      .eq("project_id", activeProject.id)
-      .gt("amount", 0);
-
-    if (startDate) {
-      const startStr = parseClientDateRange(startDate, false).toISOString();
-      rawPaidOrdersQuery = rawPaidOrdersQuery.gte("created_at", startStr);
-    }
-    if (endDate) {
-      const endStr = parseClientDateRange(endDate, true).toISOString();
-      rawPaidOrdersQuery = rawPaidOrdersQuery.lte("created_at", endStr);
-    }
-
-    const { data: rawPaidOrders } = await rawPaidOrdersQuery;
-    const paidOrders = (rawPaidOrders || []).filter((o: any) => isPaidOrderStatus(o.status));
-
-    const { getExchangeRates } = await import("@/lib/exchange-rate");
-    const todayRates = await getExchangeRates();
-
-    const missingDates = Array.from(
-      new Set(
-        (paidOrders || [])
-          .filter((o: any) => !o.metadata?.usd_rate || !o.metadata?.usd_amount)
-          .map((o: any) => o.created_at ? o.created_at.split("T")[0] : null)
-          .filter(Boolean)
-      )
-    ) as string[];
-
-    const localRateMap: Record<string, any> = {};
-    if (missingDates.length > 0) {
-      await Promise.all(
-        missingDates.map(async (d) => {
-          localRateMap[d] = await getExchangeRates(d);
-        })
-      );
-    }
-
-    let blendedCourseRevenueUsd = 0;
-    let blendedCourseRevenueUah = 0;
-    let blendedTripwireRevenueUsd = 0;
-    let blendedTripwireRevenueUah = 0;
-    let exactCourseCount = 0;
-    let exactTripwireCount = 0;
-
-    (paidOrders || []).forEach((o: any) => {
-      const amount = Number(o.amount || 0);
-      const currency = String(o.metadata?.currency || o.metadata?.lead?.currency || o.metadata?.raw_row?.currency || activeProject.default_currency || "uah").toLowerCase().trim();
-      const dateStr = o.created_at ? o.created_at.split("T")[0] : "";
-      
-      const usdRate = Number(o.metadata?.usd_rate) || (dateStr && localRateMap[dateStr]?.usdRate) || todayRates.usdRate;
-      const eurToUsd = Number(o.metadata?.eur_to_usd) || (dateStr && localRateMap[dateStr]?.eurToUsd) || todayRates.eurToUsd;
-      const eurRate = usdRate * eurToUsd;
-
-      let usdVal = amount;
-      let uahVal = amount;
-
-      if (Number(o.metadata?.usd_amount) > 0 && Number(o.metadata?.uah_amount) > 0) {
-        usdVal = Number(o.metadata.usd_amount);
-        uahVal = Number(o.metadata.uah_amount);
-      } else {
-        if (currency === 'uah' || currency === '₴') {
-          usdVal = amount / usdRate;
-          uahVal = amount;
-        } else if (currency === 'eur' || currency === '€') {
-          usdVal = amount * eurToUsd;
-          uahVal = amount * eurRate;
-        } else {
-          usdVal = amount;
-          uahVal = amount * usdRate;
-        }
-      }
-
-      const origSheetLower = String(o.metadata?.original_sheet || o.metadata?.target_sheet || "").toLowerCase();
-      const tariffLower = String(
-        o.metadata?.raw_row?.tariffName ||
-        o.metadata?.raw_row?.raw_payload?.tariffName ||
-        o.metadata?.tariff ||
-        o.metadata?.offer_title ||
-        ""
-      ).toLowerCase();
-      const pagePathLower = String(o.metadata?.page_path || o.metadata?.raw_row?.page_path || "").toLowerCase();
-
-      const isTripwire = 
-        ['sofia', 'valeria'].includes(activeProject.slug) ||
-        o.status === "Купив(-ла) Трипвайер" ||
-        pagePathLower.includes("minicourse") ||
-        pagePathLower.includes("intensive") ||
-        pagePathLower.includes("tripwire") ||
-        pagePathLower.includes("practicum") ||
-        tariffLower.includes("міні-курс") ||
-        tariffLower.includes("мини-курс") ||
-        tariffLower.includes("трипвайер") ||
-        tariffLower.includes("трипваер") ||
-        origSheetLower.includes("практикум") ||
-        origSheetLower.includes("міні-курс") ||
-        origSheetLower.includes("мини-курс") ||
-        (currency === 'uah' && amount <= 2500) ||
-        (currency === 'usd' && amount <= 60) ||
-        (currency === 'eur' && amount <= 60);
-
-      if (isTripwire) {
-        blendedTripwireRevenueUsd += usdVal;
-        blendedTripwireRevenueUah += uahVal;
-        exactTripwireCount++;
-      } else {
-        blendedCourseRevenueUsd += usdVal;
-        blendedCourseRevenueUah += uahVal;
-        exactCourseCount++;
-      }
-    });
-
-    const totalBlendedRevenueUsd = blendedCourseRevenueUsd + blendedTripwireRevenueUsd;
-    const totalBlendedRevenueUah = blendedCourseRevenueUah + blendedTripwireRevenueUah;
-    const exactTotalSales = exactCourseCount + exactTripwireCount;
-
-    const blendedProfitUsd = totalBlendedRevenueUsd - totalCostsSpend;
-    const blendedProfitUah = totalBlendedRevenueUah - (totalCostsSpend * todayRates.usdRate);
-
-    const effectiveSalesCount = exactTotalSales > 0 ? exactTotalSales : (paidLeadsCount + paidTripwiresCount);
-    const blendedAovUsd = effectiveSalesCount > 0 ? totalBlendedRevenueUsd / effectiveSalesCount : 0;
-    const blendedAovUah = effectiveSalesCount > 0 ? totalBlendedRevenueUah / effectiveSalesCount : 0;
-
-    const roi = totalCostsSpend > 0 ? (totalBlendedRevenueUsd / totalCostsSpend) * 100 : 0;
-
     // Clicks summary
     const groupedTraffic = trafficSummaryRes.data || [];
     const totalClicks = groupedTraffic.reduce((sum: number, t: any) => sum + Number(t.clicks_count || 0), 0);
 
-    const conversionRate = totalClicks > 0 ? (totalLeads / totalClicks) * 100 : 0;
-    const cpl = totalLeads > 0 ? totalCostsSpend / totalLeads : 0;
-    const leadToSaleConv = totalLeads > 0 ? (effectiveSalesCount / totalLeads) * 100 : 0;
+    const totalLeads = Number(kpiData.total_leads || 0);
+    const totalCostsSpend = Number(kpiData.spend_usd || 0);
+    const totalCostsSpendUah = Number(kpiData.total_spend_uah || 0);
+    const totalRevenueUah = Number(kpiData.total_revenue_uah || 0);
+    const totalRevenueUsd = Number(kpiData.total_revenue_usd || 0);
+    const courseRevenueUah = Number(kpiData.course_revenue_uah || 0);
+    const courseRevenueUsd = Number(kpiData.course_revenue_usd || 0);
+    const tripwireRevenueUah = Number(kpiData.tripwire_revenue_uah || 0);
+    const tripwireRevenueUsd = Number(kpiData.tripwire_revenue_usd || 0);
+    const subscriptionRevenueUah = Number(kpiData.subscription_revenue_uah || 0);
+    const subscriptionRevenueUsd = Number(kpiData.subscription_revenue_usd || 0);
+
+    const paidLeadsCount = Number(kpiData.course_orders || 0);
+    const paidTripwiresCount = Number(kpiData.tripwire_orders || 0);
+    const totalSales = Number(kpiData.paid_orders || 0);
+
+    const netProfitUsd = totalRevenueUsd - totalCostsSpend;
+    const netProfitUah = Number(kpiData.total_profit_uah || 0);
+    const roi = Number(kpiData.roi || 0);
 
     const singleProjectStats = {
       totalLeads,
       totalClicks,
       totalSpend: totalCostsSpend,
-      totalApplications,
-      conversionRate,
-      cpl,
-      usdRevenue: totalBlendedRevenueUsd,
-      uahRevenue: totalBlendedRevenueUah,
-      eurRevenue: totalEurRevenue,
-      usdCourseRevenue: blendedCourseRevenueUsd,
-      uahCourseRevenue: blendedCourseRevenueUah,
-      eurCourseRevenue,
-      usdTripwireRevenue: blendedTripwireRevenueUsd,
-      uahTripwireRevenue: blendedTripwireRevenueUah,
-      eurTripwireRevenue,
-      netProfitUsd: blendedProfitUsd,
+      totalSpendUah: totalCostsSpendUah,
+      totalApplications: totalLeads,
+      conversionRate: totalClicks > 0 ? (totalLeads / totalClicks) * 100 : 0,
+      cpl: Number(kpiData.cpl_usd || 0),
+      cplUah: Number(kpiData.cpl_uah || 0),
+      usdRevenue: totalRevenueUsd,
+      uahRevenue: totalRevenueUah,
+      eurRevenue: 0,
+      usdCourseRevenue: courseRevenueUsd,
+      uahCourseRevenue: courseRevenueUah,
+      eurCourseRevenue: 0,
+      usdTripwireRevenue: tripwireRevenueUsd,
+      uahTripwireRevenue: tripwireRevenueUah,
+      eurTripwireRevenue: 0,
+      subscriptionRevenueUah,
+      subscriptionRevenueUsd,
+      netProfitUsd,
+      netProfitUah,
       roi,
-      totalSales: effectiveSalesCount,
-      paidLeadsCount: exactCourseCount > 0 ? exactCourseCount : paidLeadsCount,
-      paidTripwiresCount: exactTripwireCount > 0 ? exactTripwireCount : paidTripwiresCount,
-      leadToSaleConv,
-      leadToSaleConvUsd: totalLeads > 0 ? (usdSalesCount / totalLeads) * 100 : 0,
-      leadToSaleConvUah: totalLeads > 0 ? (uahSalesCount / totalLeads) * 100 : 0,
-      leadToSaleConvEur: totalLeads > 0 ? (eurSalesCount / totalLeads) * 100 : 0,
-      aovUsd: blendedAovUsd,
-      aovUah: blendedAovUah,
-      aovEur
+      totalSales,
+      paidLeadsCount,
+      paidTripwiresCount,
+      leadToSaleConv: Number(kpiData.conversion_rate || 0),
+      leadToSaleConvUsd: totalLeads > 0 ? (totalSales / totalLeads) * 100 : 0,
+      leadToSaleConvUah: totalLeads > 0 ? (totalSales / totalLeads) * 100 : 0,
+      leadToSaleConvEur: 0,
+      aovUsd: totalSales > 0 ? totalRevenueUsd / totalSales : 0,
+      aovUah: totalSales > 0 ? totalRevenueUah / totalSales : 0,
+      aovEur: 0
     };
 
     // Spline Trend Data via RPC
@@ -1203,6 +1003,8 @@ export async function getUnifiedCRMData(
       activeProject,
       leads,
       totalCount,
+      totalRevenueUAH: singleProjectStats.uahRevenue,
+      totalSpendUAH: singleProjectStats.totalSpend,
       stats: singleProjectStats,
       splineTrendData: splineTrendData || [],
       utmAttributionTree,
@@ -2522,6 +2324,31 @@ export async function getFunnelsAction(projectId: string) {
   }
 }
 
+export function isJunkOrSatelliteInternalPath(rawPath: string): boolean {
+  if (!rawPath || typeof rawPath !== "string") return true;
+  const p = rawPath.toLowerCase().trim();
+  if (
+    p === "/payment" ||
+    p === "/thanks" ||
+    p === "/thank-you" ||
+    p === "/success" ||
+    p === "/processing" ||
+    p === "/privacy" ||
+    p === "/offer" ||
+    p === "/login" ||
+    p === "/admin" ||
+    p.startsWith("/admin/") ||
+    p.startsWith("/api/") ||
+    p.startsWith("/tg_id=") ||
+    p.startsWith("/order/") ||
+    p.includes("telegram_id") ||
+    p.includes("%7b%7b")
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export async function getDiscoveredPagesAction(projectId: string) {
   try {
     await checkProjectAccess(projectId);
@@ -2545,6 +2372,8 @@ export async function getDiscoveredPagesAction(projectId: string) {
 
     (dbPages || []).forEach((p: any) => {
       const pathVal = p.path || p.slug || "/";
+      if (isJunkOrSatelliteInternalPath(pathVal)) return;
+
       pagesMap.set(pathVal, {
         id: p.id || `db-${pathVal}`,
         path: pathVal,
@@ -2559,13 +2388,15 @@ export async function getDiscoveredPagesAction(projectId: string) {
     if (project?.slug && DEFAULT_PROJECT_LANDINGS[project.slug]) {
       DEFAULT_PROJECT_LANDINGS[project.slug].forEach((land) => {
         const pathVal = land.path || "/";
+        if (isJunkOrSatelliteInternalPath(pathVal)) return;
+
         if (!pagesMap.has(pathVal)) {
           pagesMap.set(pathVal, {
             id: `default-${pathVal}`,
             path: pathVal,
             slug: pathVal,
             title: land.label || pathVal,
-            type: "discovered",
+            type: land.type || "discovered",
             source: "config"
           });
         }
@@ -2581,7 +2412,7 @@ export async function getDiscoveredPagesAction(projectId: string) {
 
     (cachePaths || []).forEach((c: any) => {
       if (c.page_path && typeof c.page_path === "string" && c.page_path.startsWith("/")) {
-        if (!pagesMap.has(c.page_path)) {
+        if (!isJunkOrSatelliteInternalPath(c.page_path) && !pagesMap.has(c.page_path)) {
           pagesMap.set(c.page_path, {
             id: `cache-${c.page_path}`,
             path: c.page_path,
@@ -2595,7 +2426,7 @@ export async function getDiscoveredPagesAction(projectId: string) {
       if (Array.isArray(c.visited_landings)) {
         c.visited_landings.forEach((v: string) => {
           if (v && typeof v === "string" && v.startsWith("/")) {
-            if (!pagesMap.has(v)) {
+            if (!isJunkOrSatelliteInternalPath(v) && !pagesMap.has(v)) {
               pagesMap.set(v, {
                 id: `cache-${v}`,
                 path: v,
@@ -2616,16 +2447,18 @@ export async function getDiscoveredPagesAction(projectId: string) {
         id: "root-page",
         path: "/",
         slug: "/",
-        title: "Головна сторінка (/)",
-        type: "discovered",
-        source: "auto"
+        title: "Головна",
+        type: "default",
+        source: "fallback"
       });
     }
 
-    const pages = Array.from(pagesMap.values());
-    return { success: true, pages };
+    return {
+      success: true,
+      pages: Array.from(pagesMap.values())
+    };
   } catch (err: any) {
-    return { error: err.message || "Failed to fetch discovered pages" };
+    return { error: err.message || "Failed to fetch project landing pages" };
   }
 }
 
@@ -2898,8 +2731,123 @@ export async function getGlobalTaskLogsAction() {
 }
 
 /**
+ * Loads full persistent registry of landings and projects from DB with clean verified configs
+ */
+export async function getProjectLandingsRegistryAction() {
+  try {
+    const supabase = await createClient();
+    const adminSupabase = createAdminClient();
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Unauthorized");
+
+    const { data: projects, error: projErr } = await adminSupabase
+      .from("projects")
+      .select("id, name, slug, is_active, cell_id, default_currency, expert_share_percent")
+      .order("name", { ascending: true });
+
+    if (projErr) throw projErr;
+
+    const { DEFAULT_PROJECT_LANDINGS } = await import("@/lib/projectLandings");
+
+    const { data: allDbPages } = await adminSupabase
+      .from("discovered_pages")
+      .select("*")
+      .order("path", { ascending: true });
+
+    const dbPagesByProject = new Map<string, any[]>();
+    (allDbPages || []).forEach((p: any) => {
+      if (isJunkOrSatelliteInternalPath(p.path)) return;
+      const list = dbPagesByProject.get(p.project_id) || [];
+      list.push(p);
+      dbPagesByProject.set(p.project_id, list);
+    });
+
+    const results = (projects || []).map((proj) => {
+      const slug = proj.slug;
+      const defaultLandings = DEFAULT_PROJECT_LANDINGS[slug] || [];
+      const rootUrl = defaultLandings[0]?.url || `https://${slug.replace(/_/g, "-")}.vercel.app`;
+      const domain = rootUrl.replace(/\/$/, "");
+
+      const pagesMap = new Map<string, any>();
+
+      // 1. Add DB saved pages
+      const dbPages = dbPagesByProject.get(proj.id) || [];
+      dbPages.forEach((p: any) => {
+        const path = p.path || "/";
+        const isPaid = path.includes("course") || path.includes("practicum") || path.includes("price") || path.includes("club") || path.includes("marathon") || path.includes("waist");
+        const isQuiz = path.includes("diagnostic") || path.includes("anketa") || path.includes("consultation") || path.includes("rozbir");
+        pagesMap.set(path, {
+          id: p.id,
+          label: p.title || (path === "/" ? "Головна" : path),
+          path: path,
+          url: `${domain}${path}`,
+          badgeColor: isPaid ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20" : isQuiz ? "bg-pink-500/10 text-pink-400 border border-pink-500/20" : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+          type: isPaid ? "paid" : isQuiz ? "quiz" : "free",
+          parameters: [],
+          source: p.source || "db",
+          lastPingAt: p.last_seen_at
+        });
+      });
+
+      // 2. Merge with DEFAULT_PROJECT_LANDINGS
+      defaultLandings.forEach((d) => {
+        const path = d.path || "/";
+        if (isJunkOrSatelliteInternalPath(path)) return;
+        if (!pagesMap.has(path)) {
+          pagesMap.set(path, {
+            ...d,
+            url: d.url || `${domain}${path}`,
+            source: "config"
+          });
+        }
+      });
+
+      // Ensure at least "/" is present
+      if (pagesMap.size === 0) {
+        pagesMap.set("/", {
+          label: "Головна",
+          path: "/",
+          url: `${domain}/`,
+          badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+          type: "free",
+          parameters: [],
+          source: "fallback"
+        });
+      }
+
+      const landings = Array.from(pagesMap.values());
+
+      return {
+        id: proj.id,
+        slug,
+        name: proj.name,
+        cell_id: proj.cell_id,
+        default_currency: proj.default_currency || "UAH",
+        expert_share_percent: proj.expert_share_percent ?? 50,
+        domain,
+        isLive: true,
+        status: "live",
+        latencyMs: 0,
+        discoveredCount: landings.length,
+        landings,
+        message: "Синхронізовано з базою",
+        lastPingAt: null
+      };
+    });
+
+    return {
+      success: true,
+      results
+    };
+  } catch (err: any) {
+    return { error: err.message || "Failed to load project landings registry" };
+  }
+}
+
+/**
  * Pings all satellite websites live, queries /api/v1/discovery or root domains,
- * discovers all routes/landings, and updates project status.
+ * discovers all routes/landings, validates 404s and filters internal routes, and updates project status.
  */
 export async function pingAllProjectsAction() {
   try {
@@ -2911,7 +2859,7 @@ export async function pingAllProjectsAction() {
 
     const { data: projects, error: projErr } = await adminSupabase
       .from("projects")
-      .select("id, name, slug, is_active, cell_id");
+      .select("id, name, slug, is_active, cell_id, default_currency, expert_share_percent");
 
     if (projErr) throw projErr;
 
@@ -2952,7 +2900,11 @@ export async function pingAllProjectsAction() {
           const data = await res.json();
           isLive = true;
           if (Array.isArray(data.pages)) {
-            discoveredPages = data.pages;
+            // Filter out junk / internal post-checkout paths
+            discoveredPages = data.pages.filter((p: any) => {
+              const path = p.path || p.url || "/";
+              return !isJunkOrSatelliteInternalPath(path);
+            });
           }
           message = `Discovery OK (HTTP ${res.status})`;
         } else {
@@ -2980,9 +2932,26 @@ export async function pingAllProjectsAction() {
 
       const latencyMs = Math.round(performance.now() - start);
 
-      // Save discovered landings into DB
-      const pagesToPersist = discoveredPages.length > 0 ? discoveredPages : defaultLandings;
-      for (const p of pagesToPersist) {
+      // Merge verified default landings with discovered pages
+      const pagesMap = new Map<string, any>();
+
+      // 1. Add defaults
+      defaultLandings.forEach((d) => {
+        const path = d.path || "/";
+        if (!isJunkOrSatelliteInternalPath(path)) {
+          pagesMap.set(path, {
+            label: d.label,
+            path: path,
+            url: d.url || `${domain}${path}`,
+            badgeColor: d.badgeColor,
+            type: d.type || "free",
+            parameters: []
+          });
+        }
+      });
+
+      // 2. Add discovered pages
+      discoveredPages.forEach((p) => {
         const rawPath = p.path || p.url || "/";
         let normalizedPath = rawPath;
         if (rawPath.startsWith("http")) {
@@ -2993,12 +2962,42 @@ export async function pingAllProjectsAction() {
           }
         }
         if (!normalizedPath.startsWith("/")) normalizedPath = "/" + normalizedPath;
+        if (isJunkOrSatelliteInternalPath(normalizedPath)) return;
 
+        const isPaid = p.type === "paid" || normalizedPath.includes("course") || normalizedPath.includes("practicum") || normalizedPath.includes("price") || normalizedPath.includes("club");
+        const isQuiz = p.type === "quiz" || normalizedPath.includes("diagnostic") || normalizedPath.includes("anketa") || normalizedPath.includes("consultation") || normalizedPath.includes("rozbir");
+
+        pagesMap.set(normalizedPath, {
+          label: p.label || p.title || (normalizedPath === "/" ? "Головна" : normalizedPath),
+          path: normalizedPath,
+          url: p.url || `${domain}${normalizedPath}`,
+          badgeColor: isPaid ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20" : isQuiz ? "bg-pink-500/10 text-pink-400 border border-pink-500/20" : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+          type: isPaid ? "paid" : isQuiz ? "quiz" : "free",
+          parameters: []
+        });
+      });
+
+      // Fallback "/"
+      if (pagesMap.size === 0) {
+        pagesMap.set("/", {
+          label: "Головна",
+          path: "/",
+          url: `${domain}/`,
+          badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+          type: "free",
+          parameters: []
+        });
+      }
+
+      const activeLandings = Array.from(pagesMap.values());
+
+      // Persist active valid landings into DB
+      for (const p of activeLandings) {
         try {
           await adminSupabase.from("discovered_pages").upsert({
             project_id: proj.id,
-            path: normalizedPath,
-            title: p.label || p.title || normalizedPath,
+            path: p.path,
+            title: p.label || p.path,
             source: discoveredPages.length > 0 ? "external" : "config",
             last_seen_at: new Date().toISOString()
           }, { onConflict: "project_id,path" });
@@ -3011,12 +3010,15 @@ export async function pingAllProjectsAction() {
         id: proj.id,
         slug,
         name: proj.name,
+        cell_id: proj.cell_id,
+        default_currency: proj.default_currency || "UAH",
+        expert_share_percent: proj.expert_share_percent ?? 50,
         domain,
         isLive,
         status: isLive ? "live" : "unresponsive",
         latencyMs,
-        discoveredCount: discoveredPages.length || defaultLandings.length,
-        landings: discoveredPages.length > 0 ? discoveredPages : defaultLandings,
+        discoveredCount: activeLandings.length,
+        landings: activeLandings,
         message,
         lastPingAt: new Date().toISOString()
       });

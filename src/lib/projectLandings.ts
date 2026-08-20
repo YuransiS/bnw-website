@@ -84,10 +84,15 @@ export const DEFAULT_PROJECT_LANDINGS: Record<string, ProjectLandingItem[]> = {
     { label: "Марафон", url: "https://vova-win.club/marathon", path: "/marathon", badgeColor: "bg-orange-500/10 text-orange-400 border border-orange-500/20", type: "paid", parameters: [] }
   ],
   anastasia_sych: [
-    { label: "Основний", url: "https://anastasia-sych.vercel.app/", path: "/", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20", type: "free", parameters: [] }
+    { label: "Основний", url: "https://anastasia-sych.vercel.app/", path: "/", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20", type: "free", parameters: [] },
+    { label: "Діагностика", url: "https://anastasia-sych.vercel.app/diagnostic", path: "/diagnostic", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "quiz", parameters: [] },
+    { label: "Міні-курс Талія", url: "https://anastasia-sych.vercel.app/mini-course/waist", path: "/mini-course/waist", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "paid", parameters: [] }
   ],
   nesoniaa: [
-    { label: "Основний", url: "https://nesoniaa.vercel.app/", path: "/", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "free", parameters: [] }
+    { label: "Головна", url: "https://nesoniaa.vercel.app/", path: "/", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "free", parameters: [] },
+    { label: "Міні-курс AI", url: "https://nesoniaa.vercel.app/mini-course/ai", path: "/mini-course/ai", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20", type: "paid", parameters: [] },
+    { label: "Міні-курс Figma", url: "https://nesoniaa.vercel.app/mini-course/figma", path: "/mini-course/figma", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20", type: "paid", parameters: [] },
+    { label: "Безкоштовний AI", url: "https://nesoniaa.vercel.app/mini-course/free/ai", path: "/mini-course/free/ai", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "free", parameters: [] }
   ],
   sandbox: [
     { label: "Головний (Sandbox)", url: "https://sandbox.bnw.internal/", path: "/", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "free", parameters: [] },
