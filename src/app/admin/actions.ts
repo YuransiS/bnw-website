@@ -1892,61 +1892,81 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
       campaignMap[campId].impressions += Number(c.impressions || 0);
     });
 
+    // 4. Fetch real Meta campaign statuses from Meta Graph API if token & mapping available
+    const metaCampaignStatuses: Record<string, string> = {};
+    try {
+      const { data: mapping } = await adminSupabase
+        .from("ad_spend_mappings")
+        .select("rule_value")
+        .eq("project_slug", projectSlug)
+        .eq("rule_type", "account")
+        .maybeSingle();
+
+      const effectiveToken = await getEffectiveMetaToken(adminSupabase);
+      if (mapping?.rule_value && effectiveToken) {
+        const accId = mapping.rule_value;
+        const campRes = await fetch(
+          `https://graph.facebook.com/v25.0/${accId}/campaigns?fields=id,name,effective_status&limit=50&access_token=${effectiveToken}`
+        );
+        if (campRes.ok) {
+          const campData = await campRes.json();
+          campData.data?.forEach((c: any) => {
+            if (c.id) metaCampaignStatuses[c.id] = c.effective_status;
+            if (c.name) metaCampaignStatuses[c.name] = c.effective_status;
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("Could not fetch live Meta campaign statuses:", e);
+    }
+
     const normSlug = (str: any) => String(str || "").toLowerCase().trim().replace(/%20/g, " ").replace(/[\s_\-\/\.\|\:\,\;\(\)]+/g, "");
 
     (ordersData || []).forEach((o: any) => {
-      const rawUtm = String(o.utm_campaign || o.campaign_name || "").trim();
-
+      const rawUtmCamp = String(o.utm_campaign || "").trim();
+      const rawUtmMedium = String(o.utm_medium || "").trim();
       const rawId = String(o.campaign_id || o.metadata?.campaign_id || "").trim();
+
       let matchedCampId: string | null = null;
 
       // Strategy 1: Direct ID match
       if (rawId && campaignMap[rawId]) {
         matchedCampId = rawId;
-      } else if (rawUtm && campaignMap[rawUtm]) {
-        matchedCampId = rawUtm;
       }
 
-      // Strategy 2: Extract numeric Meta campaign ID from utm_campaign
-      if (!matchedCampId && rawUtm) {
-        const digitsMatch = rawUtm.match(/(\d{8,})/);
-        if (digitsMatch && campaignMap[digitsMatch[1]]) {
-          matchedCampId = digitsMatch[1];
-        }
-      }
-
-      // Strategy 3: Normalized string slug exact match
-      const normUtm = normSlug(rawUtm);
-      if (!matchedCampId && normUtm) {
-        for (const c of Object.values(campaignMap)) {
-          const normName = normSlug(c.campaign_name);
-          const normId = normSlug(c.campaign_id);
-          if (normName === normUtm || normId === normUtm) {
-            matchedCampId = c.campaign_id;
+      // Strategy 2: Check utm_medium first (where campaign names are usually placed), then utm_campaign
+      if (!matchedCampId) {
+        for (const rawCandidate of [rawUtmMedium, rawUtmCamp]) {
+          if (!rawCandidate) continue;
+          if (campaignMap[rawCandidate]) {
+            matchedCampId = rawCandidate;
             break;
           }
-        }
-      }
-
-      // Strategy 4: Substring / slug match
-      if (!matchedCampId && normUtm) {
-        for (const c of Object.values(campaignMap)) {
-          const normName = normSlug(c.campaign_name);
-          if (normName && (normUtm.includes(normName) || normName.includes(normUtm))) {
-            matchedCampId = c.campaign_id;
+          // Extract numeric Meta ID if present
+          const digitsMatch = rawCandidate.match(/(\d{8,})/);
+          if (digitsMatch && campaignMap[digitsMatch[1]]) {
+            matchedCampId = digitsMatch[1];
             break;
           }
+          // Match normalized campaign name
+          const normCand = normSlug(rawCandidate);
+          for (const c of Object.values(campaignMap)) {
+            const normName = normSlug(c.campaign_name);
+            const normId = normSlug(c.campaign_id);
+            if (normName === normCand || normId === normCand || normCand.includes(normName) || normName.includes(normCand)) {
+              matchedCampId = c.campaign_id;
+              break;
+            }
+          }
+          if (matchedCampId) break;
         }
       }
 
-      // Strategy 5: Match to first active cost campaign if single active campaign
-      if (!matchedCampId && Object.keys(campaignMap).length === 1) {
-        matchedCampId = Object.keys(campaignMap)[0];
-      }
-
-      // Strategy 6: Fallback to lead's own utm_campaign name (or Meta Organic)
-      const campId = matchedCampId || (rawUtm ? `custom_${normUtm}` : (Object.keys(campaignMap)[0] || "organic_meta"));
-      const fallbackName = rawUtm || "Органічний трафік (Meta Direct)";
+      // Strategy 3: Fallback for unmatched orders
+      const hasUtm = Boolean(rawUtmCamp || rawUtmMedium);
+      const isDynamicTemplate = rawUtmCamp.includes("{{") || rawUtmMedium.includes("{{");
+      const campId = matchedCampId || (hasUtm && !isDynamicTemplate ? `custom_${normSlug(rawUtmCamp || rawUtmMedium)}` : "organic_direct");
+      const fallbackName = hasUtm && !isDynamicTemplate ? (rawUtmCamp || rawUtmMedium) : "Прямий / Органічний трафік";
 
       const orderDate = o.created_at ? o.created_at.split('T')[0] : undefined;
 
@@ -1973,7 +1993,6 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
           campaignMap[campId].max_date = orderDate;
         }
       }
-
 
       const orderStatus = String(o.status || '').toLowerCase();
       const isLead = !leadStatusesToExclude.includes(o.status);
@@ -2085,11 +2104,8 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
 
     const campaigns = Object.values(campaignMap).map((item) => {
       const computed = computeCalculatedFields(item);
-      const lastActiveDate = item.max_date ? new Date(item.max_date) : null;
-      const today = new Date();
-      const diffTime = lastActiveDate ? Math.abs(today.getTime() - lastActiveDate.getTime()) : Infinity;
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      const is_active = diffDays <= 3; // Active if had spend/activity in last 3 days
+      const metaStatus = metaCampaignStatuses[item.campaign_id] || metaCampaignStatuses[item.campaign_name];
+      const is_active = metaStatus ? metaStatus === "ACTIVE" : false;
       
       return {
         ...computed,
