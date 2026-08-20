@@ -1751,14 +1751,14 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
     }
     const projectId = activeProject.id;
 
-    const supabase = await createClient();
+    const adminSupabase = createAdminClient();
 
     // 1. Fetch exchange rate dynamically from NBU (today's rate and historical rates in parallel)
     const { getExchangeRates } = await import("@/lib/exchange-rate");
     const todayRates = await getExchangeRates();
 
     // 2. Fetch daily spend records
-    let costsQuery = supabase
+    let costsQuery = adminSupabase
       .from("daily_traffic_and_costs")
       .select("*")
       .eq("project_id", projectId)
@@ -1776,7 +1776,7 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
     if (costsError) throw costsError;
 
     // 3. Fetch orders
-    let ordersQuery = supabase
+    let ordersQuery = adminSupabase
       .from("unified_orders")
       .select("id, amount, status, created_at, utm_campaign, utm_medium, utm_source, campaign_id, customer_id, metadata")
       .eq("project_id", projectId)

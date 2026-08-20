@@ -93,12 +93,12 @@ const getCurrentMonthDates = () => {
   const today = new Date();
   const year = today.getFullYear();
   const month = today.getMonth();
-  const start = new Date(year, month, 1);
-  const end = new Date(year, month + 1, 0);
-  const formatDate = (d: Date) => d.toISOString().split("T")[0];
+  const startStr = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const endStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
   return {
-    startDate: formatDate(start),
-    endDate: formatDate(end)
+    startDate: startStr,
+    endDate: endStr
   };
 };
 
@@ -231,7 +231,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       startDate: isProjectSwitched ? "" : startDate,
       endDate: isProjectSwitched ? "" : endDate,
       selectedLanding: isProjectSwitched ? "all" : selectedLanding,
-      skipTraffic: activeTab !== "analytics"
+      skipTraffic: activeTab !== "analytics" && activeTab !== "traffic"
     });
   }, [initialData]);
 
@@ -379,7 +379,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     let isMounted = true;
     if (viewType !== "single" || !activeSlug) return;
 
-    const skipTraffic = activeTab !== "analytics";
+    const skipTraffic = activeTab !== "analytics" && activeTab !== "traffic";
     const currentParamsKey = JSON.stringify({
       activeSlug,
       page: currentPage,
@@ -1097,8 +1097,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         {activeTab === "finance_expert" && viewType === "single" && activeProject && (
           <FinanceExpertTab
             projectId={activeProject.id}
-            projectRevenue={dashboardData.totalRevenueUAH}
-            projectSpend={dashboardData.totalSpendUAH}
+            projectRevenue={singleProjectStats?.uahRevenue || dashboardData?.totalRevenueUAH || 0}
+            projectSpend={singleProjectStats?.totalSpend || dashboardData?.totalSpendUAH || 0}
             isLight={isLight}
           />
         )}
