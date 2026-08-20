@@ -193,7 +193,8 @@ export async function GET(req: Request) {
       .from("ad_spend_mappings")
       .select("rule_value")
       .eq("rule_type", "meta_token")
-      .eq("project_slug", "global")
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (dbTokenRow?.rule_value && dbTokenRow.rule_value.trim().length > 10) {

@@ -3093,7 +3093,8 @@ export async function getEffectiveMetaToken(adminSupabase: any): Promise<string 
       .from("ad_spend_mappings")
       .select("rule_value")
       .eq("rule_type", "meta_token")
-      .eq("project_slug", "global")
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (dbToken?.rule_value && dbToken.rule_value.trim().length > 10) {
@@ -3142,7 +3143,6 @@ export async function updateMetaTokenAction(newToken: string) {
       .from("ad_spend_mappings")
       .select("id")
       .eq("rule_type", "meta_token")
-      .eq("project_slug", "global")
       .maybeSingle();
 
     if (existing) {
@@ -3155,7 +3155,7 @@ export async function updateMetaTokenAction(newToken: string) {
       const { error: insErr } = await adminSupabase
         .from("ad_spend_mappings")
         .insert({
-          project_slug: "global",
+          project_slug: "bw_main",
           rule_type: "meta_token",
           rule_value: cleanToken
         });
