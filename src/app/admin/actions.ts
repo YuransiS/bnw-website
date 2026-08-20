@@ -2324,7 +2324,7 @@ export async function getFunnelsAction(projectId: string) {
   }
 }
 
-export function isJunkOrSatelliteInternalPath(rawPath: string): boolean {
+function checkJunkPath(rawPath: string): boolean {
   if (!rawPath || typeof rawPath !== "string") return true;
   const p = rawPath.toLowerCase().trim();
   if (
@@ -2347,6 +2347,10 @@ export function isJunkOrSatelliteInternalPath(rawPath: string): boolean {
     return true;
   }
   return false;
+}
+
+export async function isJunkOrSatelliteInternalPath(rawPath: string): Promise<boolean> {
+  return checkJunkPath(rawPath);
 }
 
 export async function getDiscoveredPagesAction(projectId: string) {
@@ -2372,7 +2376,7 @@ export async function getDiscoveredPagesAction(projectId: string) {
 
     (dbPages || []).forEach((p: any) => {
       const pathVal = p.path || p.slug || "/";
-      if (isJunkOrSatelliteInternalPath(pathVal)) return;
+      if (checkJunkPath(pathVal)) return;
 
       pagesMap.set(pathVal, {
         id: p.id || `db-${pathVal}`,
@@ -2388,7 +2392,7 @@ export async function getDiscoveredPagesAction(projectId: string) {
     if (project?.slug && DEFAULT_PROJECT_LANDINGS[project.slug]) {
       DEFAULT_PROJECT_LANDINGS[project.slug].forEach((land) => {
         const pathVal = land.path || "/";
-        if (isJunkOrSatelliteInternalPath(pathVal)) return;
+        if (checkJunkPath(pathVal)) return;
 
         if (!pagesMap.has(pathVal)) {
           pagesMap.set(pathVal, {
@@ -2412,7 +2416,7 @@ export async function getDiscoveredPagesAction(projectId: string) {
 
     (cachePaths || []).forEach((c: any) => {
       if (c.page_path && typeof c.page_path === "string" && c.page_path.startsWith("/")) {
-        if (!isJunkOrSatelliteInternalPath(c.page_path) && !pagesMap.has(c.page_path)) {
+        if (!checkJunkPath(c.page_path) && !pagesMap.has(c.page_path)) {
           pagesMap.set(c.page_path, {
             id: `cache-${c.page_path}`,
             path: c.page_path,
@@ -2426,7 +2430,7 @@ export async function getDiscoveredPagesAction(projectId: string) {
       if (Array.isArray(c.visited_landings)) {
         c.visited_landings.forEach((v: string) => {
           if (v && typeof v === "string" && v.startsWith("/")) {
-            if (!isJunkOrSatelliteInternalPath(v) && !pagesMap.has(v)) {
+            if (!checkJunkPath(v) && !pagesMap.has(v)) {
               pagesMap.set(v, {
                 id: `cache-${v}`,
                 path: v,
@@ -2757,7 +2761,7 @@ export async function getProjectLandingsRegistryAction() {
 
     const dbPagesByProject = new Map<string, any[]>();
     (allDbPages || []).forEach((p: any) => {
-      if (isJunkOrSatelliteInternalPath(p.path)) return;
+      if (checkJunkPath(p.path)) return;
       const list = dbPagesByProject.get(p.project_id) || [];
       list.push(p);
       dbPagesByProject.set(p.project_id, list);
@@ -2793,7 +2797,7 @@ export async function getProjectLandingsRegistryAction() {
       // 2. Merge with DEFAULT_PROJECT_LANDINGS
       defaultLandings.forEach((d) => {
         const path = d.path || "/";
-        if (isJunkOrSatelliteInternalPath(path)) return;
+        if (checkJunkPath(path)) return;
         if (!pagesMap.has(path)) {
           pagesMap.set(path, {
             ...d,
@@ -2903,7 +2907,7 @@ export async function pingAllProjectsAction() {
             // Filter out junk / internal post-checkout paths
             discoveredPages = data.pages.filter((p: any) => {
               const path = p.path || p.url || "/";
-              return !isJunkOrSatelliteInternalPath(path);
+              return !checkJunkPath(path);
             });
           }
           message = `Discovery OK (HTTP ${res.status})`;
@@ -2938,7 +2942,7 @@ export async function pingAllProjectsAction() {
       // 1. Add defaults
       defaultLandings.forEach((d) => {
         const path = d.path || "/";
-        if (!isJunkOrSatelliteInternalPath(path)) {
+        if (!checkJunkPath(path)) {
           pagesMap.set(path, {
             label: d.label,
             path: path,
@@ -2962,7 +2966,7 @@ export async function pingAllProjectsAction() {
           }
         }
         if (!normalizedPath.startsWith("/")) normalizedPath = "/" + normalizedPath;
-        if (isJunkOrSatelliteInternalPath(normalizedPath)) return;
+        if (checkJunkPath(normalizedPath)) return;
 
         const isPaid = p.type === "paid" || normalizedPath.includes("course") || normalizedPath.includes("practicum") || normalizedPath.includes("price") || normalizedPath.includes("club");
         const isQuiz = p.type === "quiz" || normalizedPath.includes("diagnostic") || normalizedPath.includes("anketa") || normalizedPath.includes("consultation") || normalizedPath.includes("rozbir");
