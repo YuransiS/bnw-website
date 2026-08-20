@@ -36,9 +36,9 @@ export default function FounderDashboardClient({
     if (demoMode) return "•••";
     const safeVal = Number(uahVal) || 0;
     
-    // If currency state is USD, convert from UAH (conversion rate ~44)
+    // If currency state is USD, convert from UAH (conversion rate ~41.5)
     if (currency === "USD") {
-      const usdVal = Math.round(safeVal / 44);
+      const usdVal = Math.round(safeVal / 41.5);
       return "$" + (usdVal || 0).toLocaleString("uk-UA");
     }
     
@@ -50,7 +50,9 @@ export default function FounderDashboardClient({
     if (opSortBy === "roi") {
       return (b.roi || 0) - (a.roi || 0);
     }
-    return (b.uah_revenue || 0) - (a.uah_revenue || 0);
+    const aRev = Number(a.uah_revenue || (a.blended_revenue ? a.blended_revenue * 41.5 : 0) || 0);
+    const bRev = Number(b.uah_revenue || (b.blended_revenue ? b.blended_revenue * 41.5 : 0) || 0);
+    return bRev - aRev;
   });
 
   return (
@@ -360,7 +362,7 @@ export default function FounderDashboardClient({
                     </div>
                     <div className="text-right shrink-0 pl-2">
                       <p className="text-xs font-black text-emerald-400">
-                        {formatVal(op.uah_revenue || 0)}
+                        {formatVal(op.uah_revenue || (op.blended_revenue ? op.blended_revenue * 41.5 : 0) || 0)}
                       </p>
                       <p className="text-[10px] text-white/30 font-semibold">
                         ROI: <span className="text-emerald-400">{Math.round(op.roi || 0)}%</span>

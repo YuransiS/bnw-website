@@ -24,6 +24,7 @@ import {
 import { useTheme } from "../../ThemeProvider";
 import { formatLocaleNumber, formatDualCurrency, formatDualProfit } from "@/app/admin/utils";
 import { traceVisitorUuidAction } from "../../actions";
+import { isPaidStatus } from "@/lib/statusMapper";
 
 interface AnalyticsTabProps {
   singleProjectStats: any;
@@ -119,8 +120,11 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
     let revenue = 0;
     let salesCount = 0;
     matchedLeads.forEach((lead: any) => {
-      if (lead.status === "Купив курс" || lead.status === "Купив(-ла) Трипвайер") {
-        revenue += Number(lead.amount || 0);
+      const isPaid = isPaidStatus(lead.status) || (Number(lead.uahPaid || lead.uah_paid || 0) > 0) || (Number(lead.usdPaid || lead.usd_paid || 0) > 0);
+      if (isPaid) {
+        const uah = Number(lead.uahPaid || lead.uah_paid || lead.uahTripwirePaid || lead.uah_tripwire_paid || lead.amount || 0);
+        const usd = Number(lead.usdPaid || lead.usd_paid || lead.usdTripwirePaid || lead.usd_tripwire_paid || 0);
+        revenue += uah + (usd * 41.5);
         salesCount++;
       }
     });
@@ -142,7 +146,7 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
       if (tx.funnel_id === funnel.id) {
         const amt = Number(tx.amount || 0);
         const isUAH = tx.currency === "UAH";
-        const amtUAH = isUAH ? amt : amt * 44; // Conversion rate to UAH
+        const amtUAH = isUAH ? amt : amt * 41.5; // Conversion rate to UAH
         if (tx.type === "expense") {
           manualSpendUAH += amtUAH;
         } else {

@@ -2,6 +2,7 @@
 
 import { createAdminClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
+import { isPaidStatus } from "@/lib/statusMapper";
 
 // 1. Verify User Access Helper
 async function verifyProjectAccess(projectId: string, writeRequired: boolean = false) {
@@ -168,16 +169,6 @@ export async function getFinanceSummaryAction(
       refunds: 0
     };
 
-    // Helper to identify paid status
-    const isPaidStatus = (status: string) => {
-      const s = String(status || "").toLowerCase().trim();
-      return (
-        ["closed_won", "approved", "paid", "success", "оплачено", "completed"].includes(s) ||
-        s.includes("оплач") ||
-        s.includes("approved")
-      );
-    };
-
     // Aggregate automated revenue from unified_orders
     (dbOrders || []).forEach((order) => {
       if (!isPaidStatus(order.status)) return;
@@ -202,18 +193,18 @@ export async function getFinanceSummaryAction(
       if (!finalUSD && !finalUAH) {
         if (currency === "USD" || currency === "$") {
           finalUSD = rawAmount;
-          finalUAH = rawAmount * 44;
+          finalUAH = rawAmount * 41.5;
         } else if (currency === "EUR" || currency === "€") {
-          finalUSD = rawAmount * 1.09;
-          finalUAH = rawAmount * 48;
+          finalUSD = rawAmount * 1.08;
+          finalUAH = rawAmount * 44.8;
         } else {
           finalUAH = rawAmount;
-          finalUSD = rawAmount / 44;
+          finalUSD = rawAmount / 41.5;
         }
       } else if (!finalUSD && finalUAH) {
-        finalUSD = finalUAH / 44;
+        finalUSD = finalUAH / 41.5;
       } else if (finalUSD && !finalUAH) {
-        finalUAH = finalUSD * 44;
+        finalUAH = finalUSD * 41.5;
       }
 
       totalIncomeUSD += finalUSD;

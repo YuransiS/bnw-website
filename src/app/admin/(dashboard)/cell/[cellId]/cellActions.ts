@@ -2,6 +2,7 @@
 
 import { createAdminClient } from "@/utils/supabase/server";
 import { checkProjectAccess } from "../../../actions";
+import { isPaidStatus } from "@/lib/statusMapper";
 
 export interface CellAnalyticsResult {
   cellId: string;
@@ -194,21 +195,25 @@ export async function getCellAnalyticsAction(
         pStats.leadsCount += 1;
       }
 
-      // Convert order amount to UAH & USD
-      let uahVal = rawAmount;
-      let usdVal = rawAmount / USD_TO_UAH;
+      // Only count successfully paid orders towards revenue and sales count
+      const isPaid = isPaidStatus(o.status);
+      if (isPaid && rawAmount > 0) {
+        // Convert order amount to UAH & USD
+        let uahVal = rawAmount;
+        let usdVal = rawAmount / USD_TO_UAH;
 
-      if (curr === "USD" || curr === "$") {
-        uahVal = rawAmount * USD_TO_UAH;
-        usdVal = rawAmount;
-      } else if (curr === "EUR" || curr === "€") {
-        uahVal = rawAmount * EUR_TO_UAH;
-        usdVal = rawAmount * 1.08;
+        if (curr === "USD" || curr === "$") {
+          uahVal = rawAmount * USD_TO_UAH;
+          usdVal = rawAmount;
+        } else if (curr === "EUR" || curr === "€") {
+          uahVal = rawAmount * EUR_TO_UAH;
+          usdVal = rawAmount * 1.08;
+        }
+
+        pStats.revenueUah += uahVal;
+        pStats.revenueUsd += usdVal;
+        pStats.salesCount += 1;
       }
-
-      pStats.revenueUah += uahVal;
-      pStats.revenueUsd += usdVal;
-      pStats.salesCount += 1;
     });
 
     // Aggregate Traffic Spend
