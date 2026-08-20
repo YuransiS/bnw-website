@@ -7,7 +7,8 @@ import {
   updateFunnelAction,
   deleteFunnelAction,
   getDiscoveredPagesAction,
-  syncProjectPagesAction
+  syncProjectPagesAction,
+  getProjectCampaignsForFunnelAction
 } from "../../actions";
 import {
   createTransactionAction,
@@ -19,6 +20,7 @@ import {
   ChevronRight, Eye, Award, X, Settings, Megaphone
 } from "lucide-react";
 import ProjectSettingsModal from "../components/ProjectSettingsModal";
+import { isPaidStatus } from "@/lib/statusMapper";
 
 interface FunnelsTabProps {
   projectId: string;
@@ -183,9 +185,23 @@ export default function FunnelsTab({
   const [manualPageInput, setManualPageInput] = useState("");
 
   // Campaigns Multiselect State
+  const [discoveredCampaigns, setDiscoveredCampaigns] = useState<any[]>([]);
   const [selectedCampaigns, setSelectedCampaigns] = useState<string[]>([]);
   const [searchCampaignQuery, setSearchCampaignQuery] = useState("");
   const [manualCampaignInput, setManualCampaignInput] = useState("");
+
+  const effectiveCampaignsList = React.useMemo(() => {
+    const map = new Map<string, any>();
+    (discoveredCampaigns || []).forEach((c: any) => {
+      const name = String(c.campaign_name || '').trim();
+      if (name) map.set(name, c);
+    });
+    (campaignsList || []).forEach((c: any) => {
+      const name = String(c.campaign_name || '').trim();
+      if (name && !map.has(name)) map.set(name, c);
+    });
+    return Array.from(map.values());
+  }, [discoveredCampaigns, campaignsList]);
   
   // Creation/Editing Form State
   const [showForm, setShowForm] = useState(false);
@@ -226,16 +242,20 @@ export default function FunnelsTab({
     ? [...defaultCategories.income, ...customCategories.filter(c => c.type === "income").map(c => c.name)]
     : [...defaultCategories.expense, ...customCategories.filter(c => c.type === "expense").map(c => c.name)];
 
-  // Load Funnels and Pages
+  // Load Funnels, Pages and Campaigns
   const loadFunnels = async (keepSelectionId?: string) => {
     setLoading(true);
     setError(null);
     try {
-      const [funnelRes, _syncRes] = await Promise.all([
+      const [funnelRes, _syncRes, campRes] = await Promise.all([
         getFunnelsAction(projectId),
         syncProjectPagesAction(projectId).catch((err) => {
           console.warn("Domain pages sync failed, falling back to local DB:", err);
           return { error: err.message };
+        }),
+        getProjectCampaignsForFunnelAction(projectId).catch((err) => {
+          console.warn("Project campaigns fetch failed:", err);
+          return { campaigns: [] };
         })
       ]);
 
@@ -254,6 +274,10 @@ export default function FunnelsTab({
           const updated = (data.funnels || []).find(f => f.id === selectedFunnel.id);
           if (updated) setSelectedFunnel(updated);
         }
+      }
+
+      if (campRes && "campaigns" in campRes) {
+        setDiscoveredCampaigns(campRes.campaigns || []);
       }
 
       const pagesRes = await getDiscoveredPagesAction(projectId);
@@ -714,21 +738,15 @@ export default function FunnelsTab({
     let revenue = 0;
     let salesCount = 0;
     matchedLeads.forEach((lead: any) => {
-      const s = String(lead.status || "").toLowerCase().trim();
-      const isPaid = (
-        ["closed_won", "approved", "aprooved", "paid", "success", "оплачено", "completed", "купив курс", "купив_курс", "купив трипвайєр", "купив трипвайер", "купив(-ла) трипвайер", "оплачено полностью"].includes(s) ||
-        s.includes("оплач") ||
-        s.includes("approved") ||
-        s.includes("closed_won") ||
-        s.includes("успішно")
-      );
+      const isPaid = isPaidStatus(lead.status) || (Number(lead.uahPaid || lead.uah_paid || 0) > 0) || (Number(lead.usdPaid || lead.usd_paid || 0) > 0);
 
       const leadAmt = Number(
         lead.uahPaid ||
         lead.uah_paid ||
         lead.uahTripwirePaid ||
         lead.uah_tripwire_paid ||
-        (lead.usdPaid || lead.usd_paid ? (Number(lead.usdPaid || lead.usd_paid) * 41.8) : 0) ||
+        (lead.usdPaid || lead.usd_paid ? (Number(lead.usdPaid || lead.usd_paid) * 41.5) : 0) ||
+        (lead.usdTripwirePaid || lead.usd_tripwire_paid ? (Number(lead.usdTripwirePaid || lead.usd_tripwire_paid) * 41.5) : 0) ||
         lead.amount ||
         0
       );
@@ -1282,7 +1300,32 @@ export default function FunnelsTab({
                     </button>
                   </div>
                   
-                  {campaignsList.length > 0 ? (
+                  {/* Selected Campaigns Badges (Always Visible when campaigns are chosen) */}
+                  {selectedCampaigns.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 p-2.5 bg-emerald-500/5 border border-emerald-500/20 rounded-xl">
+                      <div className="w-full text-[10px] text-emerald-400 font-bold uppercase tracking-wider mb-1 flex items-center justify-between">
+                        <span>Обрані кампанії для воронки ({selectedCampaigns.length}):</span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCampaigns([])}
+                          className="text-white/40 hover:text-white text-[9px] underline cursor-pointer"
+                        >
+                          Очистити всі
+                        </button>
+                      </div>
+                      {selectedCampaigns.map((camp) => (
+                        <span
+                          key={camp}
+                          onClick={() => setSelectedCampaigns(selectedCampaigns.filter((c) => c !== camp))}
+                          className="bg-emerald-500/15 hover:bg-red-500/20 border border-emerald-500/30 hover:border-red-500/30 text-emerald-300 hover:text-red-300 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 cursor-pointer transition-all text-xs group"
+                        >
+                          {camp} <span className="text-white/40 group-hover:text-red-400 font-black">×</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {effectiveCampaignsList.length > 0 ? (
                     <>
                       <div className="relative">
                         <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-white/40">
@@ -1292,7 +1335,7 @@ export default function FunnelsTab({
                           type="text"
                           value={searchCampaignQuery}
                           onChange={(e) => setSearchCampaignQuery(e.target.value)}
-                          placeholder="Пошук серед знайдених кампаній..."
+                          placeholder="Пошук серед знайдених кампаній проєкту..."
                           className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 rounded-xl text-xs focus:outline-none focus:border-emerald-500 text-white placeholder-white/30"
                         />
                       </div>
@@ -1300,13 +1343,13 @@ export default function FunnelsTab({
                       <div className="border border-white/10 rounded-xl overflow-hidden bg-black/35">
                         <div className="max-h-48 overflow-y-auto divide-y divide-white/5 custom-scrollbar text-xs">
                           {Array.from(new Set([
-                            ...campaignsList.map((c: any) => String(c.campaign_name || '').trim()),
+                            ...effectiveCampaignsList.map((c: any) => String(c.campaign_name || '').trim()),
                             ...selectedCampaigns
                           ].filter(Boolean)))
                             .filter((campName) => campName.toLowerCase().includes(searchCampaignQuery.toLowerCase()))
                             .map((campName) => {
                               const isSelected = selectedCampaigns.includes(campName);
-                              const stats = campaignsList.find((c) => c.campaign_name === campName);
+                              const stats = effectiveCampaignsList.find((c) => c.campaign_name === campName);
                               const spendUSD = stats ? Number(stats.spend || 0) : 0;
                               const leadsCount = stats ? Number(stats.leads_count || 0) : 0;
 
@@ -1335,9 +1378,9 @@ export default function FunnelsTab({
                                       {campName}
                                     </span>
                                   </div>
-                                  {spendUSD > 0 && (
+                                  {(spendUSD > 0 || leadsCount > 0) && (
                                     <span className="text-[9px] bg-white/5 px-2 py-0.5 rounded font-black text-white/50">
-                                      Витрати: ${Math.round(spendUSD).toLocaleString()} ({leadsCount} лід.)
+                                      {spendUSD > 0 ? `Витрати: $${Math.round(spendUSD).toLocaleString()}` : ""} {leadsCount > 0 ? `(${leadsCount} лід.)` : ""}
                                     </span>
                                   )}
                                 </div>
@@ -1345,28 +1388,14 @@ export default function FunnelsTab({
                             })}
                         </div>
                       </div>
-
-                      {selectedCampaigns.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 p-2 bg-white/[0.02] border border-white/5 rounded-xl">
-                          {selectedCampaigns.map((camp) => (
-                            <span
-                              key={camp}
-                              onClick={() => setSelectedCampaigns(selectedCampaigns.filter((c) => c !== camp))}
-                              className="bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-450 px-2 py-0.5 rounded-lg font-bold flex items-center gap-1 cursor-pointer transition-all text-[10px]"
-                            >
-                              {camp} <span className="text-white/40">×</span>
-                            </span>
-                          ))}
-                        </div>
-                      )}
                     </>
                   ) : (
                     <div className="p-4 text-center rounded-xl bg-white/[0.02] border border-white/10 space-y-2">
                       <p className="text-xs text-white/70 font-semibold">
-                        Кампанії з Meta Ads ще не синхронізовано для цього проєкту.
+                        Кампанії з Meta Ads ще не синхронізовано автоматично.
                       </p>
                       <p className="text-[11px] text-white/40">
-                        Ви можете додати ключове слово/назву кампанії вручну через поле вище або підв'язати рекламний кабінет Meta Ads.
+                        Введіть назву кампанії або ключове слово вручну у полі вище та натисніть <b>«+ Додати»</b> або підв'яжіть рекламний кабінет Meta Ads.
                       </p>
                     </div>
                   )}

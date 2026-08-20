@@ -2489,6 +2489,130 @@ export async function getDiscoveredPagesAction(projectId: string) {
   }
 }
 
+/**
+ * Fetches all known and live Meta campaigns for a project to assist with funnel builder attribution
+ */
+export async function getProjectCampaignsForFunnelAction(projectId: string) {
+  try {
+    await checkProjectAccess(projectId);
+    const adminSupabase = createAdminClient();
+
+    const { data: project } = await adminSupabase
+      .from("projects")
+      .select("id, slug, name")
+      .eq("id", projectId)
+      .maybeSingle();
+
+    if (!project) throw new Error("Project not found");
+
+    const campaignMap = new Map<string, any>();
+
+    // 1. Fetch all-time daily_traffic_and_costs
+    const { data: costs } = await adminSupabase
+      .from("daily_traffic_and_costs")
+      .select("campaign_name, campaign_id, spend_usd, spend, clicks, impressions")
+      .eq("project_id", projectId);
+
+    (costs || []).forEach((c) => {
+      const name = String(c.campaign_name || "").trim();
+      if (name && !name.includes("{{") && !name.includes("null")) {
+        const existing = campaignMap.get(name) || {
+          campaign_name: name,
+          campaign_id: c.campaign_id,
+          spend: 0,
+          clicks: 0,
+          impressions: 0,
+          leads_count: 0
+        };
+        existing.spend += Number(c.spend_usd || c.spend || 0);
+        existing.clicks += Number(c.clicks || 0);
+        existing.impressions += Number(c.impressions || 0);
+        campaignMap.set(name, existing);
+      }
+    });
+
+    // 2. Fetch distinct utm_medium and utm_campaign from crm_leads_cache
+    const { data: leads } = await adminSupabase
+      .from("crm_leads_cache")
+      .select("utm_medium, utm_campaign")
+      .eq("project_id", projectId)
+      .limit(2000);
+
+    (leads || []).forEach((l) => {
+      [l.utm_medium, l.utm_campaign].forEach((raw) => {
+        const name = String(raw || "").trim();
+        if (name && !name.includes("{{") && !name.includes("null") && name.length > 2) {
+          if (!campaignMap.has(name)) {
+            campaignMap.set(name, {
+              campaign_name: name,
+              campaign_id: null,
+              spend: 0,
+              clicks: 0,
+              impressions: 0,
+              leads_count: 0
+            });
+          }
+          const existing = campaignMap.get(name);
+          existing.leads_count += 1;
+        }
+      });
+    });
+
+    // 3. Fetch live Meta Campaigns if ad account is mapped
+    const { data: mapping } = await adminSupabase
+      .from("ad_spend_mappings")
+      .select("rule_value")
+      .eq("project_slug", project.slug)
+      .eq("rule_type", "account")
+      .maybeSingle();
+
+    const token = await getEffectiveMetaToken(adminSupabase);
+    if (mapping?.rule_value && token) {
+      try {
+        const res = await fetch(
+          `https://graph.facebook.com/v25.0/${mapping.rule_value}/campaigns?fields=id,name,effective_status&limit=50&access_token=${token}`
+        );
+        if (res.ok) {
+          const json = await res.json();
+          json.data?.forEach((c: any) => {
+            const name = String(c.name || "").trim();
+            if (name) {
+              if (!campaignMap.has(name)) {
+                campaignMap.set(name, {
+                  campaign_name: name,
+                  campaign_id: c.id,
+                  spend: 0,
+                  clicks: 0,
+                  impressions: 0,
+                  leads_count: 0,
+                  effective_status: c.effective_status
+                });
+              } else {
+                const existing = campaignMap.get(name);
+                existing.campaign_id = c.id;
+                existing.effective_status = c.effective_status;
+              }
+            }
+          });
+        }
+      } catch (e) {
+        console.warn("Meta campaigns query warning:", e);
+      }
+    }
+
+    const campaigns = Array.from(campaignMap.values()).sort(
+      (a, b) => b.spend - a.spend || b.leads_count - a.leads_count
+    );
+
+    return {
+      success: true,
+      campaigns
+    };
+  } catch (err: any) {
+    return { error: err.message || "Failed to fetch project campaigns" };
+  }
+}
+
 const PROJECT_DOMAINS: Record<string, string> = {
   victoria: 'https://victoria-mc.vercel.app',
   sofia: 'https://sofifinsight.vercel.app',
