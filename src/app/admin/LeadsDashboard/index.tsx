@@ -1003,6 +1003,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             customCategories={financeData?.categories?.custom || []}
             defaultCategories={financeData?.categories?.default || { income: [], expense: [] }}
             onFinanceRefresh={fetchFinanceData}
+            globalCurrency={globalCurrency}
           />
         )}
 

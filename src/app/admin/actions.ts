@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient, createAdminClient } from "@/utils/supabase/server";
-import { statusMapper } from "@/lib/statusMapper";
+import { statusMapper, isPaidStatus } from "@/lib/statusMapper";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
@@ -183,26 +183,35 @@ export async function checkProjectAccess(projectId: string) {
 
 // Helper to match lead to funnel in actions.ts
 function matchLeadToFunnel(lead: any, funnels: any[]) {
-  const campaign = String(lead.utm_campaign || lead.utmCampaign || "").trim().toLowerCase();
+  const utmCampaign = String(lead.utm_campaign || lead.utmCampaign || "").trim().toLowerCase();
+  const utmMedium = String(lead.utm_medium || lead.utmMedium || "").trim().toLowerCase();
+  const utmSource = String(lead.utm_source || lead.utmSource || "").trim().toLowerCase();
+  const campaignId = String(lead.campaign_id || lead.campaignId || lead.metadata?.campaign_id || "").trim().toLowerCase();
   const path = String(lead.page_path || "").trim().toLowerCase();
   const url = String(lead.page_url || "").trim().toLowerCase();
-  const landings = lead.visited_landings || lead.visitedLandings || [];
+  const landings = (lead.visited_landings || lead.visitedLandings || []).map((l: string) => String(l).toLowerCase());
   const targetSheet = String(lead.target_sheet || lead.targetSheet || "").trim().toLowerCase();
 
   for (const funnel of funnels) {
-    const campaignIds = (funnel.campaign_ids || []).map((c: string) => c.trim().toLowerCase());
-    const landingSlugs = (funnel.landing_slugs || []).map((s: string) => s.trim().toLowerCase());
+    const campaignIds = (funnel.campaign_ids || []).map((c: string) => c.trim().toLowerCase()).filter(Boolean);
+    const landingSlugs = (funnel.landing_slugs || []).map((s: string) => s.trim().toLowerCase()).filter(Boolean);
     const funnelName = String(funnel.name || "").trim().toLowerCase();
 
-    // 1. Match by campaign
-    if (campaign && campaignIds.some((cid: string) => campaign.includes(cid))) {
+    // 1. Match by campaign (supports utm_campaign, utm_medium, utm_source, and campaign_id)
+    const hasCampaignMatch = campaignIds.some((cid: string) => 
+      (utmCampaign && (utmCampaign.includes(cid) || cid.includes(utmCampaign))) ||
+      (utmMedium && (utmMedium.includes(cid) || cid.includes(utmMedium))) ||
+      (utmSource && (utmSource.includes(cid) || cid.includes(utmSource))) ||
+      (campaignId && (campaignId === cid || cid.includes(campaignId)))
+    );
+    if (hasCampaignMatch) {
       return funnel;
     }
 
     // 2. Match by landing slug
     if (landingSlugs.some((slug: string) => {
       if (!slug) return false;
-      return path.includes(slug) || url.includes(slug) || landings.some((l: string) => l.toLowerCase().includes(slug));
+      return path.includes(slug) || url.includes(slug) || landings.some((l: string) => l.includes(slug));
     })) {
       return funnel;
     }
@@ -569,8 +578,9 @@ export async function getUnifiedCRMData(
           const landingSlugs = funnel.landing_slugs || [];
           campaignIds.forEach((c: string) => {
             if (c && c.trim()) {
-              q = q.not("utm_campaign", "ilike", `%${c.trim()}%`);
-              aq = aq.not("utm_campaign", "ilike", `%${c.trim()}%`);
+              const val = `%${c.trim()}%`;
+              q = q.not("utm_campaign", "ilike", val).not("utm_medium", "ilike", val).not("utm_source", "ilike", val);
+              aq = aq.not("utm_campaign", "ilike", val).not("utm_medium", "ilike", val).not("utm_source", "ilike", val);
             }
           });
           landingSlugs.forEach((s: string) => {
@@ -600,7 +610,12 @@ export async function getUnifiedCRMData(
           const orConditions: string[] = [];
           
           campaignIds.forEach((c: string) => {
-            if (c && c.trim()) orConditions.push(`utm_campaign.ilike.%${c.trim()}%`);
+            if (c && c.trim()) {
+              const val = `%${c.trim()}%`;
+              orConditions.push(`utm_campaign.ilike.${val}`);
+              orConditions.push(`utm_medium.ilike.${val}`);
+              orConditions.push(`utm_source.ilike.${val}`);
+            }
           });
 
           landingSlugs.forEach((s: string) => {
@@ -2338,8 +2353,172 @@ export async function getFunnelsAction(projectId: string) {
 
     if (txErr) throw txErr;
 
+    const [leadsRes, costsRes] = await Promise.all([
+      adminSupabase
+        .from("crm_leads_cache")
+        .select("id, name, phone, status, utm_medium, utm_campaign, utm_source, page_path, page_url, visited_landings, target_sheet, uah_paid, usd_paid, eur_paid, uah_tripwire_paid, usd_tripwire_paid, eur_tripwire_paid, diagnostics_comment, created_at")
+        .eq("project_id", projectId),
+      adminSupabase
+        .from("daily_traffic_and_costs")
+        .select("date, campaign_name, campaign_id, spend_usd, spend, clicks, impressions")
+        .eq("project_id", projectId)
+    ]);
+
+    const allLeads = leadsRes.data || [];
+    const allCosts = costsRes.data || [];
+    const allTx = transactions || [];
+
+    const funnelsWithStats = (funnels || []).map((funnel: any) => {
+      const campaignIds = (funnel.campaign_ids || []).map((c: string) => c.trim().toLowerCase()).filter(Boolean);
+      const landingSlugs = (funnel.landing_slugs || []).map((s: string) => s.trim().toLowerCase()).filter(Boolean);
+      const funnelName = String(funnel.name || "").trim().toLowerCase();
+
+      const startTs = funnel.start_date ? new Date(funnel.start_date).getTime() : null;
+      const endTs = funnel.end_date ? new Date(funnel.end_date + "T23:59:59").getTime() : null;
+
+      // 1. Matched Leads
+      const matchedLeads = allLeads.filter((lead: any) => {
+        const lTime = new Date(lead.created_at).getTime();
+        if (startTs && lTime < startTs) return false;
+        if (endTs && lTime > endTs) return false;
+
+        const utmCampaign = String(lead.utm_campaign || "").trim().toLowerCase();
+        const utmMedium = String(lead.utm_medium || "").trim().toLowerCase();
+        const utmSource = String(lead.utm_source || "").trim().toLowerCase();
+        const path = String(lead.page_path || "").trim().toLowerCase();
+        const url = String(lead.page_url || "").trim().toLowerCase();
+        const landings = (lead.visited_landings || []).map((l: string) => String(l).toLowerCase());
+        const targetSheet = String(lead.target_sheet || "").trim().toLowerCase();
+
+        const hasCampaigns = campaignIds.length > 0;
+        const hasLandings = landingSlugs.length > 0;
+
+        const campaignMatch = hasCampaigns && campaignIds.some((cid: string) => 
+          (utmCampaign && (utmCampaign.includes(cid) || cid.includes(utmCampaign))) ||
+          (utmMedium && (utmMedium.includes(cid) || cid.includes(utmMedium))) ||
+          (utmSource && (utmSource.includes(cid) || cid.includes(utmSource)))
+        );
+
+        const landingMatch = hasLandings && landingSlugs.some((slug: string) => 
+          path.includes(slug) || url.includes(slug) || landings.some((l: string) => l.includes(slug))
+        );
+
+        const sheetMatch = targetSheet && (targetSheet.includes(funnelName) || funnelName.includes(targetSheet));
+
+        if (!hasCampaigns && !hasLandings) {
+          return Boolean(sheetMatch);
+        }
+
+        return Boolean(campaignMatch || landingMatch || sheetMatch);
+      });
+
+      // 2. Revenue & Sales
+      let revenueUAH = 0;
+      let revenueUSD = 0;
+      let salesCount = 0;
+
+      matchedLeads.forEach((lead: any) => {
+        const isPaid = isPaidStatus(lead.status) || Number(lead.uah_paid || 0) > 0 || Number(lead.usd_paid || 0) > 0 || Number(lead.uah_tripwire_paid || 0) > 0 || Number(lead.usd_tripwire_paid || 0) > 0;
+        const uah = Number(lead.uah_paid || 0) + Number(lead.uah_tripwire_paid || 0);
+        const usd = Number(lead.usd_paid || 0) + Number(lead.usd_tripwire_paid || 0);
+
+        if (isPaid || uah > 0 || usd > 0) {
+          salesCount++;
+          if (uah > 0 || usd > 0) {
+            revenueUAH += uah + (usd * 41.5);
+            revenueUSD += (uah / 41.5) + usd;
+          }
+        }
+      });
+
+      // 3. Ad Spend & Clicks
+      let spendUSD = 0;
+      let spendUAH = 0;
+      let totalClicks = 0;
+      let impressions = 0;
+
+      allCosts.forEach((c: any) => {
+        const cDate = c.date ? new Date(c.date).getTime() : null;
+        if (startTs && cDate && cDate < startTs) return;
+        if (endTs && cDate && cDate > endTs) return;
+
+        const cName = String(c.campaign_name || "").toLowerCase();
+        const cId = String(c.campaign_id || "").toLowerCase();
+
+        const hasCampaigns = campaignIds.length > 0;
+        const isMatched = hasCampaigns
+          ? campaignIds.some((cid: string) => cName.includes(cid) || cid.includes(cName) || cId === cid || cid.includes(cId))
+          : false;
+
+        if (isMatched) {
+          const sUsd = Number(c.spend_usd || c.spend || 0);
+          spendUSD += sUsd;
+          spendUAH += sUsd * 41.5;
+          totalClicks += Number(c.clicks || 0);
+          impressions += Number(c.impressions || 0);
+        }
+      });
+
+      // 4. Manual Transactions
+      let manualSpendUAH = 0;
+      let manualIncomeUAH = 0;
+
+      allTx.forEach((tx: any) => {
+        if (tx.funnel_id === funnel.id) {
+          const amt = Number(tx.amount || 0);
+          const isUAH = tx.currency === "UAH";
+          const amtUAH = isUAH ? amt : amt * 41.5;
+          const amtUSD = isUAH ? amt / 41.5 : amt;
+          if (tx.type === "expense") {
+            spendUAH += amtUAH;
+            spendUSD += amtUSD;
+            manualSpendUAH += amtUAH;
+          } else {
+            revenueUAH += amtUAH;
+            revenueUSD += amtUSD;
+            manualIncomeUAH += amtUAH;
+          }
+        }
+      });
+
+      const quizzesCount = matchedLeads.filter(
+        (l: any) => (l.diagnostics_comment && l.diagnostics_comment.trim().length > 0)
+      ).length;
+
+      const leadsCount = matchedLeads.length;
+      const profitUAH = revenueUAH - spendUAH;
+      const profitUSD = revenueUSD - spendUSD;
+      const roi = spendUSD > 0 ? (profitUSD / spendUSD) * 100 : 0;
+      const cr = leadsCount > 0 ? (salesCount / leadsCount) * 100 : 0;
+      const cplUSD = leadsCount > 0 ? spendUSD / leadsCount : 0;
+      const cpaUSD = salesCount > 0 ? spendUSD / salesCount : 0;
+
+      return {
+        ...funnel,
+        stats: {
+          leadsCount,
+          salesCount,
+          quizzesCount,
+          totalClicks,
+          impressions,
+          revenue: revenueUAH,
+          revenueUSD,
+          spend: spendUAH,
+          spendUSD,
+          profit: profitUAH,
+          profitUSD,
+          roi,
+          cr,
+          cplUSD,
+          cpaUSD,
+          manualSpend: manualSpendUAH,
+          manualIncome: manualIncomeUAH
+        }
+      };
+    });
+
     return {
-      funnels: funnels || [],
+      funnels: funnelsWithStats || [],
       transactions: transactions || []
     };
   } catch (err: any) {

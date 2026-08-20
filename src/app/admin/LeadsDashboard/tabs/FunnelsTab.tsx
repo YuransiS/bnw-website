@@ -34,6 +34,7 @@ interface FunnelsTabProps {
   customCategories: { name: string; type: string }[];
   defaultCategories: { income: string[]; expense: string[] };
   onFinanceRefresh?: () => void;
+  globalCurrency?: string;
 }
 
 interface Funnel {
@@ -48,6 +49,7 @@ interface Funnel {
   planned_spend?: number;
   stages?: any[] | string[] | null;
   created_at: string;
+  stats?: any;
 }
 
 const ALL_COMMON_STAGES = [
@@ -165,7 +167,8 @@ export default function FunnelsTab({
   accounts,
   customCategories,
   defaultCategories,
-  onFinanceRefresh
+  onFinanceRefresh,
+  globalCurrency = "UAH"
 }: FunnelsTabProps) {
   const [funnels, setFunnels] = useState<Funnel[]>([]);
   const [funnelTransactions, setFunnelTransactions] = useState<any[]>([]);
@@ -704,26 +707,70 @@ export default function FunnelsTab({
       return isNaN(d.getTime()) ? null : d.getTime();
     };
 
+    const isUSD = globalCurrency === "USD";
+
+    // 1. If server precomputed stats exist on the funnel, use them directly for 100% precision
+    if (funnel.stats) {
+      const s = funnel.stats;
+      const rev = isUSD ? Number(s.revenueUSD || (s.revenue ? s.revenue / 41.5 : 0) || 0) : Number(s.revenue || 0);
+      const spd = isUSD ? Number(s.spendUSD || (s.spend ? s.spend / 41.5 : 0) || 0) : Number(s.spend || 0);
+      const prf = rev - spd;
+      const r = spd > 0 ? (prf / spd) * 100 : 0;
+      const lCount = Number(s.leadsCount || 0);
+      const sCount = Number(s.salesCount || 0);
+      const convRate = lCount > 0 ? (sCount / lCount) * 100 : 0;
+
+      return {
+        leadsCount: lCount,
+        salesCount: sCount,
+        quizzesCount: Number(s.quizzesCount || 0),
+        totalClicks: Number(s.totalClicks || 0),
+        impressions: Number(s.impressions || 0),
+        revenue: rev,
+        spend: spd,
+        profit: prf,
+        roi: r,
+        cr: convRate,
+        cplUSD: Number(s.cplUSD || 0),
+        cpaUSD: Number(s.cpaUSD || 0),
+        manualSpend: Number(s.manualSpend || 0),
+        manualIncome: Number(s.manualIncome || 0)
+      };
+    }
+
     const startDateTime = parseSafeTs(funnel.start_date, false);
     const endDateTime = parseSafeTs(funnel.end_date, true);
     
-    // Filter leads created in the active range, matching campaign or landing slugs
+    // Filter leads created in the active range, matching campaign, medium, source or landing slugs
     const matchedLeads = leadsList.filter((lead: any) => {
       const leadTime = new Date(lead.created_at || lead.createdAt).getTime();
       if (startDateTime && leadTime < startDateTime) return false;
       if (endDateTime && leadTime > endDateTime) return false;
 
       const leadCampaign = String(lead.utm_campaign || lead.utmCampaign || "").trim().toLowerCase();
+      const leadMedium = String(lead.utm_medium || lead.utmMedium || "").trim().toLowerCase();
+      const leadSource = String(lead.utm_source || lead.utmSource || "").trim().toLowerCase();
+      const leadCampaignId = String(lead.campaign_id || lead.campaignId || lead.metadata?.campaign_id || "").trim().toLowerCase();
       const leadLanding = String(lead.landing || lead.page_path || lead.page_url || lead.target_sheet || lead.targetSheet || lead.metadata?.target_sheet || "").trim().toLowerCase();
       const visitedLandings = (lead.visited_landings || lead.visitedLandings || []).map((l: string) => String(l).toLowerCase());
 
       const hasCampaigns = Array.isArray(funnel.campaign_ids) && funnel.campaign_ids.length > 0;
       const hasLandings = Array.isArray(funnel.landing_slugs) && funnel.landing_slugs.length > 0;
 
-      const campaignMatch = hasCampaigns && funnel.campaign_ids.some((id) => id && leadCampaign.includes(id.toLowerCase()));
+      const campaignMatch = hasCampaigns && funnel.campaign_ids.some((id) => {
+        if (!id) return false;
+        const cid = id.toLowerCase().trim();
+        return (
+          leadCampaign.includes(cid) || cid.includes(leadCampaign) ||
+          leadMedium.includes(cid) || cid.includes(leadMedium) ||
+          leadSource.includes(cid) || cid.includes(leadSource) ||
+          leadCampaignId === cid || cid.includes(leadCampaignId)
+        );
+      });
+
       const landingMatch = hasLandings && funnel.landing_slugs.some((slug) => {
         if (!slug) return false;
-        const s = slug.toLowerCase();
+        const s = slug.toLowerCase().trim();
         return leadLanding.includes(s) || visitedLandings.some((vl: string) => vl.includes(s));
       });
 
@@ -735,25 +782,24 @@ export default function FunnelsTab({
     });
 
     // Sum revenue from these leads
-    let revenue = 0;
+    let revenueUAH = 0;
+    let revenueUSD = 0;
     let salesCount = 0;
     matchedLeads.forEach((lead: any) => {
       const isPaid = isPaidStatus(lead.status) || (Number(lead.uahPaid || lead.uah_paid || 0) > 0) || (Number(lead.usdPaid || lead.usd_paid || 0) > 0);
+      const uah = Number(lead.uahPaid || lead.uah_paid || lead.uahTripwirePaid || lead.uah_tripwire_paid || 0);
+      const usd = Number(lead.usdPaid || lead.usd_paid || lead.usdTripwirePaid || lead.usd_tripwire_paid || 0);
+      const rawAmt = Number(lead.amount || 0);
 
-      const leadAmt = Number(
-        lead.uahPaid ||
-        lead.uah_paid ||
-        lead.uahTripwirePaid ||
-        lead.uah_tripwire_paid ||
-        (lead.usdPaid || lead.usd_paid ? (Number(lead.usdPaid || lead.usd_paid) * 41.5) : 0) ||
-        (lead.usdTripwirePaid || lead.usd_tripwire_paid ? (Number(lead.usdTripwirePaid || lead.usd_tripwire_paid) * 41.5) : 0) ||
-        lead.amount ||
-        0
-      );
-
-      if (isPaid || leadAmt > 0) {
-        revenue += leadAmt;
+      if (isPaid || uah > 0 || usd > 0 || rawAmt > 0) {
         salesCount++;
+        if (uah > 0 || usd > 0) {
+          revenueUAH += uah + (usd * 41.5);
+          revenueUSD += (uah / 41.5) + usd;
+        } else if (rawAmt > 0) {
+          revenueUAH += rawAmt;
+          revenueUSD += rawAmt / 41.5;
+        }
       }
     });
 
@@ -763,11 +809,17 @@ export default function FunnelsTab({
     ).length;
 
     // Sum Ad Spends from daily traffic costs in the active range
-    let spend = 0;
+    let spendUSD = 0;
+    let spendUAH = 0;
     costsList.forEach((c: any) => {
       const hasCampaigns = Array.isArray(funnel.campaign_ids) && funnel.campaign_ids.length > 0;
       const isMatched = hasCampaigns
-        ? funnel.campaign_ids.some((id) => String(c.campaign_name || "").toLowerCase().includes(id.toLowerCase()))
+        ? funnel.campaign_ids.some((id) => {
+            const cid = id.toLowerCase().trim();
+            const cName = String(c.campaign_name || "").toLowerCase();
+            const cId = String(c.campaign_id || "").toLowerCase();
+            return cName.includes(cid) || cid.includes(cName) || cId === cid || cid.includes(cId);
+          })
         : true;
       if (!isMatched) return;
       
@@ -777,8 +829,9 @@ export default function FunnelsTab({
         if (endDateTime && costDate > endDateTime) return;
       }
       
-      // Spend in UAH
-      spend += Number(c.spend || 0);
+      const sUsd = Number(c.spend_usd || c.spend || 0);
+      spendUSD += sUsd;
+      spendUAH += sUsd * 41.5;
     });
 
     // Sum manual transactions bound to this funnel
@@ -789,21 +842,25 @@ export default function FunnelsTab({
       if (tx.funnel_id === funnel.id) {
         const amt = Number(tx.amount || 0);
         const isUAH = tx.currency === "UAH";
-        const amtUAH = isUAH ? amt : amt * 41.8;
+        const amtUAH = isUAH ? amt : amt * 41.5;
+        const amtUSD = isUAH ? amt / 41.5 : amt;
         if (tx.type === "expense") {
+          spendUAH += amtUAH;
+          spendUSD += amtUSD;
           manualSpendUAH += amtUAH;
         } else {
+          revenueUAH += amtUAH;
+          revenueUSD += amtUSD;
           manualIncomeUAH += amtUAH;
         }
       }
     });
 
-    revenue += manualIncomeUAH;
-    spend += manualSpendUAH;
-
     const leadsCount = matchedLeads.length;
-    const profit = revenue - spend;
-    const roi = spend > 0 ? (profit / spend) * 100 : 0;
+    const finalRev = isUSD ? revenueUSD : revenueUAH;
+    const finalSpd = isUSD ? spendUSD : spendUAH;
+    const profit = finalRev - finalSpd;
+    const roi = finalSpd > 0 ? (profit / finalSpd) * 100 : 0;
     const cr = leadsCount > 0 ? (salesCount / leadsCount) * 100 : 0;
 
     // Click sum from campaigns
@@ -811,7 +868,12 @@ export default function FunnelsTab({
     campaignsList.forEach((c: any) => {
       const hasCampaigns = Array.isArray(funnel.campaign_ids) && funnel.campaign_ids.length > 0;
       const isMatched = hasCampaigns
-        ? funnel.campaign_ids.some((id) => String(c.campaign_name || "").toLowerCase().includes(id.toLowerCase()))
+        ? funnel.campaign_ids.some((id) => {
+            const cid = id.toLowerCase().trim();
+            const cName = String(c.campaign_name || "").toLowerCase();
+            const cId = String(c.campaign_id || "").toLowerCase();
+            return cName.includes(cid) || cid.includes(cName) || cId === cid || cid.includes(cId);
+          })
         : true;
       if (isMatched) {
         totalClicks += Number(c.clicks || 0);
@@ -823,8 +885,8 @@ export default function FunnelsTab({
       salesCount,
       quizzesCount,
       totalClicks,
-      revenue,
-      spend,
+      revenue: finalRev,
+      spend: finalSpd,
       profit,
       roi,
       cr,
