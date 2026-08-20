@@ -524,8 +524,15 @@ export async function getUnifiedCRMData(
     const touchCountFilter = filters?.touchCountFilter || "all";
     const sourceFilter = filters?.sourceFilter || "all";
     const unpaidIntentOnly = filters?.unpaidIntentOnly || false;
-    const startDate = filters?.startDate || "";
-    const endDate = filters?.endDate || "";
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth();
+    const defaultStartStr = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+    const defaultLastDay = new Date(year, month + 1, 0).getDate();
+    const defaultEndStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(defaultLastDay).padStart(2, "0")}`;
+
+    const startDate = filters?.startDate !== undefined ? filters.startDate : defaultStartStr;
+    const endDate = filters?.endDate !== undefined ? filters.endDate : defaultEndStr;
     const selectedLanding = filters?.selectedLanding || "all";
 
     // Build filter statements

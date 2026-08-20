@@ -49,8 +49,18 @@ export default async function ProjectDashboardPage({ params }: PageProps) {
     );
   }
 
-  // 3. Load unified data for project slug
-  const initialData = await getUnifiedCRMData(project.slug);
+  // 3. Load unified data for project slug defaulting to current month (matching UI preset)
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth();
+  const startDate = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const endDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+  const initialData = await getUnifiedCRMData(project.slug, {
+    startDate,
+    endDate
+  });
 
   const cellName = (project.cells as any)?.name || "Проект";
 

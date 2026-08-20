@@ -5,8 +5,18 @@ import LeadsDashboard from "../LeadsDashboard";
 export const revalidate = 0;
 
 export default async function MainLandingSitePage() {
-  // Load unified data for B&B Main landing slug
-  const initialData = await getUnifiedCRMData("bw_main");
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth();
+  const startDate = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const endDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+  // Load unified data for B&B Main landing slug defaulting to current month
+  const initialData = await getUnifiedCRMData("bw_main", {
+    startDate,
+    endDate
+  });
 
   return (
     <div className="space-y-4">
