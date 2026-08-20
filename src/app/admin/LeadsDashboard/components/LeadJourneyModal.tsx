@@ -14,8 +14,10 @@ import {
   Calendar,
   X,
   HelpCircle,
-  ChevronDown
+  ChevronDown,
+  Clock
 } from "lucide-react";
+import { isPaidStatus } from "@/lib/statusMapper";
 import { updateCustomerCommentAction, assignLeadToManagerAction } from "../../actions";
 import { getLeadDate, formatLocaleNumber, parseComments, CommentItem } from "@/app/admin/utils";
 import { LeadItem } from "../types";
@@ -318,11 +320,24 @@ export default function LeadJourneyModal({
             </h4>
 
             {history.map((touch: any, idx: number) => {
-              const isPaidCourse = touch.status === "Купив курс";
-              const isTripwire = touch.status === "Купив(-ла) Трипвайер";
+              const rawStatus = String(touch.status || "").toLowerCase().trim();
+              const isExplicitPaid = isPaidStatus(touch.status);
+              const isCheckoutIntent = 
+                rawStatus.includes("перехід до оплат") ||
+                rawStatus.includes("клик на форму") ||
+                rawStatus.includes("почато оплату") ||
+                rawStatus.includes("очікує");
+
+              const isTripwire = isExplicitPaid && (
+                touch.status === "Купив(-ла) Трипвайер" ||
+                String(touch.page_path || touch.metadata?.raw_row?.page_path || "").toLowerCase().includes("minicourse") ||
+                String(touch.quiz_result || "").toLowerCase().includes("міні-курс") ||
+                String(touch.metadata?.raw_row?.tariffName || "").toLowerCase().includes("міні-курс")
+              );
+              const isPaidCourse = isExplicitPaid && !isTripwire;
               const isCall = touch.status === "Назначено Дзвінок" || touch.status === "Дзвінок проведено";
               const isThink = touch.status === "Вирішив подумати";
-              const isDecline = touch.status === "Відмова";
+              const isDecline = touch.status === "Відмова" || rawStatus.includes("відхил") || rawStatus.includes("decline");
 
               // Resolve timeline design tokens
               let ringColor = "border-white/10 text-white/50 bg-white/5";
@@ -338,6 +353,10 @@ export default function LeadJourneyModal({
                 ringColor = "border-indigo-500/30 text-indigo-400 bg-indigo-500/10 shadow-[0_0_15px_rgba(99,102,241,0.1)]";
                 glowColor = "bg-indigo-500";
                 touchIcon = <Sparkles className="w-3.5 h-3.5" />;
+              } else if (isCheckoutIntent) {
+                ringColor = "border-amber-500/30 text-amber-400 bg-amber-500/10";
+                glowColor = "bg-amber-500";
+                touchIcon = <Clock className="w-3.5 h-3.5" />;
               } else if (isCall) {
                 ringColor = "border-orange-500/30 text-orange-400 bg-orange-500/10 shadow-[0_0_10px_rgba(249,115,22,0.05)]";
                 glowColor = "bg-orange-550";
@@ -351,6 +370,12 @@ export default function LeadJourneyModal({
                 glowColor = "bg-red-550";
                 touchIcon = <X className="w-3.5 h-3.5" />;
               }
+
+              const displayStatus = isTripwire
+                ? "Купив(-ла) Трипвайер"
+                : isPaidCourse
+                ? "Купив курс"
+                : touch.status;
 
               return (
                 <div key={touch.id} className="relative pl-12 pb-8 last:pb-2 group">
@@ -378,10 +403,12 @@ export default function LeadJourneyModal({
                               ? "bg-emerald-500/10 text-emerald-455 border-emerald-500/20"
                               : isTripwire
                               ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
+                              : isCheckoutIntent
+                              ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
                               : "bg-white/5 text-white/50 border-white/5"
                           }`}
                         >
-                          {touch.status}
+                          {displayStatus}
                         </span>
                       </div>
                       <span className="text-[10px] text-white/30 font-bold">
@@ -389,13 +416,26 @@ export default function LeadJourneyModal({
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 text-[11px] border-t border-white/5 pt-3">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-[11px] border-t border-white/5 pt-3">
                       <div>
-                        <span className="text-white/30 font-bold uppercase text-[9px] block">Джерело</span>
-                        <span className="text-white font-extrabold uppercase tracking-wide bg-white/5 px-2.5 py-0.5 rounded mt-1.5 inline-block">
-                          {touch.utm_source || "direct"}
+                        <span className="text-white/30 font-bold uppercase text-[9px] block">Джерело (UTM)</span>
+                        <span className="text-white font-extrabold uppercase tracking-wide bg-white/5 px-2 py-0.5 rounded mt-1 inline-block text-[10px]">
+                          {touch.utm_source || touch.metadata?.raw_row?.utm_source || "direct"}
                         </span>
                       </div>
+
+                      {(touch.utm_medium || touch.metadata?.raw_row?.utm_medium || touch.utm_campaign || touch.metadata?.raw_row?.utm_campaign) && (
+                        <div>
+                          <span className="text-white/30 font-bold uppercase text-[9px] block">Кампанія</span>
+                          <span
+                            className="text-white/90 font-bold truncate block mt-1 text-[10px]"
+                            title={touch.utm_medium || touch.metadata?.raw_row?.utm_medium || touch.utm_campaign || touch.metadata?.raw_row?.utm_campaign}
+                          >
+                            {touch.utm_medium || touch.metadata?.raw_row?.utm_medium || touch.utm_campaign || touch.metadata?.raw_row?.utm_campaign}
+                          </span>
+                        </div>
+                      )}
+
                       {(() => {
                         const amt = Number(
                           touch.amount ||
@@ -410,24 +450,16 @@ export default function LeadJourneyModal({
                             touch.metadata?.raw_row?.currency ||
                             touch.metadata?.raw_row?.raw_payload?.currency ||
                             ""
-                        )
-                          .trim()
-                          .toLowerCase();
-                        const isExplicitEur = ["EUR", "eur", "€", "Eur"].includes(
-                          String(metaCurrency).trim()
-                        );
-                        const isExplicitUah = ["UAH", "uah", "грн", "грн.", "Uah"].includes(
-                          String(metaCurrency).trim()
-                        );
-                        const isExplicitUsd = ["USD", "usd", "Usd", "$"].includes(
-                          String(metaCurrency).trim()
-                        );
-                        const isUah = isExplicitUah || (!isExplicitUsd && !isExplicitEur && amt >= 500);
-                        const formattedAmount = isExplicitEur ? `${formatLocaleNumber(amt)} €` : isUah ? `${formatLocaleNumber(amt)} ₴` : `$${formatLocaleNumber(amt)}`;
+                        ).trim().toLowerCase();
+                        const isExplicitEur = ["EUR", "eur", "€", "Eur"].includes(metaCurrency);
+                        const isExplicitUsd = ["USD", "usd", "Usd", "$"].includes(metaCurrency);
+                        const formattedAmount = isExplicitEur ? `${formatLocaleNumber(amt)} €` : isExplicitUsd ? `$${formatLocaleNumber(amt)}` : `${formatLocaleNumber(amt)} ₴`;
                         return (
                           <div>
-                            <span className="text-white/30 font-bold uppercase text-[9px] block">Сума</span>
-                            <span className="text-emerald-455 font-black text-sm block mt-1">
+                            <span className="text-white/30 font-bold uppercase text-[9px] block">
+                              {isCheckoutIntent ? "Сума оферу" : "Оплачено"}
+                            </span>
+                            <span className={`${isCheckoutIntent ? "text-amber-400" : "text-emerald-455"} font-black text-sm block mt-1`}>
                               {formattedAmount}
                             </span>
                           </div>

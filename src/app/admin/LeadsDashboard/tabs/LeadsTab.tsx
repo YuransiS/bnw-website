@@ -520,17 +520,45 @@ export const LeadsTab = React.memo(function LeadsTab({
                         </div>
                       </td>
 
-                      {/* Attribution link source */}
+                      {/* Attribution link source & campaign & creative */}
                       <td className="p-4">
-                        <span
-                          className={`font-semibold uppercase text-[10px] tracking-wider px-2 py-0.5 rounded ${
-                            isLight
-                              ? "bg-neutral-100 text-neutral-600 border border-neutral-200"
-                              : "bg-white/5 text-white/60 border border-white/5"
-                          }`}
-                        >
-                          {lead.utmSource || lead.utm_source || "direct"}
-                        </span>
+                        <div className="flex flex-col gap-1 max-w-[220px]">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span
+                              className={`font-black uppercase text-[9px] tracking-wider px-1.5 py-0.5 rounded ${
+                                isLight
+                                  ? "bg-neutral-100 text-neutral-600 border border-neutral-200"
+                                  : "bg-white/5 text-white/60 border border-white/5"
+                              }`}
+                            >
+                              {lead.utmSource || lead.utm_source || "direct"}
+                            </span>
+                            {(lead.utmContent || lead.utm_content) && (
+                              <span
+                                className="font-mono text-[9px] px-1 py-0.2 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20"
+                                title={`Креатив / Content: ${lead.utmContent || lead.utm_content}`}
+                              >
+                                Кр #{lead.utmContent || lead.utm_content}
+                              </span>
+                            )}
+                          </div>
+                          {(lead.utmMedium || lead.utm_medium || lead.utmCampaign || lead.utm_campaign) && (
+                            <span
+                              className="text-[11px] font-bold text-white/90 truncate block leading-tight hover:text-white"
+                              title={`Кампанія: ${lead.utmMedium || lead.utm_medium || ""}\nAdset: ${lead.utmCampaign || lead.utm_campaign || ""}`}
+                            >
+                              {lead.utmMedium || lead.utm_medium || lead.utmCampaign || lead.utm_campaign}
+                            </span>
+                          )}
+                          {(lead.utmCampaign || lead.utm_campaign) && (lead.utmMedium || lead.utm_medium) && (
+                            <span
+                              className="text-[9px] text-white/40 truncate block font-mono"
+                              title={`Adset / Campaign: ${lead.utmCampaign || lead.utm_campaign}`}
+                            >
+                              {lead.utmCampaign || lead.utm_campaign}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Touch count tracking */}
@@ -683,48 +711,59 @@ export const LeadsTab = React.memo(function LeadsTab({
                     </div>
                   </div>
 
-                  {/* Source, Touch & Status Footer */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-white/5">
-                    <div className="flex items-center gap-2">
+                  {/* Source, Campaign & Touch Footer */}
+                  <div className="flex flex-col gap-2 pt-3 border-t border-white/5">
+                    {(lead.utmMedium || lead.utm_medium || lead.utmCampaign || lead.utm_campaign) && (
+                      <div className="text-[10px] font-bold text-white/90 truncate">
+                        🎯 {lead.utmMedium || lead.utm_medium || lead.utmCampaign || lead.utm_campaign}
+                      </div>
+                    )}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span
+                          className={`font-semibold uppercase text-[9px] tracking-wider px-2 py-0.5 rounded ${
+                            isLight
+                              ? "bg-neutral-100 text-neutral-600 border border-neutral-200"
+                              : "bg-white/5 text-white/60 border border-white/5"
+                          }`}
+                        >
+                          {lead.utmSource || lead.utm_source || "direct"}
+                        </span>
+                        {(lead.utmContent || lead.utm_content) && (
+                          <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
+                            Кр #{lead.utmContent || lead.utm_content}
+                          </span>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openLeadModal(lead);
+                          }}
+                          className={`px-2 py-0.5 rounded border transition-all font-black text-[9px] cursor-pointer ${
+                            isLight
+                              ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-emerald-600"
+                              : "bg-white/5 hover:bg-white/10 border-white/5 text-emerald-450"
+                          }`}
+                        >
+                          {lead.touchCount} торк.
+                        </button>
+                      </div>
+
                       <span
-                        className={`font-semibold uppercase text-[9px] tracking-wider px-2 py-0.5 rounded ${
-                          isLight
-                            ? "bg-neutral-100 text-neutral-600 border border-neutral-200"
-                            : "bg-white/5 text-white/60 border border-white/5"
+                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[10px] font-extrabold ${
+                          lead.status === "Купив курс" || lead.status === "Купив(-ла) Трипвайер"
+                            ? "bg-emerald-500/10 text-emerald-455 border-emerald-500/20"
+                            : lead.status === "Відмова"
+                            ? "bg-red-500/10 text-red-400 border-red-500/20"
+                            : isLight
+                            ? "bg-neutral-150 border-neutral-300 text-neutral-700"
+                            : "bg-neutral-800 border-neutral-700 text-neutral-300"
                         }`}
                       >
-                        {lead.utmSource || lead.utm_source || "direct"}
+                        <span className={`w-1.5 h-1.5 rounded-full ${col.dotColor}`} />
+                        {lead.status}
                       </span>
-
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openLeadModal(lead);
-                        }}
-                        className={`px-2 py-0.5 rounded border transition-all font-black text-[9px] cursor-pointer ${
-                          isLight
-                            ? "bg-neutral-100 hover:bg-neutral-200 border-neutral-200 text-emerald-600"
-                            : "bg-white/5 hover:bg-white/10 border-white/5 text-emerald-450"
-                        }`}
-                      >
-                        {lead.touchCount} торк.
-                      </button>
                     </div>
-
-                    <span
-                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[10px] font-extrabold ${
-                        lead.status === "Купив курс" || lead.status === "Купив(-ла) Трипвайер"
-                          ? "bg-emerald-500/10 text-emerald-455 border-emerald-500/20"
-                          : lead.status === "Відмова"
-                          ? "bg-red-500/10 text-red-400 border-red-500/20"
-                          : isLight
-                          ? "bg-neutral-150 border-neutral-300 text-neutral-700"
-                          : "bg-neutral-800 border-neutral-700 text-neutral-300"
-                      }`}
-                    >
-                      <span className={`w-1.5 h-1.5 rounded-full ${col.dotColor}`} />
-                      {lead.status}
-                    </span>
                   </div>
                 </div>
               );

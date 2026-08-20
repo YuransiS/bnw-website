@@ -448,11 +448,32 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
     if (!s) return "Новий лід";
     const normalized = statusMapper.normalize(s);
 
+    const pagePath = String(lead.page_path || lead.metadata?.raw_row?.page_path || lead.metadata?.page_path || "").toLowerCase();
+    const tariffName = String(
+      lead.metadata?.raw_row?.tariffName ||
+      lead.metadata?.raw_row?.raw_payload?.tariffName ||
+      lead.metadata?.tariffName ||
+      lead.metadata?.tariff ||
+      lead.metadata?.offer_title ||
+      lead.quiz_result ||
+      ""
+    ).toLowerCase();
     const originalSheet = String(lead.metadata?.original_sheet || lead.metadata?.lead?.original_sheet || "").trim();
     const targetSheet = String(lead.metadata?.target_sheet || lead.metadata?.lead?.target_sheet || "").trim();
     const courseName = String(lead.metadata?.leadData?.course || lead.metadata?.lead?.leadData?.course || "").trim();
 
     const isTripwire =
+      pagePath.includes("minicourse") ||
+      pagePath.includes("mini-course") ||
+      pagePath.includes("practicum") ||
+      pagePath.includes("tripwire") ||
+      pagePath.includes("intensive") ||
+      tariffName.includes("міні-курс") ||
+      tariffName.includes("мини-курс") ||
+      tariffName.includes("трипвайер") ||
+      tariffName.includes("трипваєр") ||
+      tariffName.includes("код масштабування") ||
+      tariffName.includes("практикум") ||
       ["Практикум", "Practicum_Leads", "Заявки на практикум", "Miні-курс"].includes(originalSheet) ||
       ["Практикум", "Practicum_Leads", "Заявки на практикум", "Miні-курс"].includes(targetSheet) ||
       courseName.includes("Mini-Course") ||
@@ -468,6 +489,18 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
       return "Відмова";
     }
     const lower = s.toLowerCase().trim();
+    if (
+      lower.includes("перехід до оплат") ||
+      lower.includes("переход к оплат") ||
+      lower.includes("клик на форму оплат") ||
+      lower.includes("клік на форму оплат") ||
+      lower.includes("почато оплату") ||
+      lower.includes("очікується оплата") ||
+      lower.includes("очікує оплати") ||
+      lower === "expired"
+    ) {
+      return "Новий лід";
+    }
     if (
       lower === "new" ||
       lower === "pending" ||
@@ -499,7 +532,7 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
       return "Купив(-ла) Трипвайер";
     }
     if (lower === "купив курс" || lower === "купив_курс") {
-      return ["sofia", "valeria"].includes(activeSlug) ? "Купив(-ла) Трипвайер" : "Купив курс";
+      return isTripwire ? "Купив(-ла) Трипвайер" : (["sofia", "valeria"].includes(activeSlug) ? "Купив(-ла) Трипвайер" : "Купив курс");
     }
     if (lower === "зацікавлений лід" || lower === "зацікавлений") {
       return "Зацікавлений лід";

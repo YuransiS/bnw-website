@@ -25,8 +25,40 @@ export function isPaidStatus(rawStatus: string | null | undefined): boolean {
   if (!rawStatus) return false;
   const s = String(rawStatus).toLowerCase().trim();
 
-  // Exclude explicit failure/lead/click statuses
-  if (['клик', 'кликформы', 'new', 'новый', 'відмова', 'отказ', 'failed', 'declined', 'refunded', 'повернення', 'в обробці', 'in_progress', 'pending'].includes(s)) {
+  // Exclude explicit failure/lead/click/intent statuses
+  if (
+    s.includes('перехід до оплат') ||
+    s.includes('переход к оплат') ||
+    s.includes('клик на форму') ||
+    s.includes('клік на форму') ||
+    s.includes('клик') ||
+    s.includes('клік') ||
+    s.includes('new') ||
+    s.includes('новий') ||
+    s.includes('новый') ||
+    s.includes('зареєстрован') ||
+    s.includes('зарегистрирован') ||
+    s.includes('відмова') ||
+    s.includes('отказ') ||
+    s.includes('failed') ||
+    s.includes('decline') ||
+    s.includes('відхил') ||
+    s.includes('expire') ||
+    s.includes('прострочен') ||
+    s.includes('refund') ||
+    s.includes('повернен') ||
+    s.includes('в обробці') ||
+    s.includes('in_progress') ||
+    s.includes('pending') ||
+    s.includes('очікує') ||
+    s.includes('ожидает') ||
+    s.includes('почат') ||
+    s.includes('начат') ||
+    s.includes('не оплат') ||
+    s.includes('неоплат') ||
+    s.includes('не оплач') ||
+    s.includes('неоплач')
+  ) {
     return false;
   }
 
@@ -35,20 +67,17 @@ export function isPaidStatus(rawStatus: string | null | undefined): boolean {
     return true;
   }
 
-  // Check if status has unpaid negation
-  const hasUnpaidNegation =
-    s.includes('не оплат') ||
-    s.includes('неоплат') ||
-    s.includes('не оплач') ||
-    s.includes('неоплач') ||
-    s.includes('очікує') ||
-    /не\s*оплат/.test(s) ||
-    /не\s*оплач/.test(s);
-
-  if (hasUnpaidNegation) return false;
-
-  // Patterns for Ukrainian CRM statuses
-  if (s.includes('оплач') || s.includes('купив') || s.includes('approved') || s.includes('paid')) {
+  // Exact positive words: 'approved', 'paid', 'success', 'completed', 'оплачено', 'купив', 'купил'
+  if (
+    s === 'approved' ||
+    s === 'paid' ||
+    s === 'success' ||
+    s === 'completed' ||
+    s === 'оплачено' ||
+    s.startsWith('оплачено') ||
+    s.startsWith('купив') ||
+    s.startsWith('купил')
+  ) {
     return true;
   }
 
