@@ -187,21 +187,25 @@ export async function GET(req: Request) {
       auth: { persistSession: false }
     });
 
-    // 0. Resolve dynamic token from DB first, then fallback to env
-    let metaToken = process.env.META_ACCESS_TOKEN;
-    const { data: dbTokenRow } = await supabase
+    // 0. Resolve all dynamic tokens from DB and env
+    const metaTokens: string[] = [];
+    const { data: dbTokenRows } = await supabase
       .from("ad_spend_mappings")
       .select("rule_value")
       .eq("rule_type", "meta_token")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .order("created_at", { ascending: false });
 
-    if (dbTokenRow?.rule_value && dbTokenRow.rule_value.trim().length > 10) {
-      metaToken = dbTokenRow.rule_value.trim();
+    (dbTokenRows || []).forEach((r: any) => {
+      if (r.rule_value && r.rule_value.trim().length > 10 && !metaTokens.includes(r.rule_value.trim())) {
+        metaTokens.push(r.rule_value.trim());
+      }
+    });
+
+    if (process.env.META_ACCESS_TOKEN && !metaTokens.includes(process.env.META_ACCESS_TOKEN.trim())) {
+      metaTokens.push(process.env.META_ACCESS_TOKEN.trim());
     }
 
-    if (!metaToken) {
+    if (metaTokens.length === 0) {
       return NextResponse.json({ error: "Missing META_ACCESS_TOKEN in DB or ENV" }, { status: 500 });
     }
 
@@ -225,14 +229,29 @@ export async function GET(req: Request) {
     const slugToId = new Map(projects.map((p) => [p.slug, p.id]));
     const accountToSlug = new Map(rules.map((r) => [r.rule_value, r.project_slug]));
 
-    // 2. Fetch Meta ad accounts from Graph API (including currency field)
-    const accountsUrl = `https://graph.facebook.com/${apiVersion}/me/adaccounts?access_token=${metaToken}&fields=id,name,currency&limit=100`;
-    const accountsRes = await fetch(accountsUrl);
-    if (!accountsRes.ok) {
-      throw new Error(`Failed to fetch Meta accounts: ${await accountsRes.text()}`);
+    // 2. Fetch Meta ad accounts across all tokens (deduped by ID)
+    const accountsMap = new Map<string, any>();
+    const accountWorkingToken = new Map<string, string>();
+
+    for (const token of metaTokens) {
+      try {
+        const accountsUrl = `https://graph.facebook.com/${apiVersion}/me/adaccounts?access_token=${token}&fields=id,name,currency&limit=100`;
+        const accountsRes = await fetch(accountsUrl);
+        if (accountsRes.ok) {
+          const accountsData = await accountsRes.json();
+          (accountsData.data || []).forEach((acc: any) => {
+            if (acc.id && !accountsMap.has(acc.id)) {
+              accountsMap.set(acc.id, acc);
+              accountWorkingToken.set(acc.id, token);
+            }
+          });
+        }
+      } catch (err) {
+        console.warn("Could not fetch accounts for token:", err);
+      }
     }
-    const accountsData = await accountsRes.json();
-    const accounts = accountsData.data || [];
+
+    const accounts = Array.from(accountsMap.values());
 
     // Date range: last 3 days
     const today = new Date();
@@ -251,12 +270,13 @@ export async function GET(req: Request) {
       if (!projectId) continue;
 
       const currency = (acc.currency || "USD").toUpperCase();
+      const workingToken = accountWorkingToken.get(accId) || metaTokens[0];
 
       // Fetch daily insights for the mapped account using Async API
-      console.log(`Starting async insights job for account: ${accId} (${acc.name})`);
+      console.log(`Starting async insights job for account: ${accId} (${acc.name}) via working token`);
       let insights: any[] = [];
       try {
-        insights = await fetchMetaInsightsAsync(accId, apiVersion, metaToken, since, until);
+        insights = await fetchMetaInsightsAsync(accId, apiVersion, workingToken, since, until);
       } catch (err: any) {
         console.error(`Failed to fetch async insights for account ${accId}:`, err);
         continue;

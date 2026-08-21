@@ -1924,18 +1924,23 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
         .eq("rule_type", "account")
         .maybeSingle();
 
-      const effectiveToken = await getEffectiveMetaToken(adminSupabase);
-      if (mapping?.rule_value && effectiveToken) {
+      const tokens = await getAllActiveMetaTokens(adminSupabase, projectSlug);
+      if (mapping?.rule_value && tokens.length > 0) {
         const accId = mapping.rule_value;
-        const campRes = await fetch(
-          `https://graph.facebook.com/v25.0/${accId}/campaigns?fields=id,name,effective_status&limit=50&access_token=${effectiveToken}`
-        );
-        if (campRes.ok) {
-          const campData = await campRes.json();
-          campData.data?.forEach((c: any) => {
-            if (c.id) metaCampaignStatuses[c.id] = c.effective_status;
-            if (c.name) metaCampaignStatuses[c.name] = c.effective_status;
-          });
+        for (const token of tokens) {
+          try {
+            const campRes = await fetch(
+              `https://graph.facebook.com/v25.0/${accId}/campaigns?fields=id,name,effective_status&limit=50&access_token=${token}`
+            );
+            if (campRes.ok) {
+              const campData = await campRes.json();
+              campData.data?.forEach((c: any) => {
+                if (c.id) metaCampaignStatuses[c.id] = c.effective_status;
+                if (c.name) metaCampaignStatuses[c.name] = c.effective_status;
+              });
+              break; // Stop after first working token
+            }
+          } catch (err) {}
         }
       }
     } catch (e) {
@@ -2745,37 +2750,40 @@ export async function getProjectCampaignsForFunnelAction(projectId: string) {
       .eq("rule_type", "account")
       .maybeSingle();
 
-    const token = await getEffectiveMetaToken(adminSupabase);
-    if (mapping?.rule_value && token) {
-      try {
-        const res = await fetch(
-          `https://graph.facebook.com/v25.0/${mapping.rule_value}/campaigns?fields=id,name,effective_status&limit=50&access_token=${token}`
-        );
-        if (res.ok) {
-          const json = await res.json();
-          json.data?.forEach((c: any) => {
-            const name = String(c.name || "").trim();
-            if (name) {
-              if (!campaignMap.has(name)) {
-                campaignMap.set(name, {
-                  campaign_name: name,
-                  campaign_id: c.id,
-                  spend: 0,
-                  clicks: 0,
-                  impressions: 0,
-                  leads_count: 0,
-                  effective_status: c.effective_status
-                });
-              } else {
-                const existing = campaignMap.get(name);
-                existing.campaign_id = c.id;
-                existing.effective_status = c.effective_status;
-              }
+    const tokens = await getAllActiveMetaTokens(adminSupabase, project.slug);
+    if (mapping?.rule_value && tokens.length > 0) {
+      for (const token of tokens) {
+        try {
+          const res = await fetch(
+            `https://graph.facebook.com/v25.0/${mapping.rule_value}/campaigns?fields=id,name,effective_status&limit=50&access_token=${token}`
+          );
+          if (res.ok) {
+            const json = await res.json();
+            if (json.data && Array.isArray(json.data) && json.data.length > 0) {
+              json.data.forEach((c: any) => {
+                const name = String(c.name || "").trim();
+                if (name) {
+                  if (!campaignMap.has(name)) {
+                    campaignMap.set(name, {
+                      campaign_name: name,
+                      campaign_id: c.id,
+                      spend: 0,
+                      clicks: 0,
+                      impressions: 0,
+                      leads_count: 0,
+                      effective_status: c.effective_status
+                    });
+                  } else {
+                    const existing = campaignMap.get(name);
+                    existing.campaign_id = c.id;
+                    existing.effective_status = c.effective_status;
+                  }
+                }
+              });
+              break; // Stop after first working token
             }
-          });
-        }
-      } catch (e) {
-        console.warn("Meta campaigns query warning:", e);
+          }
+        } catch (err) {}
       }
     }
 
@@ -3412,25 +3420,48 @@ export async function updateProjectSettingsAction(
 
 /**
  * Resolves the effective Meta Access Token from DB (ad_spend_mappings) or env
+/**
+ * Returns all active Meta Access Tokens from DB and ENV
  */
-export async function getEffectiveMetaToken(adminSupabase: any): Promise<string | null> {
+export async function getAllActiveMetaTokens(adminSupabase: any, projectSlug?: string): Promise<string[]> {
+  const tokens: string[] = [];
   try {
-    const { data: dbToken } = await adminSupabase
+    const { data: dbTokens } = await adminSupabase
       .from("ad_spend_mappings")
-      .select("rule_value")
+      .select("rule_value, project_slug")
       .eq("rule_type", "meta_token")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .order("created_at", { ascending: false });
 
-    if (dbToken?.rule_value && dbToken.rule_value.trim().length > 10) {
-      return dbToken.rule_value.trim();
+    if (dbTokens && Array.isArray(dbTokens)) {
+      if (projectSlug) {
+        const specific = dbTokens.find((t: any) => t.project_slug === projectSlug);
+        if (specific?.rule_value && !tokens.includes(specific.rule_value.trim())) {
+          tokens.push(specific.rule_value.trim());
+        }
+      }
+      dbTokens.forEach((t: any) => {
+        if (t.rule_value && t.rule_value.trim().length > 10 && !tokens.includes(t.rule_value.trim())) {
+          tokens.push(t.rule_value.trim());
+        }
+      });
     }
   } catch (err) {
-    console.warn("Could not query DB for meta_token:", err);
+    console.warn("Could not query DB for meta_tokens:", err);
   }
 
-  return process.env.META_ACCESS_TOKEN || null;
+  if (process.env.META_ACCESS_TOKEN && !tokens.includes(process.env.META_ACCESS_TOKEN.trim())) {
+    tokens.push(process.env.META_ACCESS_TOKEN.trim());
+  }
+
+  return tokens;
+}
+
+/**
+ * Returns the primary Meta Access Token for project or global fallback
+ */
+export async function getEffectiveMetaToken(adminSupabase: any, projectSlug?: string): Promise<string | null> {
+  const tokens = await getAllActiveMetaTokens(adminSupabase, projectSlug);
+  return tokens[0] || null;
 }
 
 /**
@@ -3526,33 +3557,34 @@ export async function getMetaAdAccountsAction() {
 
     let accountsList: any[] = [];
     let apiWarning: string | null = null;
+    const seenAccountIds = new Set<string>();
 
-    const token = await getEffectiveMetaToken(adminSupabase);
-    if (token) {
+    const tokens = await getAllActiveMetaTokens(adminSupabase);
+    for (const token of tokens) {
       try {
-        const url = `https://graph.facebook.com/v25.0/me/adaccounts?fields=name,account_id,id,account_status,currency,amount_spent&limit=50&access_token=${token}`;
+        const url = `https://graph.facebook.com/v25.0/me/adaccounts?fields=name,account_id,id,account_status,currency,amount_spent,business&limit=50&access_token=${token}`;
         const res = await fetch(url, { next: { revalidate: 300 } });
         if (res.ok) {
           const json = await res.json();
-          if (json.data && Array.isArray(json.data) && json.data.length > 0) {
-            accountsList = json.data.map((acc: any) => ({
-              id: acc.id,
-              accountId: acc.account_id,
-              name: acc.name,
-              currency: acc.currency,
-              amountSpent: acc.amount_spent,
-              status: acc.account_status
-            }));
+          if (json.data && Array.isArray(json.data)) {
+            json.data.forEach((acc: any) => {
+              if (acc.id && !seenAccountIds.has(acc.id)) {
+                seenAccountIds.add(acc.id);
+                accountsList.push({
+                  id: acc.id,
+                  accountId: acc.account_id,
+                  name: acc.business?.name ? `${acc.name} (${acc.business.name})` : acc.name,
+                  currency: acc.currency,
+                  amountSpent: acc.amount_spent,
+                  status: acc.account_status
+                });
+              }
+            });
           }
-        } else {
-          const errBody = await res.json().catch(() => ({}));
-          apiWarning = errBody.error?.message || `Meta API HTTP ${res.status}`;
         }
       } catch (err: any) {
-        apiWarning = err.message || "Meta API connection failed";
+        apiWarning = err.message;
       }
-    } else {
-      apiWarning = "META_ACCESS_TOKEN is not configured on server";
     }
 
     // If API returned 0 accounts or had warning, populate from known DB mappings
@@ -3597,11 +3629,11 @@ export async function getMetaAccountCampaignsAction(adAccountId: string) {
     if (!user) throw new Error("Unauthorized");
 
     const cleanAccountId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
-    const token = await getEffectiveMetaToken(adminSupabase);
+    const tokens = await getAllActiveMetaTokens(adminSupabase);
     let campaigns: any[] = [];
     let apiWarning: string | null = null;
 
-    if (token) {
+    for (const token of tokens) {
       try {
         const url = `https://graph.facebook.com/v25.0/${cleanAccountId}/campaigns?fields=id,name,status,effective_status,objective,created_time&limit=50&access_token=${token}`;
         const res = await fetch(url, { next: { revalidate: 60 } });
@@ -3616,10 +3648,8 @@ export async function getMetaAccountCampaignsAction(adAccountId: string) {
               objective: c.objective,
               createdTime: c.created_time
             }));
+            break; // Successfully fetched from working token
           }
-        } else {
-          const errBody = await res.json().catch(() => ({}));
-          apiWarning = errBody.error?.message;
         }
       } catch (err: any) {
         apiWarning = err.message;
