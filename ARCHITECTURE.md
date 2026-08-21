@@ -187,21 +187,25 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
 ---
 
 ## 7. Управление проектами и интеграция рекламных кабинетов Meta (Facebook API)
-* **Каталог официальных названий проектов:**
-  - `sofia`: **Софія (Economica)**
-  - `victoria`: **Вікторія Візуал**
-  - `viktoria_chernysh`: **Вікторія Черниш**
-  - `svitlana`: **Світлана Тейп**
-  - `anastasia_sych`: **Анастасія Сич**
-  - `clean_klinom`: **clean.klinom**
-  - `sergiy`: **Сергій Чернявський**
-  - `nesoniaa`: **Nesoniaa**
-  - `bw_main`: **B&W Main**
-* **Модальное окно управления проектом (`ProjectSettingsModal.tsx`):** Доступно ролям `founder`, `developer`, `superman`, `admin`. Позволяет редактировать официальное название, ответственного лидера ячейки, базовую валюту и долю эксперта.
-* **Привязка рекламных кабинетов и стриминг кампаний Meta:**
-  - Функция `getMetaAdAccountsAction()` запрашивает через Meta Graph API (`v25.0`) все доступные рекламные аккаунты.
+* **Каталог активных официальных проектов:**
+  - `svitlana`: **Світлана Тейп** (Ad Account: `act_1363085972126749` — Тейпування 1)
+  - `anastasia_sych`: **Анастасія Сич** (Ad Account: `act_643114835286850` — Фітнес-тренерка Анастасія Сич)
+  - `nesoniaa`: **Nesoniaa** (Ad Account: `act_1062492249359185` — Nedesign)
+  - `victoria`: **Вікторія Візуал** (Ad Account: `act_338278609686728` — 338278609686728)
+  - `clean_klinom`: **clean.klinom** (Ad Account: `act_955118766915652` — SW LAB)
+  - `sergiy`: **Сергій Чернявський** (Ad Account: `act_1451088823442765` — Sergiy.Chernyavskyy.Business)
+  - `viktoria_chernysh`: **Вікторія Черниш** (Ad Account: `act_964399519877110` — Вікторія Ч)
+  - `sofia`: **Софія (Economica / Sofifinsight)** (Ad Account: `act_181400377513509` — Matviyko)
+  - `bw_main`: **B&W Main** (Мастер-проект агентства)
+  - `sandbox`: **🧪 Sandbox (Тестовий Проект)**
+* **Архивные неактивные проекты (`is_active = false`):**
+  - `valeria` (Valeria — закрыт)
+  - `vova_win` (Vova.win — закрыт)
+* **Модальное окно управления проектом (`ProjectSettingsModal.tsx`):** Доступно ролям `founder`, `developer`, `superman`, `admin`. Позволяет редактировать официальное название, ответственного лидера ячейки, базовую валюту, статус активности (`is_active`) и долю эксперта.
+* **Мульти-токен архитектура Meta Graph API:**
+  - Функции `getAllActiveMetaTokens()`, `getMetaAdAccountsAction()`, `getMetaAccountCampaignsAction()`, `getTrafficAnalyticsData()` и крон `/api/cron/sync-spend` поддерживают одновременную работу с несколькими токенами доступа (например, токен Business Manager фаундера + токен таргетолога).
+  - Система автоматически агрегирует список доступных рекламных аккаунтов со всех подключенных Business Manager и бесшовно выполняет запросы к кампаниям через соответствующий рабочий токен.
   - Функция `bindProjectAdAccountAction()` сохраняет маппинг в таблицу `ad_spend_mappings`.
-  - Функция `getMetaAccountCampaignsAction()` автоматически подтягивает в реальном времени все рекламные кампании (ID, Название, Статус `ACTIVE`/`PAUSED`, Цель `OUTCOME_LEADS`/`OUTCOME_SALES`) для последующей привязки к воронкам и сквозной аналитике.
 
 ---
 
