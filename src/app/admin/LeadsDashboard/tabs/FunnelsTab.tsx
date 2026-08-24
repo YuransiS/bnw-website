@@ -9,7 +9,9 @@ import {
   getDiscoveredPagesAction,
   syncProjectPagesAction,
   getProjectCampaignsForFunnelAction,
-  getFunnelDetailsAction
+  getFunnelDetailsAction,
+  getSendPulseBotsAction,
+  getFunnelBotEventsAction
 } from "../../actions";
 import {
   createTransactionAction,
@@ -18,7 +20,7 @@ import {
 import {
   Plus, Target, Calendar, Link as LinkIcon, RefreshCw, BarChart2, Layers, AlertCircle,
   Search, Sparkles, ArrowLeft, Edit3, Trash2, CheckCircle, TrendingUp, DollarSign,
-  ChevronRight, Eye, Award, X, Settings, Megaphone
+  ChevronRight, Eye, Award, X, Settings, Megaphone, Bot, Copy, Check
 } from "lucide-react";
 import ProjectSettingsModal from "../components/ProjectSettingsModal";
 import { isPaidStatus } from "@/lib/statusMapper";
@@ -336,6 +338,37 @@ export default function FunnelsTab({
     };
 
     fetchDetails();
+    return () => { isCancelled = true; };
+  }, [projectId, selectedFunnel?.id]);
+
+  // SendPulse Bots & Funnel Bot Events
+  const [sendPulseBots, setSendPulseBots] = useState<any[]>([]);
+  const [botStepCounts, setBotStepCounts] = useState<Record<string, number>>({});
+  const [copiedStep, setCopiedStep] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isCancelled = false;
+    const loadSendPulseData = async () => {
+      try {
+        const [botsRes, eventsRes] = await Promise.all([
+          getSendPulseBotsAction(projectId),
+          getFunnelBotEventsAction(projectId, selectedFunnel?.id)
+        ]);
+
+        if (!isCancelled) {
+          if (botsRes && !("error" in botsRes) && Array.isArray(botsRes.bots)) {
+            setSendPulseBots(botsRes.bots);
+          }
+          if (eventsRes && !("error" in eventsRes) && eventsRes.stepCounts) {
+            setBotStepCounts(eventsRes.stepCounts);
+          }
+        }
+      } catch (err) {
+        console.error("Error loading SendPulse data:", err);
+      }
+    };
+
+    loadSendPulseData();
     return () => { isCancelled = true; };
   }, [projectId, selectedFunnel?.id]);
 
@@ -2063,8 +2096,9 @@ export default function FunnelsTab({
 
             {funnelStagesList.length > 0 && (
               <div className="bg-neutral-900 border border-white/5 p-6 rounded-2xl space-y-4">
-                <div className="border-b border-white/5 pb-2">
+                <div className="border-b border-white/5 pb-2 flex justify-between items-center">
                   <h4 className="font-black text-xs text-white uppercase tracking-wider">Customer Journey Map (Операційна карта етапів)</h4>
+                  <span className="text-[10px] text-white/40 font-bold">Сквозна конверсія</span>
                 </div>
                 
                 <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
@@ -2089,6 +2123,81 @@ export default function FunnelsTab({
                 </div>
               </div>
             )}
+
+            {/* SendPulse Chatbot Integration & Live Milestones */}
+            <div className="bg-neutral-900 border border-white/5 p-6 rounded-2xl space-y-5">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-white/5 pb-3">
+                <div>
+                  <h4 className="font-black text-xs text-white uppercase tracking-wider flex items-center gap-2">
+                    <Bot className="w-4 h-4 text-emerald-400" /> SendPulse Чат-бот Інтеграція & Сквозний трекінг (bw_cid)
+                  </h4>
+                  <p className="text-[10px] text-white/40 mt-0.5 font-medium">
+                    Автоматична прив'язка підписників до заявок із сайту та фіксація кожного кроку воронки
+                  </p>
+                </div>
+                {sendPulseBots.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {sendPulseBots.map((b: any) => (
+                      <span key={b.id} className="text-[10px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded-full font-bold flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        {b.username ? `@${b.username}` : b.name} ({b.totalSubscribers} підписн.)
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Bot Milestones Step Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                {[
+                  { step: "bot_started", label: "1. Старт бота (/start)", desc: "Активація ліда", count: botStepCounts["bot_started"] || 0, color: "text-white" },
+                  { step: "lesson_1", label: "2. Урок 1 (Контент)", desc: "Видача 1-го модуля", count: botStepCounts["lesson_1"] || 0, color: "text-cyan-400" },
+                  { step: "lesson_2", label: "3. Урок 2 (Контент)", desc: "Видача 2-го модуля", count: botStepCounts["lesson_2"] || 0, color: "text-cyan-400" },
+                  { step: "completed", label: "4. Анкета / ДЗ", desc: "Фініш мінікурсу", count: botStepCounts["completed"] || botStepCounts["quiz_completed"] || 0, color: "text-purple-400" },
+                  { step: "offer_clicked", label: "5. Клік по оферу", desc: "Намір купити", count: botStepCounts["offer_clicked"] || 0, color: "text-emerald-400" },
+                ].map((item) => {
+                  const webhookUrl = `https://bnw-prod.vercel.app/api/v1/integrations/sendpulse/webhook?project=${activeProject?.slug || 'sergiy'}&step=${item.step}`;
+                  const isCopied = copiedStep === item.step;
+
+                  return (
+                    <div key={item.step} className="bg-white/[0.02] border border-white/5 p-3 rounded-xl space-y-2 flex flex-col justify-between">
+                      <div>
+                        <div className="flex justify-between items-start">
+                          <span className="text-[10px] font-extrabold text-white block">{item.label}</span>
+                          <span className={`text-base font-black ${item.color}`}>{item.count}</span>
+                        </div>
+                        <span className="text-[9px] text-white/40 block mt-0.5">{item.desc}</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (navigator?.clipboard) {
+                            navigator.clipboard.writeText(webhookUrl);
+                            setCopiedStep(item.step);
+                            setTimeout(() => setCopiedStep(null), 2500);
+                          }
+                        }}
+                        className="w-full mt-2 px-2 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-bold text-white/70 hover:text-white rounded-lg flex items-center justify-center gap-1 transition-all cursor-pointer"
+                        title="Скопіювати Webhook URL для SendPulse"
+                      >
+                        {isCopied ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-400" />
+                            <span className="text-emerald-400">Скопійовано!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3 text-white/50" />
+                            <span>Копіювати Webhook</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 

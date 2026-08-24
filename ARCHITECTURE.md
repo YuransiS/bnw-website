@@ -41,11 +41,26 @@
 * `src/app/api/v1/landings/route.ts` — HTTP GET API-эндпоинт для динамического получения реестра лендингов и параметров проекта.
 * `src/lib/projectLandings.ts` — Сервисный модуль с функцией `getProjectLandings` для подгрузки динамического реестра страниц из БД с безопасным fallback к статической конфигурации.
 * `src/lib/bnwLandingTracker.ts` — Клиентский SDK-модуль для мгновенной интеграции авто-регистрации страниц и URL-параметров на внешних сайтах.
+* `src/lib/sendpulse/service.ts` — SendPulse REST API клиент с автоматическим кешированием Bearer-токенов, получением ботов (Telegram/Instagram) и активных подписчиков.
+* `src/app/api/v1/integrations/sendpulse/webhook/route.ts` — Высокопроизводительный Webhook-приемник событий из чат-ботов SendPulse (`bot_started`, `lesson_1`, `lesson_2`, `completed`, `offer_clicked`) со сквозной привязкой `bw_cid`, `telegram_id` и авто-обновлением профиля клиента.
 * `src/components/ui/ParabolicProgressBar.tsx` — Универсальный нелинейный прогрессбар и оверлей загрузки (`useParabolicProgress`, `ParabolicProgressBar`, `ParabolicLoadingOverlay`). Реализует ниспадающую параболическую кривую замедления ($p(t) = \text{max} \cdot (1 - (1 - t/T)^2)$): быстрый старт на начальном этапе с плавным асимптотическим замедлением к 94-98% во время ожидания ответа, мгновенным сглаженным переходом на 100% при завершении и аккуратным скрытием. Используется во всех экранах загрузки дашборда, переключении вкладок и подгрузке данных.
 
 ---
 
 ## 3. Схема данных (Supabase PostgreSQL)
+
+### Таблица `public.bot_funnel_events`
+Фиксация прохождения вех и микроконверсий внутри чат-ботов (SendPulse / Telegram / Instagram).
+* `id` (UUID, primary key)
+* `project_id` (UUID references `public.projects(id) ON DELETE CASCADE`)
+* `customer_id` (UUID references `public.unified_customers(id) ON DELETE SET NULL`)
+* `order_id` (UUID references `public.unified_orders(id) ON DELETE SET NULL`)
+* `bw_cid` (TEXT) — Насквозной идентификатор клиента (например, `bw_02e252b9c1a94f35`)
+* `telegram_id` (BIGINT) — Уникальный Telegram ID подписчика
+* `bot_id` (TEXT) — ID бота в SendPulse
+* `step` (TEXT) — Название вехи (`bot_started`, `lesson_1`, `lesson_2`, `completed`, `offer_clicked`)
+* `payload` (JSONB) — Полные переменные контакта, теги и метаданные
+* `created_at` (TIMESTAMPTZ)
 
 ### Таблица `public.discovered_pages`
 Динамический реестр страниц, лендингов и веб-роутов проектов холдинга, автоматически обновляемый через Discovery Protocol и конфигурации.
@@ -58,11 +73,12 @@
 * `created_at` (TIMESTAMPTZ) - Время регистрации роута
 
 ### Поля сквозной аналитики и атрибуции (`traffic_clicks` & `unified_orders`)
+* `bw_cid` (TEXT) — Насквозной идентификатор клиента (`bw_...`), связывающий клик на сайте, регистрацию, чат-бота SendPulse и финальный эквайринг (WayForPay).
 * `offer_id` (TEXT) — Идентификатор конкретного оффера (`?o=...` или `?offer=...`)
 * `promo_id` (TEXT) — Идентификатор промокода / скидочного пакета (`?p=...` или `?promo=...`)
 * `query_params` (JSONB) — Полный набор параметров URL для сквозного отслеживания
 * **Сквозная атрибуция первого касания (First-Touch Lead Stitching):** Триггер БД `trg_inherit_customer_utm` автоматически переносит исходные рекламные UTM-метки (`utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`, `campaign_id`) с первичной регистрации лида на любые последующие платежные транзакции клиента (WayForPay, Monobank, боты), исключая попадание оплат в "Прямой/Органический трафик".
-* **Составные индексы:** `idx_traffic_clicks_proj_visitor`, `idx_traffic_clicks_proj_offer`, `idx_unified_orders_proj_offer`, `idx_unified_orders_proj_promo`, `daily_traffic_and_costs_full_unique_idx` для высокой скорости работы и защиты от дублей при синхронизации Meta Ads.
+* **Составные индексы:** `bot_funnel_events_proj_step_idx`, `bot_funnel_events_bw_cid_idx`, `bot_funnel_events_tg_id_idx`, `idx_traffic_clicks_proj_visitor`, `idx_traffic_clicks_proj_offer`, `idx_unified_orders_proj_offer`, `idx_unified_orders_proj_promo`, `daily_traffic_and_costs_full_unique_idx` для высокой скорости работы и защиты от дублей при синхронизации Meta Ads.
 * **Enterprise RPC `get_customer_journey_scoped`:** Функция СУБД для изолированного по проекту объединения и выборки всех кликов и заказов лида.
 
 

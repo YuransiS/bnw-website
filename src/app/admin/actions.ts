@@ -4158,5 +4158,62 @@ export async function bindProjectAdAccountAction(projectSlug: string, adAccountI
   }
 }
 
+export async function getSendPulseBotsAction(projectId: string) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Unauthorized" };
+
+    const { data: project } = await supabase
+      .from("projects")
+      .select("id, slug")
+      .eq("id", projectId)
+      .single();
+
+    if (!project) return { error: "Project not found" };
+
+    const { getProjectSendPulseBots } = await import("@/lib/sendpulse/service");
+    const bots = await getProjectSendPulseBots(project.slug || "sergiy");
+
+    return { success: true, bots };
+  } catch (err: any) {
+    console.error("Error in getSendPulseBotsAction:", err);
+    return { error: err.message || "Failed to fetch SendPulse bots" };
+  }
+}
+
+export async function getFunnelBotEventsAction(projectId: string, funnelId?: string) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Unauthorized" };
+
+    const adminSupabase = createAdminClient();
+    const { data: events, error } = await adminSupabase
+      .from("bot_funnel_events")
+      .select("*")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    // Aggregate by step
+    const stepCounts: Record<string, number> = {};
+    (events || []).forEach((e: any) => {
+      const s = (e.step || "other").toLowerCase();
+      stepCounts[s] = (stepCounts[s] || 0) + 1;
+    });
+
+    return {
+      success: true,
+      events: events || [],
+      stepCounts
+    };
+  } catch (err: any) {
+    console.error("Error in getFunnelBotEventsAction:", err);
+    return { error: err.message || "Failed to fetch bot events" };
+  }
+}
+
 
 

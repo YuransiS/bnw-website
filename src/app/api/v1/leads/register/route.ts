@@ -364,6 +364,10 @@ export async function POST(req: Request) {
     const resolvedOfferId = (marketing?.offer_id || marketing?.o || lead?.offer_id || lead?.o || orderQueryParams.offer_id || null);
     const resolvedPromoId = (marketing?.promo_id || marketing?.p || lead?.promo_id || lead?.p || orderQueryParams.promo_id || null);
 
+    const validCustomerId = customerId || '';
+    const cleanCustomerSuffix = validCustomerId.replace(/-/g, '').substring(0, 16);
+    const bw_cid = validCustomerId ? `bw_${cleanCustomerSuffix}` : null;
+
     if (existingOrder) {
       // Update existing order status, amount, and metadata
       const { data: updatedOrder, error: orderError } = await supabaseAdmin
@@ -383,6 +387,7 @@ export async function POST(req: Request) {
           query_params: orderQueryParams.query_params,
           visitor_uuid: visitor_uuid || undefined,
           metadata: meta,
+          bw_cid: bw_cid || undefined,
           funnel_id: resolvedFunnelId || undefined
         })
         .eq('id', existingOrder.id)
@@ -425,12 +430,12 @@ export async function POST(req: Request) {
           query_params: orderQueryParams.query_params,
           visitor_uuid,
           metadata: meta,
+          bw_cid,
           funnel_id: resolvedFunnelId,
           created_at: createdAtIso
         })
         .select('id')
         .single();
-
 
       if (orderError) {
         throw new Error(`Failed to log order: ${orderError.message}`);
@@ -441,11 +446,18 @@ export async function POST(req: Request) {
     // Auto-discover/update landing query parameters (?p, ?o, etc.)
     autoRegisterLandingParams(supabaseAdmin, projectId, page_url, page_path);
 
+    let telegramDeepLink = null;
+    if (project_slug === 'sergiy' && bw_cid) {
+      telegramDeepLink = `https://t.me/cherniyavskyibot?start=${bw_cid}`;
+    }
+
     return NextResponse.json({
       success: true,
       message: 'Lead registered successfully.',
       customer_id: customerId,
-      order_id: orderIdToReturn
+      order_id: orderIdToReturn,
+      bw_cid,
+      telegram_deep_link: telegramDeepLink
     });
 
   } catch (error: any) {
