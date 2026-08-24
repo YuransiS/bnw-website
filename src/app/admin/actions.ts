@@ -2327,7 +2327,8 @@ export async function createFunnelAction(
   endDate?: string | null,
   plannedRevenue?: number,
   plannedSpend?: number,
-  stages?: any[]
+  stages?: any[],
+  botUsername?: string | null
 ) {
   try {
     await checkProjectAccess(projectId);
@@ -2341,6 +2342,7 @@ export async function createFunnelAction(
         end_date: endDate || null,
         campaign_ids: campaignIds,
         landing_slugs: landingSlugs,
+        bot_username: botUsername || null,
         description: description || "",
         planned_revenue: plannedRevenue || 0,
         planned_spend: plannedSpend || 0,
@@ -2365,6 +2367,7 @@ export async function updateFunnelAction(
     endDate?: string | null;
     campaignIds: string[];
     landingSlugs: string[];
+    botUsername?: string | null;
     description?: string;
     plannedRevenue?: number;
     plannedSpend?: number;
@@ -2382,6 +2385,7 @@ export async function updateFunnelAction(
         end_date: updates.endDate || null,
         campaign_ids: updates.campaignIds,
         landing_slugs: updates.landingSlugs,
+        bot_username: updates.botUsername !== undefined ? updates.botUsername : null,
         description: updates.description || "",
         planned_revenue: updates.plannedRevenue || 0,
         planned_spend: updates.plannedSpend || 0,
@@ -4182,18 +4186,36 @@ export async function getSendPulseBotsAction(projectId: string) {
   }
 }
 
-export async function getFunnelBotEventsAction(projectId: string, funnelId?: string) {
+export async function getFunnelBotEventsAction(projectId: string, funnelId?: string, botUsername?: string) {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: "Unauthorized" };
 
     const adminSupabase = createAdminClient();
-    const { data: events, error } = await adminSupabase
+    let query = adminSupabase
       .from("bot_funnel_events")
       .select("*")
-      .eq("project_id", projectId)
-      .order("created_at", { ascending: false });
+      .eq("project_id", projectId);
+
+    if (botUsername && botUsername !== "all") {
+      const cleanBot = botUsername.replace("@", "").trim();
+      query = query.or(`bot_id.eq.${cleanBot},bot_id.eq.@${cleanBot}`);
+    } else if (funnelId && funnelId !== "all" && funnelId !== "unassigned") {
+      // If funnel has specific bot bound
+      const { data: funnel } = await adminSupabase
+        .from("funnels")
+        .select("bot_username, id")
+        .eq("id", funnelId)
+        .maybeSingle();
+
+      if (funnel?.bot_username) {
+        const cleanBot = funnel.bot_username.replace("@", "").trim();
+        query = query.or(`bot_id.eq.${cleanBot},bot_id.eq.@${cleanBot}`);
+      }
+    }
+
+    const { data: events, error } = await query.order("created_at", { ascending: false });
 
     if (error) throw error;
 

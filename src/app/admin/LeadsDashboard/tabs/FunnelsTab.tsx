@@ -48,6 +48,7 @@ interface Funnel {
   campaign_ids: string[];
   landing_slugs: string[];
   description: string;
+  bot_username?: string | null;
   planned_revenue?: number;
   planned_spend?: number;
   stages?: any[] | string[] | null;
@@ -347,21 +348,34 @@ export default function FunnelsTab({
   const [botStepCounts, setBotStepCounts] = useState<Record<string, number>>({});
   const [copiedStep, setCopiedStep] = useState<string | null>(null);
 
+  // Auto-sync selectedBotUsername with selectedFunnel's bot_username if defined
+  useEffect(() => {
+    if (selectedFunnel?.bot_username) {
+      setSelectedBotUsername(selectedFunnel.bot_username);
+    }
+  }, [selectedFunnel?.id, selectedFunnel?.bot_username]);
+
   useEffect(() => {
     let isCancelled = false;
     const loadSendPulseData = async () => {
       try {
+        const activeBot = selectedBotUsername || selectedFunnel?.bot_username || "";
         const [botsRes, eventsRes] = await Promise.all([
           getSendPulseBotsAction(projectId),
-          getFunnelBotEventsAction(projectId, selectedFunnel?.id)
+          getFunnelBotEventsAction(projectId, selectedFunnel?.id, activeBot)
         ]);
 
         if (!isCancelled) {
           if (botsRes && !("error" in botsRes) && Array.isArray(botsRes.bots)) {
             setSendPulseBots(botsRes.bots);
+            if (!selectedBotUsername && !selectedFunnel?.bot_username && botsRes.bots.length > 0) {
+              setSelectedBotUsername(botsRes.bots[0].username || "");
+            }
           }
           if (eventsRes && !("error" in eventsRes) && eventsRes.stepCounts) {
             setBotStepCounts(eventsRes.stepCounts);
+          } else {
+            setBotStepCounts({});
           }
         }
       } catch (err) {
@@ -371,7 +385,7 @@ export default function FunnelsTab({
 
     loadSendPulseData();
     return () => { isCancelled = true; };
-  }, [projectId, selectedFunnel?.id]);
+  }, [projectId, selectedFunnel?.id, selectedBotUsername]);
 
   // Sync transaction default account
   useEffect(() => {
@@ -388,6 +402,8 @@ export default function FunnelsTab({
       setStages(found.defaultStages);
     }
   };
+
+  const [formBotUsername, setFormBotUsername] = useState<string>("");
 
   // Open Form for Creation
   const handleOpenCreate = () => {
@@ -408,6 +424,7 @@ export default function FunnelsTab({
     setSelectedPages([]);
     setManualPageInput("");
     setSelectedCampaigns([]);
+    setFormBotUsername("");
     setDescription("");
     setWizardStep(1);
     setShowForm(true);
@@ -421,6 +438,7 @@ export default function FunnelsTab({
     setEndDate(funnel.end_date || "");
     setPlannedRevenue(String(funnel.planned_revenue || 0));
     setPlannedSpend(String(funnel.planned_spend || 0));
+    setFormBotUsername(funnel.bot_username || "");
     
     // Parse metadata for type
     const parsedType = funnel.description?.startsWith("[Type:")
@@ -512,6 +530,7 @@ export default function FunnelsTab({
           endDate: finalEndDate,
           campaignIds,
           landingSlugs,
+          botUsername: formBotUsername || null,
           description: finalDesc,
           plannedRevenue: plannedRevNum,
           plannedSpend: plannedSpendNum,
@@ -520,7 +539,7 @@ export default function FunnelsTab({
       } else {
         res = await createFunnelAction(
           projectId, name, startDate, campaignIds, landingSlugs, finalDesc,
-          finalEndDate, plannedRevNum, plannedSpendNum, stages
+          finalEndDate, plannedRevNum, plannedSpendNum, stages, formBotUsername || null
         );
       }
 
@@ -1107,6 +1126,26 @@ export default function FunnelsTab({
                       </button>
                     ))}
                   </div>
+                </div>
+
+                {/* Connected SendPulse Telegram Bot */}
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-white/50 block">Прив'язаний Telegram-бот (SendPulse)</label>
+                  <select
+                    value={formBotUsername}
+                    onChange={(e) => setFormBotUsername(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white text-xs"
+                  >
+                    <option value="" className="bg-neutral-900 text-white/50">-- Не прив'язано (або обрати пізніше) --</option>
+                    {sendPulseBots.map((b: any) => (
+                      <option key={b.id} value={b.username || b.name} className="bg-neutral-900 text-white">
+                        {b.username ? `@${b.username}` : b.name} ({b.totalSubscribers} підписників)
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[9px] text-white/40">
+                    Оберіть конкретного чат-бота, події та підписники якого будуть прив'язані саме до цієї воронки.
+                  </p>
                 </div>
 
                 <div className="space-y-1">
