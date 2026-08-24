@@ -8,6 +8,10 @@ const SENDPULSE_CREDENTIALS: Record<string, { clientId: string; clientSecret: st
     clientId: process.env.SENDPULSE_SERGIY_CLIENT_ID || 'sp_id_dcd767242d4f919193dba2016a06b6f6',
     clientSecret: process.env.SENDPULSE_SERGIY_CLIENT_SECRET || 'sp_sk_243da6c412d3132bfe69d159b32b2315'
   },
+  nesoniaa: {
+    clientId: process.env.SENDPULSE_NESONIAA_CLIENT_ID || 'sp_id_79ddb76b585da0315c846c0a9093dbea',
+    clientSecret: process.env.SENDPULSE_NESONIAA_CLIENT_SECRET || 'sp_sk_5fec2d8ef1b42139d5e16fa47d886c3f'
+  },
   default: {
     clientId: process.env.SENDPULSE_CLIENT_ID || 'sp_id_dcd767242d4f919193dba2016a06b6f6',
     clientSecret: process.env.SENDPULSE_CLIENT_SECRET || 'sp_sk_243da6c412d3132bfe69d159b32b2315'
