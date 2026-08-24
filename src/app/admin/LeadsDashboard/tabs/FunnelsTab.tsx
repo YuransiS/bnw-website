@@ -11,7 +11,9 @@ import {
   getProjectCampaignsForFunnelAction,
   getFunnelDetailsAction,
   getSendPulseBotsAction,
-  getFunnelBotEventsAction
+  getFunnelBotEventsAction,
+  getSendPulseBotContactsAction,
+  syncSendPulseBotContactsAction
 } from "../../actions";
 import {
   createTransactionAction,
@@ -20,7 +22,8 @@ import {
 import {
   Plus, Target, Calendar, Link as LinkIcon, RefreshCw, BarChart2, Layers, AlertCircle,
   Search, Sparkles, ArrowLeft, Edit3, Trash2, CheckCircle, TrendingUp, DollarSign,
-  ChevronRight, Eye, Award, X, Settings, Megaphone, Bot, Copy, Check
+  ChevronRight, Eye, Award, X, Settings, Megaphone, Bot, Copy, Check, Users, UserCheck,
+  ExternalLink, Send, ShieldCheck, Phone, Mail, ArrowUpRight, Filter
 } from "lucide-react";
 import ProjectSettingsModal from "../components/ProjectSettingsModal";
 import { isPaidStatus } from "@/lib/statusMapper";
@@ -76,6 +79,18 @@ const ALL_COMMON_STAGES = [
 ];
 
 const FUNNEL_TYPES = [
+  {
+    id: "Клуб",
+    label: "Клуб / Підписка",
+    defaultStages: [
+      "Вхід на Тріал (/club/trial)",
+      "Активація Тріалу (1 ₴)",
+      "Telegram Mini App (/club/mini-app)",
+      "Оплата 1 місяць",
+      "Оплата 3 місяці",
+      "Рекурентне продовження"
+    ]
+  },
   {
     id: "Інтенсив",
     label: "Інтенсив",
@@ -389,6 +404,59 @@ export default function FunnelsTab({
     loadSendPulseData();
     return () => { isCancelled = true; };
   }, [projectId, selectedFunnel?.id, selectedBotUsername]);
+
+  // SendPulse Bot Contacts & 1-to-1 CRM bw_cid Mapping
+  const [botContacts, setBotContacts] = useState<any[]>([]);
+  const [loadingBotContacts, setLoadingBotContacts] = useState<boolean>(false);
+  const [syncingBotContacts, setSyncingBotContacts] = useState<boolean>(false);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+  const [botContactSearch, setBotContactSearch] = useState<string>("");
+  const [botContactFilter, setBotContactFilter] = useState<"all" | "matched" | "unmatched">("all");
+
+  const loadBotContacts = async (botUsername?: string) => {
+    const targetBot = botUsername || selectedBotUsername || selectedFunnel?.bot_username;
+    if (!targetBot) return;
+    setLoadingBotContacts(true);
+    try {
+      const res = await getSendPulseBotContactsAction(projectId, targetBot, 100);
+      if (res && !("error" in res) && Array.isArray(res.contacts)) {
+        setBotContacts(res.contacts);
+      } else {
+        setBotContacts([]);
+      }
+    } catch (e) {
+      console.error("Error loading bot contacts:", e);
+    } finally {
+      setLoadingBotContacts(false);
+    }
+  };
+
+  const handleSyncContacts = async () => {
+    const targetBot = selectedBotUsername || selectedFunnel?.bot_username;
+    if (!targetBot) return;
+    setSyncingBotContacts(true);
+    setSyncFeedback(null);
+    try {
+      const res = await syncSendPulseBotContactsAction(projectId, targetBot);
+      if (res && !("error" in res)) {
+        setSyncFeedback(`Успішно зіставлено ${res.syncedCount || 0} із ${res.totalContacts || 0} контактів за bw_cid!`);
+        await loadBotContacts(targetBot);
+      } else {
+        setSyncFeedback(res.error || "Помилка синхронізації");
+      }
+    } catch (e: any) {
+      setSyncFeedback(e.message || "Помилка запиту");
+    } finally {
+      setSyncingBotContacts(false);
+      setTimeout(() => setSyncFeedback(null), 6000);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedFunnel?.bot_username || selectedBotUsername) {
+      loadBotContacts();
+    }
+  }, [selectedFunnel?.id, selectedFunnel?.bot_username, selectedBotUsername]);
 
   const [customStepInput, setCustomStepInput] = useState<string>("");
 
@@ -1970,11 +2038,11 @@ export default function FunnelsTab({
                     {Math.round(stats.profit).toLocaleString("uk-UA")} {isUSD ? "$" : "₴"}
                   </span>
                   <div className="flex justify-between text-[10px] text-white/40 font-black mt-1">
-                    <span>Сквозний ROI</span>
+                    <span>{actualSpend > 0 ? "Сквозний ROI" : "Маржинальність"}</span>
                     <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
-                      stats.roi >= 150 ? "bg-emerald-500/10 text-emerald-450 animate-pulse" : stats.roi >= 100 ? "bg-blue-500/10 text-blue-400" : "bg-red-500/10 text-red-400"
+                      actualSpend === 0 ? "bg-emerald-500/10 text-emerald-400" : stats.roi >= 150 ? "bg-emerald-500/10 text-emerald-450 animate-pulse" : stats.roi >= 100 ? "bg-blue-500/10 text-blue-400" : "bg-red-500/10 text-red-400"
                     }`}>
-                      {Math.round(stats.roi)}%
+                      {actualSpend === 0 ? "100% (Органіка)" : `${Math.round(stats.roi)}%`}
                     </span>
                   </div>
                 </div>
@@ -2375,6 +2443,270 @@ export default function FunnelsTab({
                       );
                     });
                   })()}
+                </div>
+
+                {/* SendPulse Subscribers & CRM bw_cid Mapping Section */}
+                <div className="pt-4 border-t border-white/5 space-y-4">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 bg-emerald-500/10 rounded-lg border border-emerald-500/20 text-emerald-400">
+                        <Users className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h5 className="font-extrabold text-xs text-white">
+                          Підписники бота & Сквозний маппінг (bw_cid)
+                        </h5>
+                        <span className="text-[10px] text-white/40">
+                          {botContacts.length > 0
+                            ? `Завантажено ${botContacts.length} контактів (${botContacts.filter(c => c.isMatched).length} зв'язано з CRM)`
+                            : "Завантаження контактів..."}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <button
+                        type="button"
+                        onClick={handleSyncContacts}
+                        disabled={syncingBotContacts}
+                        className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black text-xs font-black rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-lg shadow-emerald-500/10 shrink-0"
+                        title="Зіставити контактів бота з лідами CRM та проставити bw_cid"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${syncingBotContacts ? "animate-spin" : ""}`} />
+                        <span>{syncingBotContacts ? "Синхронізація..." : "Синхронізувати з CRM"}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => loadBotContacts()}
+                        disabled={loadingBotContacts}
+                        className="p-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white rounded-xl border border-white/10 transition-all cursor-pointer"
+                        title="Оновити список"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${loadingBotContacts ? "animate-spin" : ""}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {syncFeedback && (
+                    <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-400 font-bold flex items-center gap-2 animate-in fade-in">
+                      <CheckCircle className="w-4 h-4 shrink-0" />
+                      <span>{syncFeedback}</span>
+                    </div>
+                  )}
+
+                  {/* Search and Filters */}
+                  <div className="flex flex-col sm:flex-row gap-2 justify-between items-stretch sm:items-center">
+                    <div className="relative flex-1">
+                      <Search className="w-3.5 h-3.5 text-white/30 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={botContactSearch}
+                        onChange={(e) => setBotContactSearch(e.target.value)}
+                        placeholder="Пошук за ім'ям, @username, телефоном або bw_cid..."
+                        className="w-full pl-9 pr-3 py-2 bg-white/[0.03] border border-white/10 rounded-xl text-xs text-white placeholder-white/30 focus:outline-none focus:border-emerald-500"
+                      />
+                      {botContactSearch && (
+                        <button
+                          onClick={() => setBotContactSearch("")}
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-white/40 hover:text-white"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1 bg-white/[0.03] p-1 rounded-xl border border-white/10 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setBotContactFilter("all")}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer ${
+                          botContactFilter === "all" ? "bg-white/15 text-white" : "text-white/40 hover:text-white/70"
+                        }`}
+                      >
+                        Всі ({botContacts.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBotContactFilter("matched")}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-all flex items-center gap-1 cursor-pointer ${
+                          botContactFilter === "matched" ? "bg-emerald-500/20 text-emerald-400" : "text-white/40 hover:text-white/70"
+                        }`}
+                      >
+                        <Check className="w-3 h-3" /> Зв'язані ({botContacts.filter(c => c.isMatched).length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBotContactFilter("unmatched")}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer ${
+                          botContactFilter === "unmatched" ? "bg-white/15 text-white" : "text-white/40 hover:text-white/70"
+                        }`}
+                      >
+                        Тільки бот ({botContacts.filter(c => !c.isMatched).length})
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Contacts Table */}
+                  <div className="overflow-hidden rounded-xl border border-white/5 bg-white/[0.01]">
+                    <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead className="sticky top-0 bg-[#0c0c10] border-b border-white/10 text-[9px] uppercase font-black text-white/40 z-10">
+                          <tr>
+                            <th className="p-3">Підписник / Telegram</th>
+                            <th className="p-3">Сквозний ID (bw_cid)</th>
+                            <th className="p-3">Контакти (Телефон / Email)</th>
+                            <th className="p-3">Змінні SendPulse</th>
+                            <th className="p-3 text-right">Оплати в CRM</th>
+                            <th className="p-3 text-right">Останній актив</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5 font-semibold text-white/80">
+                          {(() => {
+                            const filtered = botContacts.filter((c: any) => {
+                              if (botContactFilter === "matched" && !c.isMatched) return false;
+                              if (botContactFilter === "unmatched" && c.isMatched) return false;
+                              if (!botContactSearch.trim()) return true;
+                              const q = botContactSearch.toLowerCase();
+                              const nameMatch = String(c.name || "").toLowerCase().includes(q);
+                              const usernameMatch = String(c.username || "").toLowerCase().includes(q);
+                              const phoneMatch = String(c.phone || "").toLowerCase().includes(q);
+                              const bwMatch = String(c.bwCid || "").toLowerCase().includes(q);
+                              const varMatch = Object.values(c.variables || {}).some(v => String(v).toLowerCase().includes(q));
+                              return nameMatch || usernameMatch || phoneMatch || bwMatch || varMatch;
+                            });
+
+                            if (loadingBotContacts) {
+                              return (
+                                <tr>
+                                  <td colSpan={6} className="p-8 text-center text-white/40 italic">
+                                    <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-emerald-400" />
+                                    Завантаження підписників із SendPulse...
+                                  </td>
+                                </tr>
+                              );
+                            }
+
+                            if (filtered.length === 0) {
+                              return (
+                                <tr>
+                                  <td colSpan={6} className="p-8 text-center text-white/30 italic">
+                                    {botContacts.length === 0
+                                      ? "Не знайдено підписників або перевірте API-ключі SendPulse у налаштуваннях проєкту."
+                                      : "Немає підписників, які відповідають критеріям пошуку."}
+                                  </td>
+                                </tr>
+                              );
+                            }
+
+                            return filtered.map((c: any) => {
+                              const cleanUsername = (c.username || "").replace(/^@/, "");
+                              return (
+                                <tr key={c.id} className="hover:bg-white/[0.02] transition-all">
+                                  <td className="p-3">
+                                    <div className="flex items-center gap-2.5">
+                                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-black shrink-0 ${
+                                        c.isMatched ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-white/5 text-white/50 border border-white/5"
+                                      }`}>
+                                        {(c.name || "U")[0].toUpperCase()}
+                                      </div>
+                                      <div>
+                                        <span className="font-extrabold text-white block truncate max-w-[140px]" title={c.name}>
+                                          {c.name}
+                                        </span>
+                                        {cleanUsername ? (
+                                          <a
+                                            href={`https://t.me/${cleanUsername}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-[10px] text-cyan-400 hover:text-cyan-300 flex items-center gap-0.5 mt-0.5"
+                                          >
+                                            @{cleanUsername} <ExternalLink className="w-2.5 h-2.5" />
+                                          </a>
+                                        ) : (
+                                          <span className="text-[9px] text-white/30 font-mono block">ID: {c.id?.substring(0, 10)}...</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </td>
+
+                                  <td className="p-3">
+                                    {c.bwCid ? (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono text-[10px] font-bold">
+                                        <ShieldCheck className="w-3 h-3 shrink-0" />
+                                        {c.bwCid}
+                                      </span>
+                                    ) : (
+                                      <span className="text-[10px] text-white/30 italic">
+                                        Не прив'язано
+                                      </span>
+                                    )}
+                                  </td>
+
+                                  <td className="p-3">
+                                    <div className="space-y-0.5">
+                                      {c.phone ? (
+                                        <span className="text-white/80 font-mono text-[11px] flex items-center gap-1">
+                                          <Phone className="w-3 h-3 text-white/30" /> {c.phone}
+                                        </span>
+                                      ) : (
+                                        <span className="text-white/20 text-[10px] italic">Немає телефону</span>
+                                      )}
+                                      {c.email && (
+                                        <span className="text-white/50 text-[10px] flex items-center gap-1">
+                                          <Mail className="w-3 h-3 text-white/30" /> {c.email}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+
+                                  <td className="p-3">
+                                    <div className="flex flex-wrap gap-1 max-w-xs">
+                                      {Object.entries(c.variables || {}).map(([key, val]: any) => (
+                                        <span
+                                          key={key}
+                                          className="text-[9px] px-1.5 py-0.5 rounded bg-white/[0.04] border border-white/5 text-white/70 font-mono truncate max-w-[140px]"
+                                          title={`${key}: ${String(val)}`}
+                                        >
+                                          {key}: <b className="text-white">{String(val)}</b>
+                                        </span>
+                                      ))}
+                                      {Object.keys(c.variables || {}).length === 0 && (
+                                        <span className="text-[10px] text-white/20 italic">—</span>
+                                      )}
+                                    </div>
+                                  </td>
+
+                                  <td className="p-3 text-right">
+                                    {c.totalPaidAmount > 0 ? (
+                                      <div>
+                                        <span className="text-emerald-400 font-black text-xs block">
+                                          {c.totalPaidAmount.toLocaleString("uk-UA")} ₴
+                                        </span>
+                                        <span className="text-[9px] text-white/40">
+                                          {c.ordersCount} {c.ordersCount === 1 ? "замовлення" : "замовлень"}
+                                        </span>
+                                      </div>
+                                    ) : c.ordersCount > 0 ? (
+                                      <span className="text-amber-400 text-[10px] font-bold">Очікує оплати</span>
+                                    ) : (
+                                      <span className="text-white/30 text-[10px] italic">0 ₴</span>
+                                    )}
+                                  </td>
+
+                                  <td className="p-3 text-right">
+                                    <span className="text-[10px] text-white/50 block font-mono">
+                                      {c.lastActivity ? new Date(c.lastActivity).toLocaleDateString("uk-UA", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            });
+                          })()}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

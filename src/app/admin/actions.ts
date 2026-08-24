@@ -4299,5 +4299,234 @@ export async function getFunnelBotEventsAction(projectId: string, funnelId?: str
   }
 }
 
+export async function getSendPulseBotContactsAction(projectId: string, botUsernameOrId: string, limit: number = 100) {
+  try {
+    await checkProjectAccess(projectId);
+    const adminSupabase = createAdminClient();
+    const { data: project } = await adminSupabase
+      .from("projects")
+      .select("id, slug, name, sendpulse_client_id, sendpulse_client_secret")
+      .eq("id", projectId)
+      .single();
+
+    if (!project) return { error: "Project not found" };
+
+    const { getSendPulseAccessToken } = await import("@/lib/sendpulse/service");
+    const token = await getSendPulseAccessToken(project.slug || "sergiy");
+
+    // 1. Get bot
+    const botsRes = await fetch("https://api.sendpulse.com/telegram/bots", {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const botsData = await botsRes.json();
+    const cleanBotQuery = botUsernameOrId.replace(/^@/, "").toLowerCase().trim();
+    const bot = (botsData.data || []).find((b: any) => {
+      const u = (b.channel_data?.username || b.name || "").replace(/^@/, "").toLowerCase().trim();
+      return u === cleanBotQuery || b.id === botUsernameOrId;
+    });
+
+    if (!bot) {
+      return { error: `Бот @${cleanBotQuery} не знайдений у SendPulse акаунті проєкту` };
+    }
+
+    // 2. Get bot contacts
+    const contactsRes = await fetch(`https://api.sendpulse.com/telegram/contacts?bot_id=${bot.id}&limit=${limit}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const contactsJson = await contactsRes.json();
+    const rawContacts = contactsJson.data || [];
+
+    // 3. Fetch CRM customers and orders for matching
+    const [customersRes, ordersRes] = await Promise.all([
+      adminSupabase
+        .from("unified_customers")
+        .select("id, name, phone, email, telegram, telegram_id, created_at")
+        .eq("project_id", project.id),
+      adminSupabase
+        .from("unified_orders")
+        .select("id, customer_id, order_id, amount, status, metadata, created_at")
+        .eq("project_id", project.id)
+    ]);
+
+    const customers = customersRes.data || [];
+    const orders = ordersRes.data || [];
+
+    // 4. Map contacts with CRM
+    const matchedContacts = rawContacts.map((c: any) => {
+      const spUsername = (c.username || c.channel_data?.username || "").replace(/^@/, "").toLowerCase().trim();
+      const spPhone = (c.phone || c.channel_data?.phone || c.variables?.phone || "").replace(/[^0-9]/g, "");
+      const spOrderId = (c.variables?.order_id || "").trim();
+      const spTgId = c.telegram_id || c.channel_data?.id || null;
+
+      let matchedCustomer = customers.find((cust: any) => {
+        if (spTgId && cust.telegram_id && String(cust.telegram_id) === String(spTgId)) return true;
+        const custTg = (cust.telegram || "").replace(/^@/, "").toLowerCase().trim();
+        if (spUsername && custTg && spUsername === custTg) return true;
+        const custPhone = (cust.phone || "").replace(/[^0-9]/g, "");
+        if (spPhone && custPhone && (spPhone.includes(custPhone) || custPhone.includes(spPhone))) return true;
+        if (spOrderId) {
+          const orderMatch = orders.find((o: any) => o.order_id === spOrderId || o.id === spOrderId);
+          if (orderMatch && orderMatch.customer_id === cust.id) return true;
+        }
+        return false;
+      });
+
+      const customerOrders = matchedCustomer ? orders.filter((o: any) => o.customer_id === matchedCustomer.id) : [];
+      const totalPaidAmount = customerOrders
+        .filter((o: any) => ["closed_won", "paid", "Approved", "Оплачено"].includes(o.status))
+        .reduce((sum: number, o: any) => sum + Number(o.amount || 0), 0);
+
+      const bwCid = matchedCustomer
+        ? `bw_${matchedCustomer.id.replace(/-/g, "").substring(0, 16)}`
+        : (c.variables?.bw_cid || null);
+
+      return {
+        id: c.id,
+        telegramId: spTgId,
+        name: c.name || c.full_name || matchedCustomer?.name || "Користувач Telegram",
+        username: spUsername ? `@${spUsername}` : (matchedCustomer?.telegram ? `@${matchedCustomer.telegram.replace(/^@/, '')}` : null),
+        phone: spPhone || matchedCustomer?.phone || null,
+        email: matchedCustomer?.email || null,
+        bwCid,
+        isMatched: !!matchedCustomer,
+        matchedCustomerId: matchedCustomer?.id || null,
+        ordersCount: customerOrders.length,
+        totalPaidAmount,
+        variables: c.variables || {},
+        tags: c.tags || [],
+        lastActivity: c.last_activity_at || c.created_at
+      };
+    });
+
+    return {
+      success: true,
+      bot: {
+        id: bot.id,
+        name: bot.name,
+        username: bot.channel_data?.username || bot.username,
+        totalSubscribers: bot.inbox?.total || 0
+      },
+      contacts: matchedContacts
+    };
+  } catch (err: any) {
+    console.error("Error in getSendPulseBotContactsAction:", err);
+    return { error: err.message || "Failed to fetch SendPulse bot contacts" };
+  }
+}
+
+export async function syncSendPulseBotContactsAction(projectId: string, botUsernameOrId: string) {
+  try {
+    await checkProjectAccess(projectId);
+    const adminSupabase = createAdminClient();
+    const { data: project } = await adminSupabase
+      .from("projects")
+      .select("id, slug, name, sendpulse_client_id, sendpulse_client_secret")
+      .eq("id", projectId)
+      .single();
+
+    if (!project) return { error: "Project not found" };
+
+    const { getSendPulseAccessToken } = await import("@/lib/sendpulse/service");
+    const token = await getSendPulseAccessToken(project.slug || "sergiy");
+
+    // 1. Get bot
+    const botsRes = await fetch("https://api.sendpulse.com/telegram/bots", {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const botsData = await botsRes.json();
+    const cleanBotQuery = botUsernameOrId.replace(/^@/, "").toLowerCase().trim();
+    const bot = (botsData.data || []).find((b: any) => {
+      const u = (b.channel_data?.username || b.name || "").replace(/^@/, "").toLowerCase().trim();
+      return u === cleanBotQuery || b.id === botUsernameOrId;
+    });
+
+    if (!bot) {
+      return { error: `Бот @${cleanBotQuery} не знайдений` };
+    }
+
+    // 2. Fetch bot contacts
+    const contactsRes = await fetch(`https://api.sendpulse.com/telegram/contacts?bot_id=${bot.id}&limit=100`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const contactsJson = await contactsRes.json();
+    const rawContacts = contactsJson.data || [];
+
+    // 3. Fetch CRM customers
+    const [customersRes, ordersRes] = await Promise.all([
+      adminSupabase
+        .from("unified_customers")
+        .select("id, name, phone, email, telegram, telegram_id")
+        .eq("project_id", project.id),
+      adminSupabase
+        .from("unified_orders")
+        .select("id, customer_id, order_id, amount, status")
+        .eq("project_id", project.id)
+    ]);
+
+    const customers = customersRes.data || [];
+    const orders = ordersRes.data || [];
+
+    let syncedCount = 0;
+
+    for (const c of rawContacts) {
+      const spUsername = (c.username || c.channel_data?.username || "").replace(/^@/, "").toLowerCase().trim();
+      const spPhone = (c.phone || c.channel_data?.phone || c.variables?.phone || "").replace(/[^0-9]/g, "");
+      const spOrderId = (c.variables?.order_id || "").trim();
+      const spTgId = c.telegram_id || c.channel_data?.id || null;
+
+      let matchedCustomer = customers.find((cust: any) => {
+        if (spTgId && cust.telegram_id && String(cust.telegram_id) === String(spTgId)) return true;
+        const custTg = (cust.telegram || "").replace(/^@/, "").toLowerCase().trim();
+        if (spUsername && custTg && spUsername === custTg) return true;
+        const custPhone = (cust.phone || "").replace(/[^0-9]/g, "");
+        if (spPhone && custPhone && (spPhone.includes(custPhone) || custPhone.includes(spPhone))) return true;
+        if (spOrderId) {
+          const orderMatch = orders.find((o: any) => o.order_id === spOrderId || o.id === spOrderId);
+          if (orderMatch && orderMatch.customer_id === cust.id) return true;
+        }
+        return false;
+      });
+
+      if (matchedCustomer) {
+        syncedCount++;
+        const bwCid = `bw_${matchedCustomer.id.replace(/-/g, "").substring(0, 16)}`;
+
+        // Update customer telegram_id if missing
+        if (spTgId && !matchedCustomer.telegram_id) {
+          await adminSupabase
+            .from("unified_customers")
+            .update({ telegram_id: spTgId })
+            .eq("id", matchedCustomer.id);
+        }
+
+        // Set phone variable in SendPulse if missing
+        if (matchedCustomer.phone && !c.variables?.phone) {
+          try {
+            await fetch("https://api.sendpulse.com/telegram/contacts/setVariable", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                bot_id: bot.id,
+                contact_id: c.id,
+                variable_name: "phone",
+                variable_value: matchedCustomer.phone
+              })
+            });
+          } catch {}
+        }
+      }
+    }
+
+    return {
+      success: true,
+      totalContacts: rawContacts.length,
+      syncedCount
+    };
+  } catch (err: any) {
+    console.error("Error in syncSendPulseBotContactsAction:", err);
+    return { error: err.message || "Failed to sync SendPulse bot contacts" };
+  }
+}
+
 
 
