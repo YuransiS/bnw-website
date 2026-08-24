@@ -104,11 +104,18 @@
 * `end_date` (DATE, nullable) - Дата завершения воронки
 * `campaign_ids` (TEXT[]) - UTM Campaign ID, привязанные к воронке
 * `landing_slugs` (TEXT[]) - Лендинги, привязанные к воронке
+* `bot_username` (TEXT, nullable) - Конкретный привязанный Telegram/Instagram бот SendPulse
+* `bot_steps` (JSONB, default '[]') - Кастомные шаги и вебхуки воронки с авто-транслитерацией
 * `planned_revenue` (NUMERIC, default 0) - Плановый доход воронки
 * `planned_spend` (NUMERIC, default 0) - Плановые затраты воронки
 * `stages` (JSONB, default '[]') - Массив кастомных этапов воронки
 * `description` (TEXT) - Описание воронки
 * `created_at` (TIMESTAMP)
+
+### Таблица `public.projects` (Интеграционные поля)
+* `sendpulse_client_id` (TEXT, nullable) - SendPulse Client ID проекта
+* `sendpulse_client_secret` (TEXT, nullable) - SendPulse Secret Key проекта
+* `meta_ad_account_id` (TEXT, nullable) - Привязанный Meta Ad Account ID проекта
 
 ### Таблица `public.tasks`
 Дедлайны и вехи (milestones) для продюсеров и экспертов.
