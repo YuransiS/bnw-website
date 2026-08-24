@@ -446,9 +446,41 @@ export async function POST(req: Request) {
     // Auto-discover/update landing query parameters (?p, ?o, etc.)
     autoRegisterLandingParams(supabaseAdmin, projectId, page_url, page_path);
 
-    let telegramDeepLink = null;
-    if (project_slug === 'sergiy' && bw_cid) {
-      telegramDeepLink = `https://t.me/cherniyavskyibot?start=${bw_cid}`;
+    // Resolve SendPulse Smart Deep Link (via tg.pulse.is)
+    let sendpulseDeepLink: string | null = null;
+    const customBot = marketing?.bot_username || meta?.bot_username || null;
+    const customFlowId = marketing?.flow_id || meta?.flow_id || null;
+
+    let targetBot = customBot;
+    let targetFlow = customFlowId;
+
+    if (!targetBot) {
+      if (project_slug === 'sergiy') {
+        targetBot = 'cherniyavskyibot';
+        targetFlow = targetFlow || '6a7ec1362bcd49dc270d239a';
+      } else if (project_slug === 'nesoniaa') {
+        targetBot = 'nesoniaaibot';
+        targetFlow = targetFlow || '6a86d7b517aebba1b80a29d6';
+      }
+    }
+
+    if (targetBot) {
+      try {
+        const { generateSendPulseDeepLink } = await import('@/lib/sendpulse/service');
+        sendpulseDeepLink = generateSendPulseDeepLink({
+          botUsername: targetBot,
+          flowId: targetFlow,
+          bwCid: bw_cid,
+          phone,
+          email,
+          name,
+          utmSource: utm_source,
+          utmMedium: utm_medium,
+          utmCampaign: utm_campaign
+        });
+      } catch (linkErr) {
+        console.warn('Could not generate SendPulse link:', linkErr);
+      }
     }
 
     return NextResponse.json({
@@ -457,7 +489,8 @@ export async function POST(req: Request) {
       customer_id: customerId,
       order_id: orderIdToReturn,
       bw_cid,
-      telegram_deep_link: telegramDeepLink
+      sendpulse_deep_link: sendpulseDeepLink,
+      telegram_deep_link: sendpulseDeepLink || (targetBot && bw_cid ? `https://t.me/${targetBot}?start=${bw_cid}` : null)
     });
 
   } catch (error: any) {

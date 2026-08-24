@@ -134,3 +134,37 @@ export async function getProjectSendPulseBots(projectSlug: string = 'sergiy'): P
     return [];
   }
 }
+
+export interface SendPulseDeepLinkParams {
+  botUsername: string;
+  flowId?: string | null;
+  bwCid?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  name?: string | null;
+  telegramId?: string | number | null;
+  utmSource?: string | null;
+  utmMedium?: string | null;
+  utmCampaign?: string | null;
+}
+
+/**
+ * Generate a SendPulse tg.pulse.is smart redirection link
+ * Encodes all lead parameters (bw_cid, phone, email, UTM) directly into SendPulse contact variables.
+ */
+export function generateSendPulseDeepLink(params: SendPulseDeepLinkParams): string {
+  const cleanBot = (params.botUsername || '').replace('@', '').trim();
+  const url = new URL(`https://tg.pulse.is/${cleanBot}`);
+
+  if (params.flowId) url.searchParams.set('start', params.flowId);
+  if (params.bwCid) url.searchParams.set('bw_cid', params.bwCid);
+  if (params.phone) url.searchParams.set('phone', params.phone);
+  if (params.email) url.searchParams.set('email', params.email);
+  if (params.name) url.searchParams.set('name', params.name);
+  if (params.telegramId) url.searchParams.set('telegram_id', String(params.telegramId));
+  if (params.utmSource) url.searchParams.set('utm_source', params.utmSource);
+  if (params.utmMedium) url.searchParams.set('utm_medium', params.utmMedium);
+  if (params.utmCampaign) url.searchParams.set('utm_campaign', params.utmCampaign);
+
+  return url.toString();
+}
