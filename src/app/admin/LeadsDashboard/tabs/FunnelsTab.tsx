@@ -343,6 +343,7 @@ export default function FunnelsTab({
 
   // SendPulse Bots & Funnel Bot Events
   const [sendPulseBots, setSendPulseBots] = useState<any[]>([]);
+  const [selectedBotUsername, setSelectedBotUsername] = useState<string>("");
   const [botStepCounts, setBotStepCounts] = useState<Record<string, number>>({});
   const [copiedStep, setCopiedStep] = useState<string | null>(null);
 
@@ -2137,12 +2138,25 @@ export default function FunnelsTab({
                 </div>
                 {sendPulseBots.length > 0 && (
                   <div className="flex flex-wrap items-center gap-2">
-                    {sendPulseBots.map((b: any) => (
-                      <span key={b.id} className="text-[10px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded-full font-bold flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        {b.username ? `@${b.username}` : b.name} ({b.totalSubscribers} підписн.)
-                      </span>
-                    ))}
+                    <span className="text-[10px] text-white/40 font-bold uppercase mr-1">Оберіть бота:</span>
+                    {sendPulseBots.map((b: any) => {
+                      const isSelected = (selectedBotUsername || sendPulseBots[0]?.username) === b.username;
+                      return (
+                        <button
+                          key={b.id}
+                          type="button"
+                          onClick={() => setSelectedBotUsername(b.username)}
+                          className={`text-[10px] px-2.5 py-1 rounded-full font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                            isSelected
+                              ? "bg-emerald-500/20 border border-emerald-400 text-emerald-300 shadow-[0_0_10px_rgba(52,211,153,0.2)]"
+                              : "bg-white/5 border border-white/10 text-white/50 hover:text-white hover:bg-white/10"
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? "bg-emerald-400 animate-pulse" : "bg-white/30"}`} />
+                          {b.username ? `@${b.username}` : b.name} ({b.totalSubscribers} підписн.)
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -2156,7 +2170,9 @@ export default function FunnelsTab({
                   { step: "completed", label: "4. Анкета / ДЗ", desc: "Фініш мінікурсу", count: botStepCounts["completed"] || botStepCounts["quiz_completed"] || 0, color: "text-purple-400" },
                   { step: "offer_clicked", label: "5. Клік по оферу", desc: "Намір купити", count: botStepCounts["offer_clicked"] || 0, color: "text-emerald-400" },
                 ].map((item) => {
-                  const webhookUrl = `https://bnw-prod.vercel.app/api/v1/integrations/sendpulse/webhook?project=${activeProject?.slug || 'sergiy'}&step=${item.step}`;
+                  const currentBot = selectedBotUsername || sendPulseBots[0]?.username || "";
+                  const botParam = currentBot ? `&bot=${currentBot}` : "";
+                  const webhookUrl = `https://bnw-prod.vercel.app/api/v1/integrations/sendpulse/webhook?project=${activeProject?.slug || 'sergiy'}${botParam}&step=${item.step}`;
                   const isCopied = copiedStep === item.step;
 
                   return (

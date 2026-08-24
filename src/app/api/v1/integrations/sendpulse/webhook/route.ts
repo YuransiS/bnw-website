@@ -48,7 +48,7 @@ export async function POST(req: Request) {
     }
 
     const email = payload.email || payload.contact?.email || rawVariables.email || null;
-    const botId = payload.bot_id || payload.contact?.bot_id || url.searchParams.get('bot_id') || null;
+    const botId = url.searchParams.get('bot') || url.searchParams.get('bot_username') || url.searchParams.get('bot_id') || payload.bot_id || payload.contact?.bot_id || null;
 
     // 4. Resolve Project ID
     const { data: project } = await supabaseAdmin
