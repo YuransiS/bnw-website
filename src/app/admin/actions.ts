@@ -753,9 +753,38 @@ export async function getUnifiedCRMData(
     const dbQueryEnd = performance.now();
     const dbQueryMs = dbQueryEnd - dbQueryStart;
 
-    if (leadsRes.error) throw leadsRes.error;
+    const rawFunnels = funnelsRes.data || [];
+    const funnelsList = await Promise.all(
+      rawFunnels.map(async (funnel: any) => {
+        const { data: kpi } = await adminSupabase.rpc("get_funnel_analytics_aggregated", {
+          p_funnel_id: funnel.id
+        });
+        const s = kpi || {};
+        return {
+          ...funnel,
+          stats: {
+            leadsCount: Number(s.total_leads || 0),
+            salesCount: Number(s.paid_orders || 0),
+            quizzesCount: Number(s.quizzes_count || 0),
+            totalClicks: Number(s.total_clicks || 0),
+            impressions: Number(s.impressions || 0),
+            revenue: Number(s.total_revenue_uah || 0),
+            revenueUSD: Number(s.total_revenue_usd || 0),
+            spend: Number(s.spend_uah || 0),
+            spendUSD: Number(s.spend_usd || 0),
+            profit: Number(s.profit_uah || 0),
+            profitUSD: Number(s.profit_usd || 0),
+            roi: Number(s.roi || 0),
+            cr: Number(s.conversion_rate || 0),
+            cplUSD: Number(s.cpl_usd || 0),
+            cpaUSD: Number(s.cpa_usd || 0),
+            manualSpend: Number(s.manual_expense_uah || 0),
+            manualIncome: Number(s.manual_income_uah || 0)
+          }
+        };
+      })
+    );
 
-    const funnelsList = funnelsRes.data || [];
     const rawPaginatedLeads = leadsRes.data || [];
     const paginatedLeads = rawPaginatedLeads.map((lead: any) => {
       const matchedFunnel = matchLeadToFunnel(lead, funnelsList);

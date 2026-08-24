@@ -550,7 +550,7 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {funnels.map((funnel) => {
-            const stats = getFunnelStats(funnel);
+            const stats = funnel.stats || getFunnelStats(funnel);
             const parsedType = funnel.description?.includes("[Type:")
               ? (funnel.description.match(/\[Type:\s*([^\]]+)\]/i)?.[1] || "Інше")
               : "Інше";
