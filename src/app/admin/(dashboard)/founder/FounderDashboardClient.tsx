@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useTransition } from "react";
 import Link from "next/link";
-import { Layers, Users, BarChart4, ClipboardCheck, ArrowRight, ShieldAlert, Award, Calendar, Eye, EyeOff, Globe, Sparkles, AlertCircle } from "lucide-react";
+import { Layers, Users, BarChart4, ClipboardCheck, ArrowRight, ShieldAlert, Award, Calendar, Eye, EyeOff, Globe, Sparkles, AlertCircle, RefreshCw } from "lucide-react";
+import { getFounderDashboardDataAction } from "../../actions";
 
 interface FounderDashboardClientProps {
   cellsWithProjects: any[];
@@ -13,23 +14,46 @@ interface FounderDashboardClientProps {
   totalSpendUah: number;
   totalProfitUah: number;
   globalRoi: number;
+  initialStartDate?: string;
+  initialEndDate?: string;
+  isDevOrAdmin?: boolean;
 }
 
 export default function FounderDashboardClient({
-  cellsWithProjects,
-  unassignedProjects,
-  leaderboard,
+  cellsWithProjects: initialCells,
+  unassignedProjects: initialUnassigned,
+  leaderboard: initialLeaderboard,
   taskLogs,
-  totalRevenueUah,
-  totalSpendUah,
-  totalProfitUah,
-  globalRoi
+  totalRevenueUah: initialRevenue,
+  totalSpendUah: initialSpend,
+  totalProfitUah: initialProfit,
+  globalRoi: initialRoi,
+  initialStartDate = "",
+  initialEndDate = "",
+  isDevOrAdmin = false
 }: FounderDashboardClientProps) {
   // Client States
   const [currency, setCurrency] = useState<"UAH" | "USD">("UAH");
   const [demoMode, setDemoMode] = useState(false);
   const [expandedCard, setExpandedCard] = useState<"revenue" | "opex" | "profit" | "roi" | null>(null);
   const [opSortBy, setOpSortBy] = useState<"revenue" | "roi">("revenue");
+
+  // Dynamic Date Filter States
+  const [activePreset, setActivePreset] = useState<"today" | "month" | "30d" | "all" | "custom">("month");
+  const [startDate, setStartDate] = useState(initialStartDate);
+  const [endDate, setEndDate] = useState(initialEndDate);
+  const [customStart, setCustomStart] = useState(initialStartDate);
+  const [customEnd, setCustomEnd] = useState(initialEndDate);
+  const [isPending, startTransition] = useTransition();
+
+  // Dynamic Dashboard Data States
+  const [cells, setCells] = useState(initialCells);
+  const [unassigned, setUnassigned] = useState(initialUnassigned);
+  const [leaders, setLeaders] = useState(initialLeaderboard);
+  const [revenueUah, setRevenueUah] = useState(initialRevenue);
+  const [spendUah, setSpendUah] = useState(initialSpend);
+  const [profitUah, setProfitUah] = useState(initialProfit);
+  const [roiVal, setRoiVal] = useState(initialRoi);
 
   // Helper converter
   const formatVal = (uahVal: number, isUAH: boolean = true) => {
@@ -45,8 +69,62 @@ export default function FounderDashboardClient({
     return (safeVal || 0).toLocaleString("uk-UA") + " ₴";
   };
 
+  const loadData = (s: string, e: string) => {
+    startTransition(async () => {
+      const res = await getFounderDashboardDataAction(s, e);
+      if (res.success) {
+        setCells(res.cellsWithProjects || []);
+        setUnassigned(res.unassignedProjects || []);
+        setLeaders(res.leaderboard || []);
+        setRevenueUah(res.totalRevenueUah || 0);
+        setSpendUah(res.totalSpendUah || 0);
+        setProfitUah(res.totalProfitUah || 0);
+        setRoiVal(res.globalRoi || 0);
+      }
+    });
+  };
+
+  const handlePresetChange = (preset: "today" | "month" | "30d" | "all" | "custom") => {
+    setActivePreset(preset);
+    let s = "";
+    let e = "";
+    const today = new Date();
+    const formatDate = (d: Date) => d.toISOString().split("T")[0];
+
+    if (preset === "today") {
+      s = formatDate(today);
+      e = formatDate(today);
+    } else if (preset === "month") {
+      const year = today.getFullYear();
+      const month = today.getMonth();
+      s = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+      const lastDay = new Date(year, month + 1, 0).getDate();
+      e = `${year}-${String(month + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+    } else if (preset === "30d") {
+      const start = new Date();
+      start.setDate(today.getDate() - 30);
+      s = formatDate(start);
+      e = formatDate(today);
+    } else if (preset === "all") {
+      s = "";
+      e = "";
+    }
+
+    if (preset !== "custom") {
+      setStartDate(s);
+      setEndDate(e);
+      loadData(s, e);
+    }
+  };
+
+  const handleCustomApply = () => {
+    setStartDate(customStart);
+    setEndDate(customEnd);
+    loadData(customStart, customEnd);
+  };
+
   // Sort Leaderboard
-  const sortedLeaderboard = [...leaderboard].sort((a, b) => {
+  const sortedLeaderboard = [...leaders].sort((a, b) => {
     if (opSortBy === "roi") {
       return (b.roi || 0) - (a.roi || 0);
     }
@@ -60,20 +138,97 @@ export default function FounderDashboardClient({
       
       {/* Sticky Global Filter Header */}
       <div className="sticky top-0 z-40 backdrop-blur-md border border-white/5 p-4 rounded-2xl bg-[#0c0c0f]/80 flex flex-wrap items-center justify-between gap-4 shadow-xl">
-        <div>
-          <h1 className="text-xl font-black uppercase tracking-tight flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-emerald-400" />
-            Консолідований Звіт
-          </h1>
-          <p className="text-[10px] text-white/30">Верхньорівнева звітність холдингу B&W</p>
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-emerald-300 p-0.5 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+            <div className="w-full h-full bg-[#0C0C0F] rounded-[10px] flex items-center justify-center">
+              <Sparkles className="w-4 h-4 text-emerald-400" />
+            </div>
+          </div>
+          <div>
+            <h1 className="text-lg font-black uppercase tracking-tight flex items-center gap-2">
+              Консолідований Звіт
+              {isPending && <RefreshCw className="w-3.5 h-3.5 text-emerald-400 animate-spin" />}
+            </h1>
+            <p className="text-[10px] text-white/40">
+              Період: <span className="text-emerald-400 font-bold">{startDate ? `${startDate} — ${endDate}` : "Весь час"}</span>
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Date Presets Selector */}
+          <div className="flex bg-white/5 p-0.5 rounded-xl border border-white/5 overflow-x-auto text-[10px] font-black">
+            <button
+              onClick={() => handlePresetChange("today")}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                activePreset === "today" ? "bg-emerald-500 text-black shadow-sm" : "text-white/40 hover:text-white"
+              }`}
+            >
+              Сьогодні
+            </button>
+            <button
+              onClick={() => handlePresetChange("month")}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                activePreset === "month" ? "bg-emerald-500 text-black shadow-sm" : "text-white/40 hover:text-white"
+              }`}
+            >
+              Поточний місяць
+            </button>
+            <button
+              onClick={() => handlePresetChange("30d")}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                activePreset === "30d" ? "bg-emerald-500 text-black shadow-sm" : "text-white/40 hover:text-white"
+              }`}
+            >
+              30 днів
+            </button>
+            <button
+              onClick={() => handlePresetChange("all")}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                activePreset === "all" ? "bg-emerald-500 text-black shadow-sm" : "text-white/40 hover:text-white"
+              }`}
+            >
+              Весь час
+            </button>
+            <button
+              onClick={() => handlePresetChange("custom")}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                activePreset === "custom" ? "bg-emerald-500 text-black shadow-sm" : "text-white/40 hover:text-white"
+              }`}
+            >
+              Кастомно
+            </button>
+          </div>
+
+          {activePreset === "custom" && (
+            <div className="flex items-center gap-2 bg-white/5 p-1 rounded-xl border border-white/5 text-xs">
+              <input
+                type="date"
+                value={customStart}
+                onChange={(e) => setCustomStart(e.target.value)}
+                className="bg-black/40 border border-white/10 text-white rounded-lg px-2 py-1 text-[11px] focus:outline-none focus:border-emerald-500"
+              />
+              <span className="text-white/30 text-[10px]">—</span>
+              <input
+                type="date"
+                value={customEnd}
+                onChange={(e) => setCustomEnd(e.target.value)}
+                className="bg-black/40 border border-white/10 text-white rounded-lg px-2 py-1 text-[11px] focus:outline-none focus:border-emerald-500"
+              />
+              <button
+                onClick={handleCustomApply}
+                className="bg-emerald-500 hover:bg-emerald-400 text-black px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider cursor-pointer"
+              >
+                ОК
+              </button>
+            </div>
+          )}
+
           {/* Currency Toggle */}
-          <div className="flex bg-white/5 p-0.5 rounded-xl border border-white/5 shrink-0">
+          <div className="flex bg-white/5 p-0.5 rounded-xl border border-white/5 shrink-0 text-[10px] font-black">
             <button
               onClick={() => setCurrency("UAH")}
-              className={`px-3 py-1 text-[10px] font-black rounded-lg transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                 currency === "UAH" ? "bg-emerald-500 text-black shadow-sm" : "text-white/40 hover:text-white"
               }`}
             >
@@ -81,7 +236,7 @@ export default function FounderDashboardClient({
             </button>
             <button
               onClick={() => setCurrency("USD")}
-              className={`px-3 py-1 text-[10px] font-black rounded-lg transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                 currency === "USD" ? "bg-emerald-500 text-black shadow-sm" : "text-white/40 hover:text-white"
               }`}
             >
@@ -103,7 +258,7 @@ export default function FounderDashboardClient({
         >
           <p className="text-xs text-white/40 uppercase font-bold tracking-wider">Валова виручка</p>
           <p className="text-2xl font-black mt-2 text-emerald-400">
-            {formatVal(totalRevenueUah)}
+            {formatVal(revenueUah)}
           </p>
           <p className="text-[10px] text-white/30 mt-1 flex items-center gap-1">
             Клік для розгортання деталей
@@ -119,7 +274,7 @@ export default function FounderDashboardClient({
         >
           <p className="text-xs text-white/40 uppercase font-bold tracking-wider">Загальні витрати</p>
           <p className="text-2xl font-black mt-2 text-rose-400">
-            {formatVal(totalSpendUah)}
+            {formatVal(spendUah)}
           </p>
           <p className="text-[10px] text-white/30 mt-1">Трафік та опекс</p>
         </div>
@@ -133,7 +288,7 @@ export default function FounderDashboardClient({
         >
           <p className="text-xs text-white/40 uppercase font-bold tracking-wider">Чистий прибуток</p>
           <p className="text-2xl font-black mt-2 text-emerald-500">
-            {formatVal(totalProfitUah)}
+            {formatVal(profitUah)}
           </p>
           <p className="text-[10px] text-white/30 mt-1">Маржинальний баланс</p>
         </div>
@@ -147,7 +302,7 @@ export default function FounderDashboardClient({
         >
           <p className="text-xs text-white/40 uppercase font-bold tracking-wider">Совокупний ROI</p>
           <p className="text-2xl font-black mt-2 text-purple-400">
-            {globalRoi.toFixed(2)} %
+            {roiVal.toFixed(2)} %
           </p>
           <p className="text-[10px] text-white/30 mt-1">Ефективність вкладень</p>
         </div>
@@ -160,7 +315,7 @@ export default function FounderDashboardClient({
             <div className="space-y-3">
               <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400">Виручка за осередками</h4>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                {cellsWithProjects.map((c) => (
+                {cells.map((c) => (
                   <div key={c.id} className="bg-white/5 p-4 rounded-xl flex justify-between items-center">
                     <span>{c.name}</span>
                     <span className="font-extrabold text-white">{formatVal(c.revenue)}</span>
@@ -174,7 +329,7 @@ export default function FounderDashboardClient({
             <div className="space-y-3">
               <h4 className="text-xs font-bold uppercase tracking-wider text-rose-400">Витрати за осередками</h4>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                {cellsWithProjects.map((c) => (
+                {cells.map((c) => (
                   <div key={c.id} className="bg-white/5 p-4 rounded-xl flex justify-between items-center">
                     <span>{c.name}</span>
                     <span className="font-extrabold text-red-400">-{formatVal(c.spend)}</span>
@@ -188,7 +343,7 @@ export default function FounderDashboardClient({
             <div className="space-y-3">
               <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-500">Прибутковість проектів</h4>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                {cellsWithProjects.map((c) => (
+                {cells.map((c) => (
                   <div key={c.id} className="bg-white/5 p-4 rounded-xl flex justify-between items-center">
                     <span>{c.name}</span>
                     <span className={`font-extrabold ${c.profit >= 0 ? "text-emerald-450" : "text-rose-400"}`}>
@@ -204,7 +359,7 @@ export default function FounderDashboardClient({
             <div className="space-y-3">
               <h4 className="text-xs font-bold uppercase tracking-wider text-purple-400">ROI за осередками</h4>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                {cellsWithProjects.map((c) => {
+                {cells.map((c) => {
                   const cellRoi = c.spend > 0 ? (c.profit / c.spend) * 100 : 0;
                   return (
                     <div key={c.id} className="bg-white/5 p-4 rounded-xl flex justify-between items-center">
@@ -231,12 +386,12 @@ export default function FounderDashboardClient({
                 Ячейки та підрозділи
               </h2>
               <span className="text-xs bg-white/5 px-2.5 py-1 rounded-full text-white/60">
-                {cellsWithProjects.length} Ячейок
+                {cells.length} Ячейок
               </span>
             </div>
 
             <div className="space-y-6">
-              {cellsWithProjects.map((cell) => (
+              {cells.map((cell) => (
                 <div key={cell.id} className="border border-white/5 rounded-xl p-4 bg-white/[0.01]">
                   <div className="flex items-start justify-between">
                     <div>
@@ -276,13 +431,13 @@ export default function FounderDashboardClient({
                 </div>
               ))}
 
-              {unassignedProjects.length > 0 && (
+              {unassigned.length > 0 && (
                 <div className="border border-white/5 rounded-xl p-4 bg-white/[0.01]">
                   <p className="font-bold text-xs uppercase tracking-wider text-white/40 mb-3 pl-1">
                     Інші проекти (Без ячейки)
                   </p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {unassignedProjects.map((proj: any) => (
+                    {unassigned.map((proj: any) => (
                       <Link
                         key={proj.project_id}
                         href={`/admin/project/${proj.project_id}`}
@@ -372,7 +527,7 @@ export default function FounderDashboardClient({
                 );
               })}
 
-              {leaderboard.length === 0 && (
+              {sortedLeaderboard.length === 0 && (
                 <p className="text-xs text-white/30 italic text-center py-4">Рейтинг операційних продюсерів порожній</p>
               )}
             </div>

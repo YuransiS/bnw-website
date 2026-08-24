@@ -59,6 +59,7 @@ import LeadJourneyModal from "./components/LeadJourneyModal";
 import AddLeadModal from "./components/AddLeadModal";
 import UnresolvedOrdersModal from "./components/UnresolvedOrdersModal";
 import ProjectSettingsModal from "./components/ProjectSettingsModal";
+import { ParabolicLoadingOverlay, ParabolicProgressBar } from "@/components/ui/ParabolicProgressBar";
 
 interface LeadsDashboardProps {
   initialData: any;
@@ -726,6 +727,9 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         }
       `}} />
 
+      {/* Top Decelerating Parabolic Progress Bar */}
+      <ParabolicProgressBar isLoading={isLoading} className="fixed top-0 left-0 right-0 z-50" />
+
       {/* Sticky Global Filter Bar */}
       <div className={`sticky top-0 z-40 backdrop-blur-md border p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 mb-6 shadow-xl ${isLight ? 'bg-white/80 border-neutral-250' : 'bg-[#0c0c0f]/80 border-white/5'}`}>
         <div className="flex items-center gap-3">
@@ -973,14 +977,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
       {/* --- TAB VIEWPORTS --- */}
       <div className="relative min-h-[300px]">
-        {isLoading && (
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] z-40 flex items-center justify-center rounded-2xl transition-all animate-in fade-in duration-200">
-            <div className={`flex flex-col items-center gap-3 p-6 rounded-2xl shadow-2xl border ${cardClass} ${borderClass}`}>
-              <RefreshCw className="w-8 h-8 animate-spin text-emerald-500" />
-              <span className="text-xs text-crm-text/60 font-bold uppercase tracking-widest">Оновлення даних...</span>
-            </div>
-          </div>
-        )}
+        <ParabolicLoadingOverlay isLoading={isLoading} />
 
         {activeTab === "hub" && viewType === "all" && (
           <HubTab summaryData={summaryData} campaignsData={campaignsData} globalCurrency={globalCurrency} />
@@ -1099,7 +1096,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           <FinanceExpertTab
             projectId={activeProject.id}
             projectRevenue={singleProjectStats?.uahRevenue || dashboardData?.totalRevenueUAH || 0}
-            projectSpend={singleProjectStats?.totalSpend || dashboardData?.totalSpendUAH || 0}
+            projectSpend={singleProjectStats?.totalSpendUah || dashboardData?.totalSpendUAH || (singleProjectStats?.totalSpend ? singleProjectStats.totalSpend * 41.5 : 0)}
             isLight={isLight}
           />
         )}

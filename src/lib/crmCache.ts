@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/utils/supabase/server";
-import { statusMapper } from "@/lib/statusMapper";
+import { statusMapper, isPaidStatus } from "@/lib/statusMapper";
 
 
 
@@ -54,6 +54,18 @@ const getTouchPageUrl = (l: any) => {
     l.metadata?.raw_row?.page_url ||
     l.metadata?.raw_row?.pageUrl ||
     l.page_url ||
+    ""
+  );
+};
+
+const getTouchPagePath = (l: any) => {
+  if (!l) return "";
+  return (
+    l.page_path ||
+    l.metadata?.page_path ||
+    l.metadata?.pagePath ||
+    l.metadata?.raw_row?.page_path ||
+    l.metadata?.raw_row?.pagePath ||
     ""
   );
 };
@@ -742,7 +754,22 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
     let eurTripwireCount = 0;
 
     uniqueOrders.forEach((item) => {
-      const amt = Number(item.amount || 0);
+      const rawAmt = Number(
+        item.amount ||
+        item.metadata?.raw_row?.amount ||
+        item.metadata?.raw_row?.raw_payload?.amount ||
+        item.metadata?.usd_amount ||
+        item.metadata?.uah_amount ||
+        0
+      );
+      let amt = rawAmt;
+      if (amt === 0) {
+        const statusStr = String(item.status || "") + " " + String(item.metadata?.raw_row?.status || "") + " " + String(item.metadata?.raw_row?.quiz_result || "");
+        const match = statusStr.match(/(\d+)\s*(?:грн|uah|\$|usd|eur|€)/i);
+        if (match) {
+          amt = Number(match[1]);
+        }
+      }
       if (amt === 0) return;
 
       const metaCurrency = String(
@@ -758,14 +785,7 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
 
       const isProjectAlwaysTripwire = ["sofia", "valeria"].includes(activeSlug);
 
-      const normStatus = statusMapper.normalize(item.status);
-      const itemStatusLower = String(item.status || "").toLowerCase().trim();
-      const isPaidOrder = 
-        item.status === "Купив курс" || 
-        item.status === "Купив(-ла) Трипвайер" || 
-        normStatus === "closed_won" || 
-        ["approved", "paid", "success", "оплачено", "completed", "купив курс", "купив(-ла) трипвайер"].includes(itemStatusLower) ||
-        itemStatusLower.includes("оплач");
+      const isPaidOrder = isPaidStatus(item.status);
 
       const pagePathLower = String(item.page_path || item.metadata?.raw_row?.page_path || "").toLowerCase();
       const tariffLower = String(
@@ -839,7 +859,7 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
     const utm_content = prioritizedTouches.map((l) => getTouchUtm(l, "content")).find(Boolean) || "";
     const utm_term = prioritizedTouches.map((l) => getTouchUtm(l, "term")).find(Boolean) || "";
 
-    const page_path = normalizedGroupLeads.find((l) => l.page_path && l.page_path !== "/")?.page_path || primaryLead.page_path || "/";
+    const page_path = prioritizedTouches.map(getTouchPagePath).find((p) => p && p !== "/") || getTouchPagePath(primaryLead) || "/";
     const page_url = prioritizedTouches.map(getTouchPageUrl).find((url) => url !== "") || getTouchPageUrl(primaryLead);
 
     const latestTouch = normalizedGroupLeads.reduce((latest, curr) => {
@@ -858,35 +878,43 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
     // 1. Precise Payment & Checkout Intent Detection
     const totalPaidAmount = usdCoursePaid + uahCoursePaid + eurCoursePaid + usdTripwirePaid + uahTripwirePaid + eurTripwirePaid;
     const hasPayment = totalPaidAmount > 0 || normalizedGroupLeads.some((o: any) => {
-      const norm = statusMapper.normalize(o.status);
-      return norm === "closed_won" || o.status === "Купив курс" || o.status === "Купив(-ла) Трипвайер" || o.status === "Approved";
+      return isPaidStatus(o.status);
     });
 
     const hasAttemptedAmount = (usdAttempted > 0 || uahAttempted > 0 || eurAttempted > 0);
 
-    const hasCheckout = normalizedGroupLeads.some((o: any) => {
-      const norm = statusMapper.normalize(o.status);
-      const isPaidStatus = norm === "closed_won" || o.status === "Купив курс" || o.status === "Купив(-ла) Трипвайер" || o.status === "Approved";
-      if (isPaidStatus) return false;
+    // Check if customer had a real failed attempt to pay for a paid product
+    const hasRealPaymentAttempt = normalizedGroupLeads.some((o: any) => {
+      if (isPaidStatus(o.status)) return false;
 
-      const amt = Number(o.amount || o.metadata?.raw_row?.amount || o.metadata?.raw_row?.raw_payload?.amount || 0);
+      const amt = Number(
+        o.amount ||
+        o.metadata?.raw_row?.amount ||
+        o.metadata?.raw_row?.raw_payload?.amount ||
+        o.metadata?.usd_amount ||
+        o.metadata?.uah_amount ||
+        0
+      );
       const s = String(o.status || "").toLowerCase().trim();
       const meta = o.metadata || {};
       const raw = meta.raw_row || {};
       const rawOrderId = String(raw.order_id || meta.wfp_order_id || meta.mono_invoice_id || "").trim();
       const url = String(o.page_url || meta.page_url || raw.page_url || "").toLowerCase();
-      
-      const isExplicitCheckoutStatus = 
-        s.includes("перехід до оплати") ||
-        s.includes("клик на форму оплати") ||
-        s.includes("очікується оплата") || 
-        s.includes("очікує оплати") || 
-        s.includes("почато оплату") ||
-        s.includes("кошик") ||
-        s.includes("expired") ||
-        s.includes("відхилено");
+      const norm = statusMapper.normalize(o.status);
 
-      const hasGatewayOrderId = Boolean(
+      let effectiveAmt = amt;
+      if (effectiveAmt === 0) {
+        const fullText = `${s} ${o.quiz_result || ""} ${raw.quiz_result || ""} ${meta.offer_title || ""} ${raw.offer_title || ""}`;
+        const match = fullText.match(/(\d+)\s*(?:грн|uah|\$|usd|eur|€)/i);
+        if (match) {
+          effectiveAmt = Number(match[1]);
+        }
+      }
+
+      const isGatewayDecline = norm === "declined" || s.includes("відхил") || s.includes("отклон") || s.includes("expired") || s.includes("не оплач") || s.includes("помилка");
+      const isGatewayCheckout = s.includes("перехід до оплати") || s.includes("клик на форму оплати") || s.includes("очікується оплата") || s.includes("очікує оплати") || s.includes("почато оплату") || s.includes("кошик");
+      
+      const hasRealGatewayId = Boolean(
         rawOrderId && 
         rawOrderId !== "null" && 
         rawOrderId !== "undefined" && 
@@ -897,10 +925,14 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
       const hasExplicitPaymentMeta = Boolean(meta.payment_intent || meta.wfp_order_id || meta.mono_invoice_id || meta.checkout_started);
       const isCheckoutUrl = url.includes("/checkout") || url.includes("/pay") || url.includes("/order") || url.includes("wayforpay");
 
-      return (isExplicitCheckoutStatus || hasGatewayOrderId || hasExplicitPaymentMeta || (amt > 0 && isCheckoutUrl));
+      // It is ONLY a real payment attempt if there was an actual non-zero price or gateway transaction
+      return (effectiveAmt > 0 || hasRealGatewayId || hasExplicitPaymentMeta) && (isGatewayDecline || isGatewayCheckout || isCheckoutUrl || effectiveAmt > 0);
     });
 
-    const isUnpaidIntent = !hasPayment && (hasCheckout || (hasAttemptedAmount && hasCheckout));
+    // An unpaid intent is ONLY true if:
+    // 1. The customer NEVER completed a successful payment (!hasPayment)
+    // 2. AND they attempted to pay for a paid product (hasRealPaymentAttempt or hasAttemptedAmount)
+    const isUnpaidIntent = !hasPayment && (hasRealPaymentAttempt || (hasAttemptedAmount && totalPaidAmount === 0));
 
     // 2. Tag Hierarchy Engine (Levels 1, 2, 3)
     const derivedTagsSet = new Set<string>();
@@ -912,7 +944,7 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
     }
 
     if (isUnpaidIntent) {
-      derivedTagsSet.add("Кинув кошик");
+      derivedTagsSet.add("Покинутий кошик");
     }
 
     // Check for diagnostic / questionnaire form lead
@@ -962,7 +994,7 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
 
       if (amt > 0 && prodName) {
         if (!isPaidOrder && !hasPayment) {
-          derivedTagsSet.add(`Кинув кошик: ${prodName}`);
+          derivedTagsSet.add(`Покинутий кошик: ${prodName}`);
         } else if (isPaidOrder) {
           derivedTagsSet.add(`Придбано: ${prodName}`);
         }

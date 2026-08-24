@@ -58,7 +58,9 @@ export default async function ProducerPerformancePage({ params }: PageProps) {
   const managedProjectIds = (dbProfileProjects || []).map((pp: any) => pp.project_id);
 
   // Extract producer's summary from leaderboard
-  const leaderStats = (initialData.producersLeaderboard || []).find((p: any) => p.producerId === producerId);
+  const leaderStats = (initialData.producersLeaderboard || []).find(
+    (p: any) => p.producerId === producerId || p.producer_id === producerId
+  );
 
   // Filter projects managed by this producer
   const producerProjects = (initialData.summaryData || []).filter((proj: any) =>
@@ -69,7 +71,7 @@ export default async function ProducerPerformancePage({ params }: PageProps) {
   const { data: dbProjects } = await adminSupabase.from("projects").select("id, cell_id");
   const projectCellMap = new Map((dbProjects || []).map((p: any) => [p.id, p.cell_id]));
 
-  const cellIds = Array.from(new Set(producerProjects.map((p: any) => projectCellMap.get(p.project_id)).filter(Boolean)));
+  const cellIds = Array.from(new Set(managedProjectIds.map((pid: string) => projectCellMap.get(pid)).filter(Boolean)));
   const { data: dbCells } = await adminSupabase.from("cells").select("id, name");
   const cellMap = new Map((dbCells || []).map((c: any) => [c.id, c.name]));
   const assignedCells = cellIds.map(cid => cellMap.get(cid)).filter(Boolean);
@@ -80,12 +82,13 @@ export default async function ProducerPerformancePage({ params }: PageProps) {
   );
 
   // Aggregate metrics fallback if not in leaderboard (or sum directly)
-  const revenueUah = leaderStats?.uah_revenue || producerProjects.reduce((sum: number, p: any) => sum + Number(p.revenue_uah || 0), 0);
-  const spendUsd = leaderStats?.spend || producerProjects.reduce((sum: number, p: any) => sum + Number(p.expenses_usd || 0), 0);
-  const profitUsd = leaderStats?.profit || (producerProjects.reduce((sum: number, p: any) => sum + Number(p.revenue_usd || 0), 0) - spendUsd);
-  const roi = leaderStats?.roi || (spendUsd > 0 ? (profitUsd / spendUsd) * 100 : 0);
-  const leadsCount = leaderStats?.leadsCount || producerProjects.reduce((sum: number, p: any) => sum + Number(p.leads_count || 0), 0);
-  const cpl = leaderStats?.cpl || (leadsCount > 0 ? spendUsd / leadsCount : 0);
+  const revenueUah = leaderStats?.uah_revenue !== undefined ? leaderStats.uah_revenue : producerProjects.reduce((sum: number, p: any) => sum + Number(p.revenue_uah || 0), 0);
+  const revenueUsd = leaderStats?.usd_revenue !== undefined ? leaderStats.usd_revenue : producerProjects.reduce((sum: number, p: any) => sum + Number(p.revenue_usd || 0), 0);
+  const spendUsd = leaderStats?.spend !== undefined ? leaderStats.spend : producerProjects.reduce((sum: number, p: any) => sum + Number(p.expenses_usd || 0), 0);
+  const profitUsd = leaderStats?.profit !== undefined ? leaderStats.profit : (revenueUsd - spendUsd);
+  const roi = leaderStats?.roi !== undefined ? leaderStats.roi : (spendUsd > 0 ? (profitUsd / spendUsd) * 100 : 0);
+  const leadsCount = leaderStats?.leadsCount !== undefined ? leaderStats.leadsCount : producerProjects.reduce((sum: number, p: any) => sum + Number(p.leads_count || 0), 0);
+  const cpl = leaderStats?.cpl !== undefined ? leaderStats.cpl : (leadsCount > 0 ? spendUsd / leadsCount : 0);
 
   return (
     <div className="space-y-8 text-white w-full mx-auto font-sans">

@@ -210,13 +210,13 @@ export const LeadsTab = React.memo(function LeadsTab({
               className={`w-full appearance-none pl-4 pr-10 py-3.5 rounded-xl focus:outline-none text-xs font-extrabold cursor-pointer ${selectClass}`}
             >
               <option value="all" className={optionClass}>
-                🔥 Фільтр: Всі торкання
+                🔥 Кількість торкань: Всі
               </option>
               <option value="multi" className={optionClass}>
-                ⚡ Мульти-торкання (2+)
+                ⚡ Повторні звернення (2+ торкань)
               </option>
               <option value="single" className={optionClass}>
-                👤 Одиночні ліди (1)
+                👤 Первинний контакт (1 торкання)
               </option>
             </select>
             <ChevronDown
@@ -393,8 +393,8 @@ export const LeadsTab = React.memo(function LeadsTab({
               <tr className={`${tableHeaderClass} uppercase tracking-widest font-black border-b`}>
                 <th className="p-4">Клієнт</th>
                 <th className="p-4">Контакти & Соцмережі</th>
-                <th className="p-4">Кампанія (Source)</th>
-                <th className="p-4 text-center">Торкання (Touch)</th>
+                <th className="p-4">Джерело та UTM-мітки</th>
+                <th className="p-4 text-center">Кількість торкань</th>
                 <th className="p-4 text-center">Сума</th>
                 <th className="p-4 text-center">Статус</th>
               </tr>
@@ -409,14 +409,10 @@ export const LeadsTab = React.memo(function LeadsTab({
               ) : (
                 paginatedLeads.map((lead: any) => {
                   const col = PIPELINE_COLUMNS.find((c) => c.key === lead.status) || PIPELINE_COLUMNS[0];
-                  const isUnpaidIntent =
-                    lead.history.some(
-                      (o: any) =>
-                        o.status === "⏳ Очікується оплата" || (o.order_id && !o.order_id.startsWith("ELT_ORD_"))
-                    ) &&
-                    !lead.history.some(
-                      (o: any) => o.status === "Купив курс" || o.status === "Купив(-ла) Трипвайер" || o.amount > 0
-                    );
+                  const isRealUnpaid = Boolean(
+                    (lead.is_unpaid_intent || lead.isUnpaidIntent) &&
+                    (Number(lead.usd_attempted || 0) > 0 || Number(lead.uah_attempted || 0) > 0 || lead.status === "Відмова" || (lead.tags && lead.tags.some((t: string) => t.includes("кошик"))))
+                  );
 
                   return (
                     <tr
@@ -440,8 +436,8 @@ export const LeadsTab = React.memo(function LeadsTab({
                             if (tag.includes("Оплачено") || tag === "Клієнт") {
                               return <span key={tag} className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{tag}</span>;
                             }
-                            if (tag.includes("Кинув кошик")) {
-                              return <span key={tag} className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-red-500/10 text-red-400 border border-red-500/20">{tag}</span>;
+                            if (tag.includes("кошик") || tag.includes("Покинутий")) {
+                              return <span key={tag} className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-red-500/10 text-red-400 border border-red-500/20">🛒 Покинутий кошик</span>;
                             }
                             if (tag.includes("Залишив заявку") || tag.includes("Анкета")) {
                               return <span key={tag} className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20">{tag}</span>;
@@ -454,10 +450,16 @@ export const LeadsTab = React.memo(function LeadsTab({
                             }
                             return <span key={tag} className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-neutral-500/10 text-neutral-400 border border-neutral-500/20">{tag}</span>;
                           })}
-                          {(!lead.tags || lead.tags.length === 0) && isUnpaidIntent && (
-                            <span className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-red-500/10 text-red-400 border border-red-500/20">
-                              Кинув кошик
-                            </span>
+                          {(!lead.tags || lead.tags.length === 0) && (
+                            isRealUnpaid ? (
+                              <span className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-red-500/10 text-red-400 border border-red-500/20">
+                                🛒 Покинутий кошик
+                              </span>
+                            ) : (
+                              <span className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                                Зареєструвався
+                              </span>
+                            )
                           )}
                           {isDevMode && (lead.name === "Невідомий" || !lead.name) && (
                             <span
@@ -522,40 +524,41 @@ export const LeadsTab = React.memo(function LeadsTab({
 
                       {/* Attribution link source & campaign & creative */}
                       <td className="p-4">
-                        <div className="flex flex-col gap-1 max-w-[220px]">
+                        <div className="flex flex-col gap-1 max-w-[240px]">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span
                               className={`font-black uppercase text-[9px] tracking-wider px-1.5 py-0.5 rounded ${
                                 isLight
-                                  ? "bg-neutral-100 text-neutral-600 border border-neutral-200"
-                                  : "bg-white/5 text-white/60 border border-white/5"
+                                  ? "bg-neutral-100 text-neutral-700 border border-neutral-200"
+                                  : "bg-white/5 text-white/80 border border-white/10"
                               }`}
+                              title="Джерело (UTM Source)"
                             >
-                              {lead.utmSource || lead.utm_source || "direct"}
+                              🌐 {lead.utmSource || lead.utm_source || "direct"}
                             </span>
+                            {(lead.utmMedium || lead.utm_medium) && (
+                              <span
+                                className="font-bold text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20"
+                                title={`Канал (UTM Medium): ${lead.utmMedium || lead.utm_medium}`}
+                              >
+                                {lead.utmMedium || lead.utm_medium}
+                              </span>
+                            )}
                             {(lead.utmContent || lead.utm_content) && (
                               <span
-                                className="font-mono text-[9px] px-1 py-0.2 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20"
-                                title={`Креатив / Content: ${lead.utmContent || lead.utm_content}`}
+                                className="font-mono text-[9px] px-1 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20"
+                                title={`Креатив (UTM Content): ${lead.utmContent || lead.utm_content}`}
                               >
                                 Кр #{lead.utmContent || lead.utm_content}
                               </span>
                             )}
                           </div>
-                          {(lead.utmMedium || lead.utm_medium || lead.utmCampaign || lead.utm_campaign) && (
+                          {(lead.utmCampaign || lead.utm_campaign) && (
                             <span
-                              className="text-[11px] font-bold text-white/90 truncate block leading-tight hover:text-white"
-                              title={`Кампанія: ${lead.utmMedium || lead.utm_medium || ""}\nAdset: ${lead.utmCampaign || lead.utm_campaign || ""}`}
+                              className="text-[10px] font-semibold text-white/70 truncate block leading-tight hover:text-white"
+                              title={`Кампанія (UTM Campaign): ${lead.utmCampaign || lead.utm_campaign}`}
                             >
-                              {lead.utmMedium || lead.utm_medium || lead.utmCampaign || lead.utm_campaign}
-                            </span>
-                          )}
-                          {(lead.utmCampaign || lead.utm_campaign) && (lead.utmMedium || lead.utm_medium) && (
-                            <span
-                              className="text-[9px] text-white/40 truncate block font-mono"
-                              title={`Adset / Campaign: ${lead.utmCampaign || lead.utm_campaign}`}
-                            >
-                              {lead.utmCampaign || lead.utm_campaign}
+                              📢 {lead.utmCampaign || lead.utm_campaign}
                             </span>
                           )}
                         </div>
@@ -621,13 +624,10 @@ export const LeadsTab = React.memo(function LeadsTab({
           ) : (
             paginatedLeads.map((lead: any) => {
               const col = PIPELINE_COLUMNS.find((c) => c.key === lead.status) || PIPELINE_COLUMNS[0];
-              const isUnpaidIntent =
-                lead.history.some(
-                  (o: any) => o.status === "⏳ Очікується оплата" || (o.order_id && !o.order_id.startsWith("ELT_ORD_"))
-                ) &&
-                !lead.history.some(
-                  (o: any) => o.status === "Купив курс" || o.status === "Купив(-ла) Трипвайер" || o.amount > 0
-                );
+              const isRealUnpaid = Boolean(
+                (lead.is_unpaid_intent || lead.isUnpaidIntent) &&
+                (Number(lead.usd_attempted || 0) > 0 || Number(lead.uah_attempted || 0) > 0 || lead.status === "Відмова" || (lead.tags && lead.tags.some((t: string) => t.includes("кошик"))))
+              );
 
               return (
                 <div
@@ -648,8 +648,8 @@ export const LeadsTab = React.memo(function LeadsTab({
                           if (tag.includes("Оплачено") || tag === "Клієнт") {
                             return <span key={tag} className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{tag}</span>;
                           }
-                          if (tag.includes("Кинув кошик")) {
-                            return <span key={tag} className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-red-500/10 text-red-400 border border-red-500/20">{tag}</span>;
+                          if (tag.includes("кошик") || tag.includes("Покинутий")) {
+                            return <span key={tag} className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-red-500/10 text-red-400 border border-red-500/20">🛒 Покинутий кошик</span>;
                           }
                           if (tag.includes("Залишив заявку") || tag.includes("Анкета")) {
                             return <span key={tag} className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20">{tag}</span>;
@@ -659,6 +659,17 @@ export const LeadsTab = React.memo(function LeadsTab({
                           }
                           return <span key={tag} className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-purple-500/10 text-purple-400 border border-purple-500/20">{tag}</span>;
                         })}
+                        {(!lead.tags || lead.tags.length === 0) && (
+                          isRealUnpaid ? (
+                            <span className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-red-500/10 text-red-400 border border-red-500/20">
+                              🛒 Покинутий кошик
+                            </span>
+                          ) : (
+                            <span className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                              Зареєструвався
+                            </span>
+                          )
+                        )}
                       </h3>
                       <div
                         className={`text-[10px] ${textMutedClass} font-semibold truncate max-w-[200px]`}

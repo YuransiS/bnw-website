@@ -92,7 +92,7 @@ async function fetchMetaInsightsAsync(
     body: JSON.stringify({
       access_token: metaToken,
       level: "ad",
-      fields: "campaign_id,campaign_name,adset_id,ad_id,spend,impressions,clicks,date_start",
+      fields: "campaign_id,campaign_name,adset_id,ad_id,spend,impressions,clicks,actions,action_values,date_start",
       time_increment: 1,
       time_range: timeRange,
       limit: 500
@@ -321,6 +321,76 @@ export async function GET(req: Request) {
           }
         }
 
+        const actions = ins.actions || [];
+        const actionValues = ins.action_values || [];
+
+        // Comprehensive Meta Lead Resolution (Web Pixel, Onsite, Messaging, CAPI, Custom)
+        const primaryLeadAction = actions.find((a: any) =>
+          [
+            "offsite_conversion.fb_pixel_lead",
+            "onsite_web_lead",
+            "lead",
+            "onsite_conversion.lead_grouped",
+            "offsite_lead_add_20_s_calls"
+          ].includes(a.action_type)
+        );
+
+        const messagingLeadAction = actions.find((a: any) =>
+          [
+            "onsite_conversion.messaging_conversation_started_7d",
+            "onsite_conversion.total_messaging_connection"
+          ].includes(a.action_type)
+        );
+
+        const customLeadAction = actions.find((a: any) =>
+          typeof a.action_type === "string" && a.action_type.startsWith("offsite_conversion.custom.")
+        );
+
+        let metaLeads = 0;
+        if (primaryLeadAction) {
+          metaLeads = Number(primaryLeadAction.value || 0);
+        } else if (messagingLeadAction) {
+          metaLeads = Number(messagingLeadAction.value || 0);
+        } else if (customLeadAction) {
+          metaLeads = Number(customLeadAction.value || 0);
+        }
+
+        // Comprehensive Meta Purchase Resolution
+        const purchaseAction = actions.find((a: any) =>
+          [
+            "offsite_conversion.fb_pixel_purchase",
+            "onsite_web_purchase",
+            "omni_purchase",
+            "purchase",
+            "onsite_web_app_purchase",
+            "web_in_store_purchase",
+            "web_app_in_store_purchase",
+            "offsite_purchase_add_20_s_calls"
+          ].includes(a.action_type)
+        );
+        const metaPurchases = purchaseAction ? Number(purchaseAction.value || 0) : 0;
+
+        // Comprehensive Meta Purchase Value Resolution
+        const purchaseValAction = actionValues.find((a: any) =>
+          [
+            "offsite_conversion.fb_pixel_purchase",
+            "onsite_web_purchase",
+            "omni_purchase",
+            "purchase",
+            "onsite_web_app_purchase",
+            "web_in_store_purchase",
+            "web_app_in_store_purchase",
+            "offsite_purchase_add_20_s_calls"
+          ].includes(a.action_type)
+        );
+        const rawPurchaseValue = purchaseValAction ? Number(purchaseValAction.value || 0) : 0;
+        let metaPurchaseValueUsd = rawPurchaseValue;
+        if (currency === "UAH") {
+          metaPurchaseValueUsd = rawPurchaseValue / rates.usdToUah;
+        } else if (currency === "EUR") {
+          metaPurchaseValueUsd = rawPurchaseValue * (rates.eurToUah / rates.usdToUah);
+        }
+
         allRecords.push({
           project_id: projectId,
           date: ins.date_start,
@@ -334,7 +404,12 @@ export async function GET(req: Request) {
           spend: spend,
           spend_usd: Number(spendUsd.toFixed(2)),
           spend_uah: Number(spendUah.toFixed(2)),
-          spend_eur: Number(spendEur.toFixed(2))
+          spend_eur: Number(spendEur.toFixed(2)),
+          actions,
+          action_values: actionValues,
+          meta_leads: metaLeads,
+          meta_purchases: metaPurchases,
+          meta_purchase_value_usd: Number(metaPurchaseValueUsd.toFixed(2))
         });
 
         summary[slug] = (summary[slug] || 0) + spend;

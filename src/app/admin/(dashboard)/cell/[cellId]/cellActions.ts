@@ -92,159 +92,60 @@ export async function getCellAnalyticsAction(
       };
     }
 
-    // 3. Query orders for revenue
-    let ordersQuery = adminSupabase
-      .from("unified_orders")
-      .select("id, project_id, amount, status, created_at, metadata")
-      .in("project_id", projectIds)
-      .gt("amount", 0);
+    // 3. Fetch canonical KPI for each project in parallel
+    const startIso = startDateStr ? new Date(startDateStr).toISOString() : null;
+    const endIso = endDateStr ? new Date(`${endDateStr}T23:59:59.999Z`).toISOString() : null;
 
-    if (startDateStr) {
-      ordersQuery = ordersQuery.gte("created_at", `${startDateStr}T00:00:00.000Z`);
-    }
-    if (endDateStr) {
-      ordersQuery = ordersQuery.lte("created_at", `${endDateStr}T23:59:59.999Z`);
-    }
+    const [kpiResults, txRes, profileProjectsRes] = await Promise.all([
+      Promise.all(
+        projectIds.map(async (pid) => {
+          const { data } = await adminSupabase.rpc("get_project_aggregated_kpi", {
+            p_project_id: pid,
+            p_start_date: startIso,
+            p_end_date: endIso
+          });
+          return { projectId: pid, kpi: data || {} };
+        })
+      ),
+      (async () => {
+        let txQ = adminSupabase
+          .from("financial_transactions")
+          .select("project_id, amount, currency, type, date")
+          .in("project_id", projectIds)
+          .eq("type", "expense");
+        if (startDateStr) txQ = txQ.gte("date", startDateStr);
+        if (endDateStr) txQ = txQ.lte("date", endDateStr);
+        return txQ;
+      })(),
+      adminSupabase
+        .from("profile_projects")
+        .select("profile_id, project_id, profiles(id, email, full_name, avatar_url, role)")
+    ]);
 
-    const { data: dbOrders, error: ordersErr } = await ordersQuery;
-    if (ordersErr) throw ordersErr;
-
-    // 4. Query daily traffic spend (Meta Ads)
-    let trafficQuery = adminSupabase
-      .from("daily_traffic_and_costs")
-      .select("project_id, spend_usd, clicks, impressions, date")
-      .in("project_id", projectIds);
-
-    if (startDateStr) {
-      trafficQuery = trafficQuery.gte("date", startDateStr);
-    }
-    if (endDateStr) {
-      trafficQuery = trafficQuery.lte("date", endDateStr);
-    }
-
-    const { data: dbTraffic, error: trafficErr } = await trafficQuery;
-    if (trafficErr) throw trafficErr;
-
-    // 5. Query manual expense transactions (OPEX)
-    let txQuery = adminSupabase
-      .from("transactions")
-      .select("project_id, amount, currency, exchange_rate, type, date")
-      .in("project_id", projectIds)
-      .eq("type", "expense");
-
-    if (startDateStr) {
-      txQuery = txQuery.gte("date", startDateStr);
-    }
-    if (endDateStr) {
-      txQuery = txQuery.lte("date", endDateStr);
-    }
-
-    const { data: dbTransactions } = await txQuery;
-
-    // 6. Query profile_projects to map producers
-    const { data: dbProfileProjects } = await adminSupabase
-      .from("profile_projects")
-      .select("profile_id, project_id, profiles(id, email, full_name, avatar_url, role)");
+    const kpiMap = new Map(kpiResults.map((r) => [r.projectId, r.kpi]));
+    const dbTransactions = txRes.data || [];
+    const dbProfileProjects = profileProjectsRes.data || [];
 
     const cellProfileProjects = (dbProfileProjects || []).filter((pp: any) =>
       projectIds.includes(pp.project_id) && pp.profiles?.role === "producer"
     );
 
-    // Standard CRM conversion rate: 1 USD = 41.80 UAH, 1 EUR = 44.50 UAH
-    const USD_TO_UAH = 41.80;
-    const EUR_TO_UAH = 44.50;
+    // Standard conversion rate fallback
+    const USD_TO_UAH = 41.50;
+    const EUR_TO_UAH = 44.80;
 
-    // Build project-level stats
-    const projectStatsMap = new Map<string, {
-      revenueUah: number;
-      revenueUsd: number;
-      trafficSpendUsd: number;
-      trafficSpendUah: number;
-      opexSpendUah: number;
-      totalSpendUah: number;
-      leadsCount: number;
-      salesCount: number;
-    }>();
-
-    projectIds.forEach(id => {
-      projectStatsMap.set(id, {
-        revenueUah: 0,
-        revenueUsd: 0,
-        trafficSpendUsd: 0,
-        trafficSpendUah: 0,
-        opexSpendUah: 0,
-        totalSpendUah: 0,
-        leadsCount: 0,
-        salesCount: 0
-      });
-    });
-
-    // Aggregate Orders
-    (dbOrders || []).forEach((o: any) => {
-      const pStats = projectStatsMap.get(o.project_id);
-      if (!pStats) return;
-
-      const rawAmount = Number(o.amount || 0);
-      const meta = o.metadata || {};
-      const curr = String(meta.currency || meta.lead?.currency || "UAH").toUpperCase();
-      const statusLower = String(o.status || "").toLowerCase();
-
-      // Check if not a bounce/click
-      const isLead = !["клик", "кликформы", "отказ", "відмова"].includes(statusLower);
-      if (isLead) {
-        pStats.leadsCount += 1;
-      }
-
-      // Only count successfully paid orders towards revenue and sales count
-      const isPaid = isPaidStatus(o.status);
-      if (isPaid && rawAmount > 0) {
-        // Convert order amount to UAH & USD
-        let uahVal = rawAmount;
-        let usdVal = rawAmount / USD_TO_UAH;
-
-        if (curr === "USD" || curr === "$") {
-          uahVal = rawAmount * USD_TO_UAH;
-          usdVal = rawAmount;
-        } else if (curr === "EUR" || curr === "€") {
-          uahVal = rawAmount * EUR_TO_UAH;
-          usdVal = rawAmount * 1.08;
-        }
-
-        pStats.revenueUah += uahVal;
-        pStats.revenueUsd += usdVal;
-        pStats.salesCount += 1;
-      }
-    });
-
-    // Aggregate Traffic Spend
-    (dbTraffic || []).forEach((t: any) => {
-      const pStats = projectStatsMap.get(t.project_id);
-      if (!pStats) return;
-
-      const spendUSD = Number(t.spend_usd || 0);
-      pStats.trafficSpendUsd += spendUSD;
-      pStats.trafficSpendUah += spendUSD * USD_TO_UAH;
-    });
-
-    // Aggregate OPEX Transactions
-    (dbTransactions || []).forEach((tx: any) => {
-      const pStats = projectStatsMap.get(tx.project_id);
-      if (!pStats) return;
-
+    // Aggregate OPEX by project
+    const opexByProject = new Map<string, number>();
+    projectIds.forEach(id => opexByProject.set(id, 0));
+    dbTransactions.forEach((tx: any) => {
       const rawAmount = Number(tx.amount || 0);
       const curr = String(tx.currency || "UAH").toUpperCase();
       let uahVal = rawAmount;
-
-      if (curr === "USD") {
-        uahVal = rawAmount * USD_TO_UAH;
-      } else if (curr === "EUR") {
-        uahVal = rawAmount * EUR_TO_UAH;
-      }
-
-      pStats.opexSpendUah += uahVal;
+      if (curr === "USD") uahVal = rawAmount * USD_TO_UAH;
+      else if (curr === "EUR") uahVal = rawAmount * EUR_TO_UAH;
+      opexByProject.set(tx.project_id, (opexByProject.get(tx.project_id) || 0) + uahVal);
     });
 
-    // Finalize Project stats array
     let totalCellRevenueUah = 0;
     let totalCellRevenueUsd = 0;
     let totalCellTrafficUsd = 0;
@@ -252,16 +153,22 @@ export async function getCellAnalyticsAction(
     let totalCellSpendUah = 0;
 
     const cellProjectsList = projects.map(p => {
-      const stats = projectStatsMap.get(p.id)!;
-      const totalSpend = stats.trafficSpendUah + stats.opexSpendUah;
-      const profit = stats.revenueUah - totalSpend;
-      const roi = totalSpend > 0 ? (profit / totalSpend) * 100 : 0;
-      const cpl = stats.leadsCount > 0 ? totalSpend / stats.leadsCount : 0;
+      const kpi = kpiMap.get(p.id) || {};
+      const revenueUah = Number(kpi.total_revenue_uah || 0);
+      const revenueUsd = Number(kpi.total_revenue_usd || 0);
+      const trafficSpendUsd = Number(kpi.spend_usd || 0);
+      const trafficSpendUah = Number(kpi.spend_uah || 0);
+      const opexSpendUah = Number(kpi.opex_uah || (opexByProject.get(p.id) || 0));
+      const totalSpend = Number(kpi.total_spend_uah || (trafficSpendUah + opexSpendUah));
+      const profit = Number(kpi.total_profit_uah || (revenueUah - totalSpend));
+      const roi = Number(kpi.roi || (totalSpend > 0 ? (profit / totalSpend) * 100 : 0));
+      const leadsCount = Number(kpi.total_leads || 0);
+      const cpl = Number(kpi.cpl_uah || (leadsCount > 0 ? totalSpend / leadsCount : 0));
 
-      totalCellRevenueUah += stats.revenueUah;
-      totalCellRevenueUsd += stats.revenueUsd;
-      totalCellTrafficUsd += stats.trafficSpendUsd;
-      totalCellOpexUah += stats.opexSpendUah;
+      totalCellRevenueUah += revenueUah;
+      totalCellRevenueUsd += revenueUsd;
+      totalCellTrafficUsd += trafficSpendUsd;
+      totalCellOpexUah += opexSpendUah;
       totalCellSpendUah += totalSpend;
 
       return {
@@ -270,13 +177,13 @@ export async function getCellAnalyticsAction(
         project_slug: p.slug,
         cell_id: p.cell_id,
         financial_goal_plan_usd: Number(p.financial_goal_plan_usd || 0),
-        revenue_uah: stats.revenueUah,
-        revenue_usd: stats.revenueUsd,
+        revenue_uah: revenueUah,
+        revenue_usd: revenueUsd,
         expenses_uah: totalSpend,
-        traffic_spend_usd: stats.trafficSpendUsd,
-        opex_spend_uah: stats.opexSpendUah,
+        traffic_spend_usd: trafficSpendUsd,
+        opex_spend_uah: opexSpendUah,
         profit_uah: profit,
-        leads_count: stats.leadsCount,
+        leads_count: leadsCount,
         cpl: Math.round(cpl),
         roi: Number(roi.toFixed(1))
       };

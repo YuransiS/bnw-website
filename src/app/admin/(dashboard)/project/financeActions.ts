@@ -116,7 +116,7 @@ export async function getFinanceSummaryAction(
     // 3. Fetch traffic spend from daily_traffic_and_costs
     let trafficQuery = adminSupabase
       .from("daily_traffic_and_costs")
-      .select("spend_usd")
+      .select("spend_usd, spend")
       .eq("project_id", projectId);
 
     if (startDateStr) {
@@ -127,7 +127,7 @@ export async function getFinanceSummaryAction(
     }
 
     const { data: dbTraffic } = await trafficQuery;
-    const totalTrafficFromDbUSD = (dbTraffic || []).reduce((sum: number, t: any) => sum + Number(t.spend_usd || 0), 0);
+    const totalTrafficFromDbUSD = (dbTraffic || []).reduce((sum: number, t: any) => sum + Number(t.spend_usd || t.spend || 0), 0);
 
     // Calculate aggregated metrics
     let totalIncomeUSD = 0;
@@ -169,8 +169,16 @@ export async function getFinanceSummaryAction(
       refunds: 0
     };
 
-    // Aggregate automated revenue from unified_orders
-    (dbOrders || []).forEach((order) => {
+    // Aggregate automated revenue from unified_orders (with deduplication matching SQL RPC)
+    const seenOrderKeys = new Set<string>();
+    const deduplicatedOrders = (dbOrders || []).filter((order) => {
+      const orderKey = order.order_id ? String(order.order_id).trim() : String(order.id);
+      if (seenOrderKeys.has(orderKey)) return false;
+      seenOrderKeys.add(orderKey);
+      return true;
+    });
+
+    deduplicatedOrders.forEach((order) => {
       if (!isPaidStatus(order.status)) return;
 
       const rawAmount = Number(order.amount || 0);

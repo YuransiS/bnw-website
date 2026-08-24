@@ -278,9 +278,12 @@ export default function PerformanceView({
       {/* 1. Header Toolbar */}
       <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${cardClass} p-4 rounded-2xl`}>
         <div className="space-y-1">
-          <h3 className={`text-sm font-black uppercase tracking-widest ${textClass}`}>Аналітика Трафіку та Витрат</h3>
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)] animate-pulse" />
+            <h3 className={`text-sm font-black uppercase tracking-widest ${textClass}`}>Аналітика Трафіку Meta Ads (Pixel & CAPI)</h3>
+          </div>
           <p className={`text-[11px] ${textMutedClass} font-semibold`}>
-            Детальні звіти по окупності реклами Meta Ads. Курс НБУ: <span className="text-emerald-450">{data?.usdRate || 41.0} ₴/$</span>
+            Прямі дані рекламного кабінету Meta Ads. Курс НБУ: <span className="text-emerald-450">{data?.usdRate || 41.0} ₴/$</span>
           </p>
         </div>
 
@@ -350,7 +353,7 @@ export default function PerformanceView({
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <div className={`${cardClass} p-4 rounded-2xl space-y-1`}>
             <div className="flex justify-between items-center text-neutral-400">
-              <span className="text-[10px] font-black uppercase tracking-wider">Бюджет (Spend)</span>
+              <span className="text-[10px] font-black uppercase tracking-wider">Бюджет Meta (Spend)</span>
               <Coins className="w-4 h-4 text-emerald-450" />
             </div>
             <p className={`text-lg font-black ${textClass}`}>{formatUSD(totals.spend)}</p>
@@ -358,7 +361,7 @@ export default function PerformanceView({
 
           <div className={`${cardClass} p-4 rounded-2xl space-y-1`}>
             <div className="flex justify-between items-center text-neutral-400">
-              <span className="text-[10px] font-black uppercase tracking-wider">Кліки</span>
+              <span className="text-[10px] font-black uppercase tracking-wider">Кліки (Meta)</span>
               <MousePointerClick className="w-4 h-4 text-sky-400" />
             </div>
             <p className={`text-lg font-black ${textClass}`}>{totals.clicks.toLocaleString()}</p>
@@ -366,7 +369,7 @@ export default function PerformanceView({
 
           <div className={`${cardClass} p-4 rounded-2xl space-y-1`}>
             <div className="flex justify-between items-center text-neutral-400">
-              <span className="text-[10px] font-black uppercase tracking-wider">Реєстрації (Ліди)</span>
+              <span className="text-[10px] font-black uppercase tracking-wider">Ліди (Meta Pixel / Direct)</span>
               <Eye className="w-4 h-4 text-violet-400" />
             </div>
             <p className={`text-lg font-black ${textClass}`}>{totals.leads_count.toLocaleString()}</p>
@@ -375,16 +378,16 @@ export default function PerformanceView({
 
           <div className={`${cardClass} p-4 rounded-2xl space-y-1`}>
             <div className="flex justify-between items-center text-neutral-400">
-              <span className="text-[10px] font-black uppercase tracking-wider">Продажі</span>
+              <span className="text-[10px] font-black uppercase tracking-wider">Продажі (Meta Pixel)</span>
               <CheckCircle className="w-4 h-4 text-emerald-400" />
             </div>
             <p className={`text-lg font-black ${textClass}`}>{totals.sales.toLocaleString()}</p>
-            <p className={`text-[9px] font-extrabold ${textMutedClass} uppercase`}>Конв: {totals.appCr}%</p>
+            <p className={`text-[9px] font-extrabold ${textMutedClass} uppercase`}>CPA: {formatUSD(totals.cpa)}</p>
           </div>
 
           <div className={`${cardClass} p-4 rounded-2xl col-span-2 lg:col-span-1 space-y-1`}>
             <div className="flex justify-between items-center text-neutral-400">
-              <span className="text-[10px] font-black uppercase tracking-wider">Выручка (ROAS)</span>
+              <span className="text-[10px] font-black uppercase tracking-wider">Дохід Meta (ROAS)</span>
               <TrendingUp className="w-4 h-4 text-yellow-400" />
             </div>
             <p className={`text-lg font-black ${textClass}`}>{formatUSD(totals.usd_revenue)}</p>

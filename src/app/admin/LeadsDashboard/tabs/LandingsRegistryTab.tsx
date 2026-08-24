@@ -22,6 +22,7 @@ import { useTheme } from "../../ThemeProvider";
 import { pingAllProjectsAction, getProjectLandingsRegistryAction } from "../../actions";
 import { DEFAULT_PROJECT_LANDINGS } from "@/lib/projectLandings";
 import ProjectSettingsModal from "../components/ProjectSettingsModal";
+import { ParabolicProgressBar } from "@/components/ui/ParabolicProgressBar";
 
 interface LandingsRegistryTabProps {
   activeSlug: string;
@@ -127,6 +128,7 @@ export default function LandingsRegistryTab({
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Header & KPI Card */}
       <div className="bg-crm-card border border-crm-border rounded-3xl p-6 shadow-xl relative overflow-hidden">
+        <ParabolicProgressBar isLoading={isLoading} className="absolute top-0 left-0 right-0" />
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">

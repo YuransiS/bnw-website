@@ -16,6 +16,7 @@ import {
   AlertCircle
 } from "lucide-react";
 import { deleteTransactionAction } from "../../(dashboard)/project/financeActions";
+import { ParabolicProgressBar } from "@/components/ui/ParabolicProgressBar";
 
 interface Transaction {
   id: string;
@@ -124,7 +125,8 @@ export default function CashflowFeed({
           </div>
         </div>
       ) : (
-        <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1.5 scrollbar-thin scrollbar-thumb-white/10">
+        <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1.5 scrollbar-thin scrollbar-thumb-white/10 relative">
+          <ParabolicProgressBar isLoading={isLoadingMore} className="rounded-full mb-2" />
           {transactions.map((tx) => (
             <div 
               key={tx.id} 

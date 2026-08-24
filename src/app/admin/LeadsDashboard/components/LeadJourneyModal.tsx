@@ -247,13 +247,16 @@ export default function LeadJourneyModal({
               };
 
               const firstTouch = history[0];
-              const convertingTouch = history.find((h: any) =>
-                ["closed_won", "approved", "оплачено", "купив курс", "купив_курс", "купив трипвайєр", "купив трипвайер"].includes(String(h.status).toLowerCase())
-              ) || history[history.length - 1];
+              const paidTouch = history.find((h: any) =>
+                isPaidStatus(h.status) || ["closed_won", "approved", "оплачено", "купив курс", "купив_курс", "купив трипвайєр", "купив трипвайер"].includes(String(h.status || "").toLowerCase().trim())
+              );
+              const lastTouch = history[history.length - 1];
+              const isConversion = Boolean(paidTouch);
+              const targetTouch = paidTouch || lastTouch;
 
               const firstOffer = firstTouch?.offer_id || firstTouch?.metadata?.offer_id || firstTouch?.metadata?.o || "";
-              const convertingOffer = convertingTouch?.offer_id || convertingTouch?.metadata?.offer_id || convertingTouch?.metadata?.o || "";
-              const convertingPromo = convertingTouch?.promo_id || convertingTouch?.metadata?.promo_id || convertingTouch?.metadata?.p || "";
+              const targetOffer = targetTouch?.offer_id || targetTouch?.metadata?.offer_id || targetTouch?.metadata?.o || "";
+              const targetPromo = targetTouch?.promo_id || targetTouch?.metadata?.promo_id || targetTouch?.metadata?.p || "";
 
               return (
                 <div className="bg-gradient-to-r from-purple-500/10 via-blue-500/10 to-emerald-500/10 border border-white/10 rounded-2xl p-4 space-y-3 shadow-xl backdrop-blur-md">
@@ -263,7 +266,7 @@ export default function LeadJourneyModal({
                       Сквозна атрибуція 360°
                     </span>
                     <span className="text-[9px] font-extrabold text-white/40 uppercase">
-                      Торкань: {history.length}
+                      Всього дій: {history.length}
                     </span>
                   </div>
 
@@ -287,25 +290,25 @@ export default function LeadJourneyModal({
                     </div>
 
                     <div className="space-y-1 bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
-                      <span className="text-[9px] font-black uppercase text-emerald-400 tracking-wider block">
-                        🎯 Конвертуюче торкання (Last Touch)
+                      <span className={`text-[9px] font-black uppercase tracking-wider block ${isConversion ? "text-emerald-400" : "text-amber-400"}`}>
+                        {isConversion ? "🎯 Конвертуюча дія (Оплата)" : "📌 Останнє торкання (Last Touch)"}
                       </span>
                       <p className="text-white font-bold truncate">
-                        Статус: {convertingTouch?.status || "Візит"}
+                        Статус: {targetTouch?.status || "Візит"}
                       </p>
                       <p className="text-white/70 text-[10px] truncate">
                         <span className="text-white/40">Лендинг: </span>
-                        <span className="font-semibold text-emerald-400/90">{getTouchLandingDisplay(convertingTouch)}</span>
+                        <span className="font-semibold text-emerald-400/90">{getTouchLandingDisplay(targetTouch)}</span>
                       </p>
                       <div className="flex flex-wrap gap-1 mt-1">
-                        {convertingOffer && (
+                        {targetOffer && (
                           <span className="inline-block px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-[9px] text-purple-300 font-mono">
-                            ?o={convertingOffer}
+                            ?o={targetOffer}
                           </span>
                         )}
-                        {convertingPromo && (
+                        {targetPromo && (
                           <span className="inline-block px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-[9px] text-amber-300 font-mono">
-                            ?p={convertingPromo}
+                            ?p={targetPromo}
                           </span>
                         )}
                       </div>
@@ -416,25 +419,30 @@ export default function LeadJourneyModal({
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-[11px] border-t border-white/5 pt-3">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-[11px] border-t border-white/5 pt-3">
                       <div>
-                        <span className="text-white/30 font-bold uppercase text-[9px] block">Джерело (UTM)</span>
+                        <span className="text-white/40 font-bold uppercase text-[9px] block">Джерело (UTM Source)</span>
                         <span className="text-white font-extrabold uppercase tracking-wide bg-white/5 px-2 py-0.5 rounded mt-1 inline-block text-[10px]">
-                          {touch.utm_source || touch.metadata?.raw_row?.utm_source || "direct"}
+                          {touch.utm_source || touch.metadata?.raw_row?.utm_source || "Прямий перехід"}
                         </span>
                       </div>
 
-                      {(touch.utm_medium || touch.metadata?.raw_row?.utm_medium || touch.utm_campaign || touch.metadata?.raw_row?.utm_campaign) && (
-                        <div>
-                          <span className="text-white/30 font-bold uppercase text-[9px] block">Кампанія</span>
-                          <span
-                            className="text-white/90 font-bold truncate block mt-1 text-[10px]"
-                            title={touch.utm_medium || touch.metadata?.raw_row?.utm_medium || touch.utm_campaign || touch.metadata?.raw_row?.utm_campaign}
-                          >
-                            {touch.utm_medium || touch.metadata?.raw_row?.utm_medium || touch.utm_campaign || touch.metadata?.raw_row?.utm_campaign}
-                          </span>
-                        </div>
-                      )}
+                      <div>
+                        <span className="text-white/40 font-bold uppercase text-[9px] block">Канал (UTM Medium)</span>
+                        <span className="text-white/90 font-bold truncate block mt-1 text-[10px]">
+                          {touch.utm_medium || touch.metadata?.raw_row?.utm_medium || "—"}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="text-white/40 font-bold uppercase text-[9px] block">Кампанія (UTM Campaign)</span>
+                        <span
+                          className="text-white/90 font-bold truncate block mt-1 text-[10px]"
+                          title={touch.utm_campaign || touch.metadata?.raw_row?.utm_campaign || "—"}
+                        >
+                          {touch.utm_campaign || touch.metadata?.raw_row?.utm_campaign || "—"}
+                        </span>
+                      </div>
 
                       {(() => {
                         const amt = Number(
@@ -454,12 +462,21 @@ export default function LeadJourneyModal({
                         const isExplicitEur = ["EUR", "eur", "€", "Eur"].includes(metaCurrency);
                         const isExplicitUsd = ["USD", "usd", "Usd", "$"].includes(metaCurrency);
                         const formattedAmount = isExplicitEur ? `${formatLocaleNumber(amt)} €` : isExplicitUsd ? `$${formatLocaleNumber(amt)}` : `${formatLocaleNumber(amt)} ₴`;
+                        
+                        const isTouchPaid = isPaidStatus(touch.status);
+                        
                         return (
                           <div>
-                            <span className="text-white/30 font-bold uppercase text-[9px] block">
-                              {isCheckoutIntent ? "Сума оферу" : "Оплачено"}
+                            <span className="text-white/40 font-bold uppercase text-[9px] block">
+                              {isTouchPaid 
+                                ? "Оплачено" 
+                                : isDecline 
+                                ? "Спроба оплати (Відхилено)" 
+                                : isCheckoutIntent 
+                                ? "Сума в кошику" 
+                                : "Сума замовлення"}
                             </span>
-                            <span className={`${isCheckoutIntent ? "text-amber-400" : "text-emerald-455"} font-black text-sm block mt-1`}>
+                            <span className={`${isTouchPaid ? "text-emerald-455" : isDecline ? "text-rose-400 line-through opacity-80" : "text-amber-400"} font-black text-sm block mt-1`}>
                               {formattedAmount}
                             </span>
                           </div>

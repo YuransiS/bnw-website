@@ -59,8 +59,8 @@ export default async function CellDashboardPage({ params }: PageProps) {
 
   const cellProjIds = (dbCellProjects || []).map((p: any) => p.id);
 
-  // 3. Fetch comprehensive multi-currency cell analytics for all-time initial view
-  const analyticsRes = await getCellAnalyticsAction(cellId, "all");
+  // 3. Fetch comprehensive multi-currency cell analytics for current month initial view
+  const analyticsRes = await getCellAnalyticsAction(cellId, "this_month");
   const analytics = analyticsRes.data || {
     cellRevenueUah: 0,
     cellTotalSpendUah: 0,

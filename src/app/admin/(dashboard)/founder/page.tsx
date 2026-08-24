@@ -1,74 +1,32 @@
 import React from "react";
-import Link from "next/link";
-import { getUnifiedCRMData, getGlobalTaskLogsAction, getCellsAction } from "../../actions";
-import { createAdminClient } from "@/utils/supabase/server";
-import { Layers, Users, BarChart4, ClipboardCheck, ArrowRight, ShieldAlert, Award, Calendar } from "lucide-react";
+import { getFounderDashboardDataAction } from "../../actions";
 import FounderDashboardClient from "./FounderDashboardClient";
 
 export const revalidate = 0;
 
 export default async function FounderDashboardPage() {
-  // 1. Fetch data
-  const initialData = await getUnifiedCRMData("all");
-  const taskLogsResult = await getGlobalTaskLogsAction();
-  const cellsResult = await getCellsAction();
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth();
+  const startStr = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const endStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 
-  const taskLogs = Array.isArray(taskLogsResult) ? taskLogsResult : [];
-  const cells = Array.isArray(cellsResult) ? cellsResult : [];
-
-  const summaryData = initialData.summaryData || [];
-  const leaderboard = initialData.producersLeaderboard || [];
-  
-  // Load cell_id mappings for projects
-  const adminSupabase = createAdminClient();
-  const { data: dbProjects } = await adminSupabase.from("projects").select("id, cell_id");
-  const projectCellMap = new Map((dbProjects || []).map((p: any) => [p.id, p.cell_id]));
-
-  const summaryDataWithCell = summaryData.map((p: any) => ({
-    ...p,
-    cell_id: projectCellMap.get(p.project_id) || null
-  }));
-
-  // Calculate global metrics
-  let totalRevenueUah = 0;
-  let totalSpendUah = 0;
-  summaryDataWithCell.forEach((p: any) => {
-    totalRevenueUah += Number(p.revenue_uah || 0);
-    totalSpendUah += Number(p.expenses_uah || 0);
-  });
-  const totalProfitUah = totalRevenueUah - totalSpendUah;
-  const globalRoi = totalSpendUah > 0 ? (totalProfitUah / totalSpendUah) * 100 : 0;
-
-  // Group projects by cells
-  const cellsWithProjects = cells.map((cell: any) => {
-    const projects = summaryDataWithCell.filter((p: any) => p.cell_id === cell.id);
-    let cellRevenue = 0;
-    let cellSpend = 0;
-    projects.forEach((p: any) => {
-      cellRevenue += Number(p.revenue_uah || 0);
-      cellSpend += Number(p.expenses_uah || 0);
-    });
-    return {
-      ...cell,
-      projects,
-      revenue: cellRevenue,
-      spend: cellSpend,
-      profit: cellRevenue - cellSpend
-    };
-  });
-
-  const unassignedProjects = summaryDataWithCell.filter((p: any) => !p.cell_id && p.slug !== "bw_main");
+  const initialData = await getFounderDashboardDataAction(startStr, endStr);
 
   return (
     <FounderDashboardClient
-      cellsWithProjects={cellsWithProjects}
-      unassignedProjects={unassignedProjects}
-      leaderboard={leaderboard}
-      taskLogs={taskLogs}
-      totalRevenueUah={totalRevenueUah}
-      totalSpendUah={totalSpendUah}
-      totalProfitUah={totalProfitUah}
-      globalRoi={globalRoi}
+      cellsWithProjects={initialData.cellsWithProjects || []}
+      unassignedProjects={initialData.unassignedProjects || []}
+      leaderboard={initialData.leaderboard || []}
+      taskLogs={initialData.taskLogs || []}
+      totalRevenueUah={initialData.totalRevenueUah || 0}
+      totalSpendUah={initialData.totalSpendUah || 0}
+      totalProfitUah={initialData.totalProfitUah || 0}
+      globalRoi={initialData.globalRoi || 0}
+      initialStartDate={startStr}
+      initialEndDate={endStr}
+      isDevOrAdmin={initialData.isDevOrAdmin}
     />
   );
 }

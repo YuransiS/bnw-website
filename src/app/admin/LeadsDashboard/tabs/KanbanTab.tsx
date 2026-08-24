@@ -154,10 +154,10 @@ export const KanbanTab = React.memo(function KanbanTab({
               🎯 Торкання: Всі
             </option>
             <option value="multi" className={optionClass}>
-              ⚡ Мульти (2+)
+              ⚡ Повторні (2+)
             </option>
             <option value="single" className={optionClass}>
-              👤 Одиночні (1)
+              👤 Первинні (1)
             </option>
           </select>
           <ChevronDown
@@ -175,7 +175,7 @@ export const KanbanTab = React.memo(function KanbanTab({
             className={`w-full appearance-none pl-4 pr-10 py-2.5 rounded-xl focus:outline-none text-xs font-extrabold cursor-pointer ${selectClass}`}
           >
             <option value="all" className={optionClass}>
-              📊 Воронка: Всі
+              📊 Всі воронки
             </option>
             {uniqueSources.map((source: string) => (
               <option key={source} value={source} className={optionClass}>

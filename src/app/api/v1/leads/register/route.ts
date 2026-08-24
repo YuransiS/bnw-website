@@ -128,15 +128,40 @@ export async function POST(req: Request) {
       });
     }
 
-    // 3. Выделение и нормализация контактных данных лида
+    // 3. Выделение и нормализация контактных данных лида (E.164 & Clean CRM Standard)
     const name = lead.name || null;
-    let phone = lead.phone ? String(lead.phone).trim() : null;
-    let email = lead.email ? String(lead.email).trim().toLowerCase() : null;
-    let telegram = lead.telegram ? String(lead.telegram).trim() : null;
+    let rawPhone = lead.phone ? String(lead.phone).trim().replace(/\s+/g, '') : null;
+    let phone: string | null = null;
 
-    phone = phone ? phone.replace(/\s+/g, '') : null;
-    email = email || null;
-    telegram = telegram || null;
+    if (rawPhone) {
+      const cleanDigits = rawPhone.replace(/[^0-9]/g, '');
+      if (rawPhone.startsWith('+')) {
+        phone = rawPhone;
+      } else if (cleanDigits.length === 12 && cleanDigits.startsWith('380')) {
+        phone = `+${cleanDigits}`;
+      } else if (cleanDigits.length === 10 && cleanDigits.startsWith('0')) {
+        phone = `+38${cleanDigits}`;
+      } else if (cleanDigits.length === 9) {
+        phone = `+380${cleanDigits}`;
+      } else if (cleanDigits.length >= 10 && cleanDigits.length <= 14) {
+        phone = `+${cleanDigits}`;
+      } else if (cleanDigits.length >= 7) {
+        phone = cleanDigits;
+      }
+    }
+
+    let email = lead.email ? String(lead.email).trim().toLowerCase() : null;
+    email = email && email.includes('@') && email.length >= 5 ? email : null;
+
+    let telegram = lead.telegram ? String(lead.telegram).trim() : null;
+    if (telegram) {
+      if (telegram.startsWith('@')) {
+        telegram = telegram.substring(1).trim();
+      }
+      if (telegram.length < 2 || ['none', 'null', 'undefined', 'test', 'user', 'tg'].includes(telegram.toLowerCase())) {
+        telegram = null;
+      }
+    }
 
     if (!phone && !email && !telegram) {
       return NextResponse.json(
@@ -237,11 +262,36 @@ export async function POST(req: Request) {
     const resolvedCurrency = String(rawCurr).trim().toUpperCase();
     meta.currency = resolvedCurrency;
 
+    // Auto-classify product_type
+    const amount = Number(lead.amount || 0);
+    const rawProductType = lead.product_type || meta.product_type || null;
+    let resolvedProductType = rawProductType;
+    if (!resolvedProductType) {
+      const pagePathLower = String(page_path || "").toLowerCase();
+      const isTripwire = 
+        ['sofia', 'valeria'].includes(project_slug) ||
+        lead.status === "Купив(-ла) Трипвайер" ||
+        pagePathLower.includes("minicourse") ||
+        pagePathLower.includes("tripwire") ||
+        pagePathLower.includes("practicum") ||
+        pagePathLower.includes("intensive") ||
+        (resolvedCurrency === 'UAH' && amount > 0 && amount <= 2500) ||
+        (resolvedCurrency === 'USD' && amount > 0 && amount <= 60);
+
+      if (amount <= 0) {
+        resolvedProductType = 'lead';
+      } else if (isTripwire) {
+        resolvedProductType = 'tripwire';
+      } else {
+        resolvedProductType = 'course';
+      }
+    }
+    meta.product_type = resolvedProductType;
+
     // Fetch today's NBU rates and store in metadata for exact conversion
     try {
       const { getExchangeRates } = await import('@/lib/exchange-rate');
       const todayRates = await getExchangeRates();
-      const amount = Number(lead.amount || 0);
       const currencyLower = resolvedCurrency.toLowerCase();
 
       meta.usd_rate = todayRates.usdRate;

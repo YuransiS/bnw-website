@@ -51,14 +51,14 @@ export const DEFAULT_PROJECT_LANDINGS: Record<string, ProjectLandingItem[]> = {
     { label: "Практикум", url: "https://victoria-mc.vercel.app/practicum", path: "/practicum", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20", type: "paid", parameters: [] }
   ],
   sofia: [
-    { label: "Основний", url: "https://sofifinsight.vercel.app/", path: "/", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "free", parameters: [] },
-    { label: "Інтенсив", url: "https://sofifinsight.vercel.app/intensive", path: "/intensive", badgeColor: "bg-teal-500/10 text-teal-400 border border-teal-500/20", type: "free", parameters: [] },
-    { label: "Вебінар", url: "https://sofifinsight.vercel.app/web", path: "/web", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20", type: "free", parameters: [] },
-    { label: "VSL Sofia Invest", url: "https://sofifinsight.vercel.app/sofia-invest", path: "/sofia-invest", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20", type: "free", parameters: [] },
-    { label: "Міні-курс", url: "https://sofifinsight.vercel.app/minicourse", path: "/minicourse", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20", type: "paid", parameters: [] },
-    { label: "Тарифи / Ціни", url: "https://sofifinsight.vercel.app/price", path: "/price", badgeColor: "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20", type: "paid", parameters: [] },
-    { label: "Діагностика", url: "https://sofifinsight.vercel.app/diagnostics", path: "/diagnostics", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "quiz", parameters: [] },
-    { label: "Оплата Чек-аут", url: "https://sofifinsight.vercel.app/checkout", path: "/checkout", badgeColor: "bg-orange-500/10 text-orange-400 border border-orange-500/20", type: "paid", parameters: [] }
+    { label: "Основний", url: "https://economica.vercel.app/", path: "/", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "free", parameters: [] },
+    { label: "Інтенсив", url: "https://economica.vercel.app/intensive", path: "/intensive", badgeColor: "bg-teal-500/10 text-teal-400 border border-teal-500/20", type: "free", parameters: [] },
+    { label: "Вебінар", url: "https://economica.vercel.app/web", path: "/web", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20", type: "free", parameters: [] },
+    { label: "VSL Sofia Invest", url: "https://economica.vercel.app/sofia-invest", path: "/sofia-invest", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20", type: "free", parameters: [] },
+    { label: "Міні-курс", url: "https://economica.vercel.app/minicourse", path: "/minicourse", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20", type: "paid", parameters: [] },
+    { label: "Тарифи / Ціни", url: "https://economica.vercel.app/price", path: "/price", badgeColor: "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20", type: "paid", parameters: [] },
+    { label: "Діагностика", url: "https://economica.vercel.app/diagnostics", path: "/diagnostics", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "quiz", parameters: [] },
+    { label: "Оплата Чек-аут", url: "https://economica.vercel.app/checkout", path: "/checkout", badgeColor: "bg-orange-500/10 text-orange-400 border border-orange-500/20", type: "paid", parameters: [] }
   ],
   valeria: [
     { label: "Основний", url: "https://pix-ai-ua.vercel.app/", path: "/", badgeColor: "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20", type: "free", parameters: [] },
@@ -84,9 +84,10 @@ export const DEFAULT_PROJECT_LANDINGS: Record<string, ProjectLandingItem[]> = {
     { label: "Марафон", url: "https://vova-win.club/marathon", path: "/marathon", badgeColor: "bg-orange-500/10 text-orange-400 border border-orange-500/20", type: "paid", parameters: [] }
   ],
   anastasia_sych: [
-    { label: "Основний", url: "https://anastasia-sych.vercel.app/", path: "/", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20", type: "free", parameters: [] },
-    { label: "Діагностика", url: "https://anastasia-sych.vercel.app/diagnostic", path: "/diagnostic", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "quiz", parameters: [] },
-    { label: "Міні-курс Талія", url: "https://anastasia-sych.vercel.app/mini-course/waist", path: "/mini-course/waist", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "paid", parameters: [] }
+    { label: "Основний", url: "https://anastasiia-sych.vercel.app/", path: "/", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20", type: "free", parameters: [] },
+    { label: "Консультація", url: "https://anastasiia-sych.vercel.app/consultation", path: "/consultation", badgeColor: "bg-blue-500/10 text-blue-400 border border-blue-500/20", type: "free", parameters: [] },
+    { label: "Діагностика", url: "https://anastasiia-sych.vercel.app/diagnostic", path: "/diagnostic", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "quiz", parameters: [] },
+    { label: "Сторінка Подяки", url: "https://anastasiia-sych.vercel.app/thank-you", path: "/thank-you", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "thank_you", parameters: [] }
   ],
   nesoniaa: [
     { label: "Головна", url: "https://nesoniaa.vercel.app/", path: "/", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "free", parameters: [] },

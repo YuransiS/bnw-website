@@ -41,6 +41,7 @@
 * `src/app/api/v1/landings/route.ts` — HTTP GET API-эндпоинт для динамического получения реестра лендингов и параметров проекта.
 * `src/lib/projectLandings.ts` — Сервисный модуль с функцией `getProjectLandings` для подгрузки динамического реестра страниц из БД с безопасным fallback к статической конфигурации.
 * `src/lib/bnwLandingTracker.ts` — Клиентский SDK-модуль для мгновенной интеграции авто-регистрации страниц и URL-параметров на внешних сайтах.
+* `src/components/ui/ParabolicProgressBar.tsx` — Универсальный нелинейный прогрессбар и оверлей загрузки (`useParabolicProgress`, `ParabolicProgressBar`, `ParabolicLoadingOverlay`). Реализует ниспадающую параболическую кривую замедления ($p(t) = \text{max} \cdot (1 - (1 - t/T)^2)$): быстрый старт на начальном этапе с плавным асимптотическим замедлением к 94-98% во время ожидания ответа, мгновенным сглаженным переходом на 100% при завершении и аккуратным скрытием. Используется во всех экранах загрузки дашборда, переключении вкладок и подгрузке данных.
 
 ---
 
@@ -60,7 +61,8 @@
 * `offer_id` (TEXT) — Идентификатор конкретного оффера (`?o=...` или `?offer=...`)
 * `promo_id` (TEXT) — Идентификатор промокода / скидочного пакета (`?p=...` или `?promo=...`)
 * `query_params` (JSONB) — Полный набор параметров URL для сквозного отслеживания
-* **Составные индексы:** `idx_traffic_clicks_proj_visitor`, `idx_traffic_clicks_proj_offer`, `idx_unified_orders_proj_offer`, `idx_unified_orders_proj_promo` для высокой скорости работы в Enterprise-режиме (без перегрузки RAM на фронтенде).
+* **Сквозная атрибуция первого касания (First-Touch Lead Stitching):** Триггер БД `trg_inherit_customer_utm` автоматически переносит исходные рекламные UTM-метки (`utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`, `campaign_id`) с первичной регистрации лида на любые последующие платежные транзакции клиента (WayForPay, Monobank, боты), исключая попадание оплат в "Прямой/Органический трафик".
+* **Составные индексы:** `idx_traffic_clicks_proj_visitor`, `idx_traffic_clicks_proj_offer`, `idx_unified_orders_proj_offer`, `idx_unified_orders_proj_promo`, `daily_traffic_and_costs_full_unique_idx` для высокой скорости работы и защиты от дублей при синхронизации Meta Ads.
 * **Enterprise RPC `get_customer_journey_scoped`:** Функция СУБД для изолированного по проекту объединения и выборки всех кликов и заказов лида.
 
 
@@ -230,14 +232,46 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
 * **Постійна навігація (Загальна аналітика):** Кнопка `📊 Загальна аналітика` доступна для всіх авторизованих ролей (`admin`, `superman`, `founder`, `developer`, `cell_leader`, `producer`), що забезпечує 1-клік повернення до зведеного огляду проекту.
 * **Вкладка «Лендінги» (`LandingsRegistryTab.tsx`):** Строго фільтрується за поточним активним проектом (`activeSlug`), відображає розширені картки лендінгів з підтримуваними параметрами (`?p`, `?o`, `?utm_*`), прямим копіюванням посилань та вбудованим модальним вікном Live Preview (`iframe`).
 * **Єдина консолідована база «Ліди» (`LeadsTab.tsx`):** Об'єднаний хаб контактів із DSU-дедуплікацією, фільтром за воронками (`sourceFilter`), індикатором заповнених анкет (`📋 Анкета`) та мульти-торканнями.
-* **Модуль воронок (`FunnelsTab.tsx`):**
-  - Клік по будь-якій частині картки воронки відкриває детальну сквозну аналітику (`setSelectedFunnel(funnel)`).
-  - Створення/редагування воронки виконується у фокусному модальному вікні (Backdrop Modal) для захисту від розфокусування.
-  - Попередньо налаштовані шаблони етапів шляху клієнта (Customer Journey Presets) за типами воронок (`Інтенсив`, `Автовеб`, `VSL + Трипваєр`, `Діагностика`, `Марафон`) з інтерактивними чекбоксами та пулом швидкого додавання.
-* **Фінансовий облік (`AddTransactionModal.tsx` & `FinanceDashboardTab.tsx`):**
-  - Дедуплікація категорій операцій через `Set`.
-  - Повна українська локалізація (виправлено «Прочі» -> «Інші операційні витрати» / «Інший дохід», «Расход» -> «Витрата»).
-  - Стандартні рахунки для списання (`Особиста картка`, `Картка ФОП`, `Рахунок ФОП`, `Рахунок виконавця`) та отримання (`Рахунок ФОП`, `WayForPay`, `Рахунок виконавця`, `PayPal виконавця`).
-  - Інтуїтивний формат обмінного курсу `1 USD ($) = [ 41.80 ] UAH (₴)` з автоматичним розрахунком бази P&L в USD.
+---
 
+## 10. Канонічні серверні процедури PostgreSQL (RPC Layer)
+* **`public.fn_is_status_paid(status TEXT) RETURNS BOOLEAN`:** Єдина канонічна функція перевірки оплати замовлення. Суворо фільтрує помилкові збіги (`Передано у ВП`, `⏳ Перехід до оплати`, `Клик на форму оплати`, `Не оплачено`) та повертає `TRUE` для `Approved`, `paid`, `closed_won`, `Купив курс`, `Купив(-ла) Трипвайер` тощо.
+* **`public.fn_convert_to_uah(amount NUMERIC, currency TEXT, target_date DATE) RETURNS NUMERIC`:** Конвертує будь-яку суму в UAH за офіційним курсом НБУ на дату замовлення (або найближчу відому дату).
+* **`public.fn_convert_to_usd(amount NUMERIC, currency TEXT, target_date DATE) RETURNS NUMERIC`:** Конвертує будь-яку суму в USD за офіційним курсом НБУ на дату замовлення.
+* **`public.fn_classify_order_type(metadata JSONB, amount NUMERIC, currency TEXT) RETURNS TEXT`:** Автоматично класифікує замовлення на `'tripwire'` або `'course'` на основі структури метаданих, шляху сторінки, тарифу та суми.
+* **`public.get_project_aggregated_kpi(p_project_id UUID, p_start_date TIMESTAMPTZ, p_end_date TIMESTAMPTZ) RETURNS JSONB`:** Розраховує консолідовані KPI проекту (виручка UAH/USD, витрати на рекламу, операційні витрати, чистий прибуток, ROI, CPL, CR) менш ніж за 30 мс на рівні БД.
+* **`public.get_funnel_analytics_aggregated(p_funnel_id UUID, p_start_date TIMESTAMPTZ, p_end_date TIMESTAMPTZ) RETURNS JSONB`:** Розраховує конверсії по кроках воронки (Кліки -> Реєстрації -> Анкети -> Оплати), дохід, витрати та ROI по всій базі даних без завантаження лидів у пам'ять Node.js.
 
+---
+
+## 13. Чиста аналітика Meta Ads (Pure Meta Insights) та модель 100% звірки даних
+* **Вкладка «Трафік» (Pure Meta Ads API):**
+  - Працює виключно з даними рекламного кабінету Meta Ads (`daily_traffic_and_costs`) без змішування з внутрішніми замовленнями CRM чи штучними UTM-маппінгами.
+  - Показники вкладки: Бюджет ($), Кліки, Покази, CTR %, CPM, CPC, Ліди Meta (`meta_leads`), Ціна ліда Meta (`cpl`), Продажі за пікселем Meta (`meta_purchases`), Вартість конверсій Meta (`meta_purchase_value_usd`), ROAS (`meta_purchase_value_usd / spend`).
+  - Виключено фантомні кампанії `custom_...` та `organic_direct` з рекламного дашборду.
+* **Розширена таксономія дій Meta (Action Types Parser):**
+  - **Ліди:** `offsite_conversion.fb_pixel_lead`, `onsite_web_lead`, `lead`, `onsite_conversion.lead_grouped`, `offsite_lead_add_20_s_calls`, `onsite_conversion.messaging_conversation_started_7d`, `onsite_conversion.total_messaging_connection`, а також кастомні конверсії `offsite_conversion.custom.*`.
+  - **Покупки:** `offsite_conversion.fb_pixel_purchase`, `onsite_web_purchase`, `omni_purchase`, `purchase`, `onsite_web_app_purchase`, `web_in_store_purchase`, `web_app_in_store_purchase`, `offsite_purchase_add_20_s_calls`.
+  - **Конверсійна вартість:** Автоматичний розрахунок з `action_values` з конвертацією в USD за актуальними курсами НБУ.
+* **Синхронізація ручного та автоматичного імпорту:**
+  - Обидва контури (`/api/cron/sync-spend` та `syncProjectAdSpendNowAction`) запитують повний набір полів (`campaign_id, campaign_name, adset_id, ad_id, spend, impressions, clicks, actions, action_values, date_start`), виключаючи затирання конверсій пікселя нулями при ручному оновленні.
+* **100% узгодженість фінансових контурів:**
+  - Всі 6 бізнес-екранів (`FounderDashboard`, `CellDashboard`, `AnalyticsTab`, `FunnelsTab`, `FinanceDashboard`, `FinanceExpertTab`) синхронізовані через канонічний PostgreSQL RPC `get_project_aggregated_kpi` та єдиний механізм дедуплікації замовлень `DISTINCT ON (project_id, COALESCE(order_id, id::text))`.
+
+---
+
+## 14. Глобальна фільтрація періодів, ізоляція проектів розробника та інтерактивні тренди
+* **Глобальний фільтр дат за замовчуванням («Поточний місяць»):**
+  - На головній сторінці фаундерів (`/admin/founder`), в дашбордах осередків (`/admin/cell/[cellId]`) та проектній аналітиці встановлено період за замовчуванням — **«Поточний місяць»** (з 1-го числа до кінця місяця).
+  - Підтримуються пресети: `Сьогодні`, `Поточний місяць` (Default), `30 днів`, `Весь час`, `Кастомний діапазон` з інтерактивним перерахунком через Server Action `getFounderDashboardDataAction`.
+* **Ізоляція тестових та системних проектів (`sandbox` та `bw_main`):**
+  - Проекти `🧪 Sandbox` та `B&W Main` виключені з загальних списків та зведених звітів фаундерів, лідерів осередків, продюсерів та менеджерів з продажу.
+  - Проекти відображаються виключно для ролей із технічним доступом (`developer`, `admin`, `superman`).
+* **Відновлення структури осередків та продюсерів:**
+  - `Анастасія Сич` закріплена за ячейкою `Уткин Дмитрий` (`4944b399-429f-423e-a4ab-e24b49c71d32`).
+  - `Вікторія Черниш` коректно пов'язана з лідером ячейки в `profile_projects`.
+* **Фільтрація воронок на графіку тренду заявок (`AnalyticsTab`):**
+  - Додано випадаючий список вибору воронки над графіком *«Тренд реєстрацій заявок»*.
+  - Автоматичне приховування пустих/нульових граничних інтервалів (`effectiveTrendData`).
+* **Розширений парсер подій Meta Pixel (Консультації та Заявки):**
+  - У `getTrafficAnalyticsData` додано обробку подій `Schedule`, `Contact`, `Submit Application`, `custom.consultation`, `custom.anketa`, `custom.diagnostika`, `InitiateCheckout`, `CompleteRegistration` тощо.

@@ -66,7 +66,7 @@ export default function CellDashboardClient({
   const [roi, setRoi] = useState(initialRoi);
 
   // Filter state
-  const [activePreset, setActivePreset] = useState("all");
+  const [activePreset, setActivePreset] = useState("this_month");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
   const [showCustomDates, setShowCustomDates] = useState(false);

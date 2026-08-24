@@ -24,7 +24,7 @@ export default function FinanceExpertTab({ projectId, projectRevenue, projectSpe
         // Fetch project settings (percentages)
         const { data: proj } = await supabase
           .from("projects")
-          .select("id, name, expert_share_percentage, marketer_share_percentage")
+          .select("id, name, expert_share_percent, contract_model, default_currency")
           .eq("id", projectId)
           .single();
         
@@ -60,8 +60,8 @@ export default function FinanceExpertTab({ projectId, projectRevenue, projectSpe
     );
   }
 
-  const expertSharePct = projectSettings?.expert_share_percentage || 0;
-  const marketerSharePct = projectSettings?.marketer_share_percentage || 0;
+  const expertSharePct = Number(projectSettings?.expert_share_percent ?? 50);
+  const marketerSharePct = 100 - expertSharePct;
 
   const projectProfit = projectRevenue - projectSpend;
   

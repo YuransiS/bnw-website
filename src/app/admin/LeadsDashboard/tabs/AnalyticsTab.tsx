@@ -90,6 +90,7 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
 
   // Isolated states for UTM tree collapse
   const [expandedUtmNodes, setExpandedUtmNodes] = useState<Record<string, boolean>>({});
+  const [selectedFunnelFilter, setSelectedFunnelFilter] = useState<string>("all");
 
   const toggleUtmNode = (path: string) => {
     setExpandedUtmNodes((prev) => ({
@@ -98,20 +99,99 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
     }));
   };
 
+  // Compute effective filtered & trimmed spline data for the trend chart
+  const effectiveTrendData = React.useMemo(() => {
+    let rawData = splineTrendData || [];
+
+    if (selectedFunnelFilter !== "all") {
+      const selectedFunnel = funnels.find((f: any) => f.id === selectedFunnelFilter);
+      if (selectedFunnel) {
+        const hasRules = (selectedFunnel.campaign_ids && selectedFunnel.campaign_ids.length > 0) || (selectedFunnel.landing_slugs && selectedFunnel.landing_slugs.length > 0);
+        
+        // Match leads belonging to this funnel
+        const matched = leadsList.filter((lead: any) => {
+          if (!hasRules) return true;
+          const leadCampaign = String(lead.utm_campaign || lead.utmCampaign || lead.metadata?.raw_row?.utm_campaign || "").trim().toLowerCase();
+          const leadMedium = String(lead.utm_medium || lead.utmMedium || lead.metadata?.raw_row?.utm_medium || "").trim().toLowerCase();
+          const leadSource = String(lead.utm_source || lead.utmSource || lead.metadata?.raw_row?.utm_source || "").trim().toLowerCase();
+          const leadPath = String(lead.page_path || lead.pagePath || lead.metadata?.raw_row?.page_path || "").trim().toLowerCase();
+          const leadUrl = String(lead.page_url || lead.pageUrl || lead.metadata?.raw_row?.page_url || "").trim().toLowerCase();
+          const leadSheet = String(lead.target_sheet || lead.metadata?.target_sheet || lead.metadata?.raw_row?.target_sheet || "").trim().toLowerCase();
+          const visited = (lead.visited_landings || lead.visitedLandings || []).map((v: string) => String(v).toLowerCase());
+
+          const campaignMatch = selectedFunnel.campaign_ids?.some((id: string) => {
+            if (!id) return false;
+            const cid = id.toLowerCase().trim();
+            return leadCampaign.includes(cid) || leadMedium.includes(cid) || leadSource.includes(cid) || cid.includes(leadCampaign) || cid.includes(leadMedium);
+          });
+          const landingMatch = selectedFunnel.landing_slugs?.some((slug: string) => {
+            if (!slug) return false;
+            const s = slug.toLowerCase().trim();
+            return leadPath.includes(s) || leadUrl.includes(s) || leadSheet.includes(s) || visited.some((v: string) => v.includes(s));
+          });
+          return campaignMatch || landingMatch;
+        });
+
+        // Group leads by date (YYYY-MM-DD)
+        const leadsByDate: Record<string, number> = {};
+        matched.forEach((l: any) => {
+          const d = l.created_at || l.createdAt;
+          if (d) {
+            const dateStr = new Date(d).toISOString().split("T")[0];
+            leadsByDate[dateStr] = (leadsByDate[dateStr] || 0) + 1;
+          }
+        });
+
+        rawData = rawData.map((d: any) => ({
+          name: d.name,
+          clicks: d.clicks,
+          leads: leadsByDate[d.name] || 0
+        }));
+      }
+    }
+
+    // Hide/trim completely zero intervals at boundaries when there are non-zero intervals
+    if (rawData.length > 2) {
+      let firstNonZero = 0;
+      while (firstNonZero < rawData.length && rawData[firstNonZero].leads === 0 && rawData[firstNonZero].clicks === 0) {
+        firstNonZero++;
+      }
+      let lastNonZero = rawData.length - 1;
+      while (lastNonZero >= 0 && rawData[lastNonZero].leads === 0 && rawData[lastNonZero].clicks === 0) {
+        lastNonZero--;
+      }
+      if (firstNonZero <= lastNonZero) {
+        return rawData.slice(firstNonZero, lastNonZero + 1);
+      }
+    }
+
+    return rawData;
+  }, [splineTrendData, selectedFunnelFilter, funnels, leadsList]);
+
   // Funnel Analytics Calculator
   const getFunnelStats = (funnel: any) => {
-    const startDateTime = new Date(funnel.start_date).getTime();
+    const startDateTime = new Date(funnel.start_date || "2020-01-01").getTime();
+    const hasRules = (funnel.campaign_ids && funnel.campaign_ids.length > 0) || (funnel.landing_slugs && funnel.landing_slugs.length > 0);
     
     // Filter leads created after start date, and matching campaign or landing slugs
     const matchedLeads = leadsList.filter((lead: any) => {
-      const leadTime = new Date(lead.created_at).getTime();
+      const leadTime = new Date(lead.created_at || lead.createdAt || 0).getTime();
       if (leadTime < startDateTime) return false;
 
-      const leadCampaign = String(lead.utm_campaign || "").trim().toLowerCase();
-      const leadLanding = String(lead.landing || lead.metadata?.target_sheet || "").trim().toLowerCase();
+      if (!hasRules) return true; // If no specific filter rules, match all project leads
 
-      const campaignMatch = funnel.campaign_ids.some((id: string) => leadCampaign.includes(id.toLowerCase()));
-      const landingMatch = funnel.landing_slugs.some((slug: string) => leadLanding.includes(slug.toLowerCase()));
+      const leadCampaign = String(lead.utm_campaign || lead.utmCampaign || "").trim().toLowerCase();
+      const leadPath = String(lead.page_path || lead.pagePath || "").trim().toLowerCase();
+      const leadUrl = String(lead.page_url || lead.pageUrl || "").trim().toLowerCase();
+      const leadSheet = String(lead.target_sheet || lead.metadata?.target_sheet || "").trim().toLowerCase();
+      const visited = (lead.visited_landings || []).map((v: string) => String(v).toLowerCase());
+
+      const campaignMatch = funnel.campaign_ids?.some((id: string) => id && leadCampaign.includes(id.toLowerCase()));
+      const landingMatch = funnel.landing_slugs?.some((slug: string) => {
+        if (!slug) return false;
+        const s = slug.toLowerCase();
+        return leadPath.includes(s) || leadUrl.includes(s) || leadSheet.includes(s) || visited.some((v: string) => v.includes(s));
+      });
 
       return campaignMatch || landingMatch;
     });
@@ -120,7 +200,7 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
     let revenue = 0;
     let salesCount = 0;
     matchedLeads.forEach((lead: any) => {
-      const isPaid = isPaidStatus(lead.status) || (Number(lead.uahPaid || lead.uah_paid || 0) > 0) || (Number(lead.usdPaid || lead.usd_paid || 0) > 0);
+      const isPaid = isPaidStatus(lead.status) || (Number(lead.uahPaid || lead.uah_paid || 0) > 0) || (Number(lead.usdPaid || lead.usd_paid || 0) > 0) || (Number(lead.uah_tripwire_paid || lead.uahTripwirePaid || 0) > 0);
       if (isPaid) {
         const uah = Number(lead.uahPaid || lead.uah_paid || lead.uahTripwirePaid || lead.uah_tripwire_paid || lead.amount || 0);
         const usd = Number(lead.usdPaid || lead.usd_paid || lead.usdTripwirePaid || lead.usd_tripwire_paid || 0);
@@ -322,25 +402,22 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
                 {globalCurrency === "UAH" ? (
                   <p
                     className={`text-lg font-black ${
-                      (singleProjectStats?.uahRevenue || 0) - ((singleProjectStats?.totalSpend || 0) * (singleProjectStats?.uahRevenue / (singleProjectStats?.usdRevenue || 1))) >= 0 ? "text-emerald-455" : "text-red-400"
+                      (singleProjectStats?.netProfitUah ?? (Number(singleProjectStats?.uahRevenue || 0) - Number(singleProjectStats?.totalSpendUah || 0))) >= 0 ? "text-emerald-455" : "text-red-400"
                     }`}
                   >
-                    {((singleProjectStats?.uahRevenue || 0) - ((singleProjectStats?.totalSpend || 0) * (singleProjectStats?.uahRevenue / (singleProjectStats?.usdRevenue || 1)))) >= 0 ? "" : "-"}
+                    {(singleProjectStats?.netProfitUah ?? (Number(singleProjectStats?.uahRevenue || 0) - Number(singleProjectStats?.totalSpendUah || 0))) >= 0 ? "" : "-"}
                     {formatLocaleNumber(
-                      Math.abs(
-                        (singleProjectStats?.uahRevenue || 0) - 
-                        ((singleProjectStats?.totalSpend || 0) * (singleProjectStats?.uahRevenue / (singleProjectStats?.usdRevenue || 1)))
-                      )
+                      Math.abs(singleProjectStats?.netProfitUah ?? (Number(singleProjectStats?.uahRevenue || 0) - Number(singleProjectStats?.totalSpendUah || 0)))
                     )} ₴
                   </p>
                 ) : (
                   <p
                     className={`text-lg font-black ${
-                      (singleProjectStats?.netProfitUsd || 0) >= 0 ? "text-emerald-455" : "text-red-400"
+                      (singleProjectStats?.netProfitUsd ?? (Number(singleProjectStats?.usdRevenue || 0) - Number(singleProjectStats?.totalSpend || 0))) >= 0 ? "text-emerald-455" : "text-red-400"
                     }`}
                   >
-                    {(singleProjectStats?.netProfitUsd || 0) >= 0 ? "" : "-"}$
-                    {formatLocaleNumber(Math.abs(singleProjectStats?.netProfitUsd || 0))}
+                    {(singleProjectStats?.netProfitUsd ?? (Number(singleProjectStats?.usdRevenue || 0) - Number(singleProjectStats?.totalSpend || 0))) >= 0 ? "" : "-"}$
+                    {formatLocaleNumber(Math.abs(singleProjectStats?.netProfitUsd ?? (Number(singleProjectStats?.usdRevenue || 0) - Number(singleProjectStats?.totalSpend || 0))))}
                   </p>
                 )}
                 <span className="text-[9px] font-black uppercase text-yellow-400 block mt-1 tracking-wider">
@@ -468,12 +545,14 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {funnels.map((funnel) => {
             const stats = getFunnelStats(funnel);
-            const parsedType = funnel.description?.startsWith("[Type:")
-              ? funnel.description.split("]")[0].replace("[Type: ", "")
+            const parsedType = funnel.description?.includes("[Type:")
+              ? (funnel.description.match(/\[Type:\s*([^\]]+)\]/i)?.[1] || "Інше")
               : "Інше";
-            const cleanDescription = funnel.description?.includes("]")
-              ? funnel.description.substring(funnel.description.indexOf("]") + 1).trim()
-              : funnel.description;
+            const stagesMatch = funnel.description?.match(/\[Stages:\s*([^\]]+)\]/i);
+            const parsedStages = stagesMatch ? stagesMatch[1].split(",").map((s: string) => s.trim()).filter(Boolean) : [];
+            const cleanDescription = funnel.description
+              ? funnel.description.replace(/\[Type:\s*[^\]]+\]/gi, "").replace(/\[Stages:\s*[^\]]+\]/gi, "").trim()
+              : "";
 
             return (
               <div
@@ -496,6 +575,20 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
                     ROI: {Math.round(stats.roi)}%
                   </span>
                 </div>
+
+                {parsedStages.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                    {parsedStages.map((stage: string, idx: number) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1 text-[9px] px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/5 text-white/70 font-medium"
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                        {stage}
+                      </span>
+                    ))}
+                  </div>
+                )}
 
                 {cleanDescription && (
                   <p className="text-[11px] text-white/60 bg-white/[0.01] p-2 rounded border border-white/5 italic">
@@ -536,24 +629,43 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Smooth SVG Spline Area Chart */}
         <div className={`${cardClass} rounded-2xl p-6 shadow-2xl backdrop-blur-md space-y-6`}>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <h3 className="text-sm font-black uppercase tracking-widest text-white">Тренд реєстрацій заявок</h3>
               <p className="text-xs text-white/30 mt-1 font-semibold">Статистика за вибраний період</p>
             </div>
-            <div className="flex items-center gap-4 text-[10px] font-black uppercase tracking-wider">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#3B82F6] block" />
-                <span className="text-white/40">Кліки (Трафік)</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#10B981] block" />
-                <span className="text-white/40">Заявки (Ліди)</span>
+            <div className="flex flex-wrap items-center gap-3">
+              {funnels.length > 0 && (
+                <div className="flex items-center gap-1.5 bg-white/5 px-2 py-1 rounded-xl border border-white/5">
+                  <span className="text-[9px] text-white/40 font-bold uppercase">Воронка:</span>
+                  <select
+                    value={selectedFunnelFilter}
+                    onChange={(e) => setSelectedFunnelFilter(e.target.value)}
+                    className="bg-transparent text-[10px] font-bold text-emerald-400 focus:outline-none cursor-pointer"
+                  >
+                    <option value="all" className="bg-[#0c0c0f] text-white">Всі воронки проекту</option>
+                    {funnels.map((f: any) => (
+                      <option key={f.id} value={f.id} className="bg-[#0c0c0f] text-white">
+                        {f.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div className="flex items-center gap-4 text-[10px] font-black uppercase tracking-wider">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#3B82F6] block" />
+                  <span className="text-white/40">Кліки (Трафік)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#10B981] block" />
+                  <span className="text-white/40">Заявки (Ліди)</span>
+                </div>
               </div>
             </div>
           </div>
 
-          {splineTrendData.length === 0 ? (
+          {effectiveTrendData.length === 0 ? (
             <div className="text-center py-20 text-white/20 italic">Немає зафіксованих даних</div>
           ) : (
             <div className="relative h-64 w-full pt-4">
@@ -574,17 +686,17 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
                 <line x1="0" y1="160" x2="700" y2="160" stroke="rgba(255,255,255,0.03)" strokeDasharray="3 3" />
 
                 {(() => {
-                  const allCounts = splineTrendData.flatMap((d: any) => [d.leads, d.clicks]);
+                  const allCounts = effectiveTrendData.flatMap((d: any) => [d.leads, d.clicks]);
                   const max = Math.max(...allCounts, 4);
-                  const stepX = 700 / (splineTrendData.length - 1 || 1);
+                  const stepX = 700 / (effectiveTrendData.length - 1 || 1);
 
-                  const leadPoints = splineTrendData.map((d: any, i: number) => {
+                  const leadPoints = effectiveTrendData.map((d: any, i: number) => {
                     const x = i * stepX;
                     const y = 180 - (d.leads / max) * 140;
                     return { x, y, label: d.leads };
                   });
 
-                  const clickPoints = splineTrendData.map((d: any, i: number) => {
+                  const clickPoints = effectiveTrendData.map((d: any, i: number) => {
                     const x = i * stepX;
                     const y = 180 - (d.clicks / max) * 140;
                     return { x, y, label: d.clicks };
@@ -621,9 +733,9 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
                       {clickPoints.map((p: any, idx: number) => (
                         <g key={`c-${idx}`}>
                           <circle cx={p.x} cy={p.y} r="3.5" fill="#0C0C0F" stroke="#3B82F6" strokeWidth="2" />
-                          {(splineTrendData.length <= 10 ||
-                            idx % Math.max(1, Math.floor(splineTrendData.length / 5)) === 0 ||
-                            idx === splineTrendData.length - 1) && (
+                          {(effectiveTrendData.length <= 10 ||
+                            idx % Math.max(1, Math.floor(effectiveTrendData.length / 5)) === 0 ||
+                            idx === effectiveTrendData.length - 1) && (
                             <text
                               x={p.x}
                               y={p.y - 10}
@@ -641,9 +753,9 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
                       {leadPoints.map((p: any, idx: number) => (
                         <g key={`l-${idx}`}>
                           <circle cx={p.x} cy={p.y} r="3.5" fill="#0C0C0F" stroke="#10B981" strokeWidth="2" />
-                          {(splineTrendData.length <= 10 ||
-                            idx % Math.max(1, Math.floor(splineTrendData.length / 5)) === 0 ||
-                            idx === splineTrendData.length - 1) && (
+                          {(effectiveTrendData.length <= 10 ||
+                            idx % Math.max(1, Math.floor(effectiveTrendData.length / 5)) === 0 ||
+                            idx === effectiveTrendData.length - 1) && (
                             <text
                               x={p.x}
                               y={p.y - 10}
@@ -663,8 +775,8 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
               </svg>
 
               <div className="flex justify-between text-[10px] text-white/30 font-black uppercase mt-4">
-                {splineTrendData.map((d: any, i: number) => {
-                  const total = splineTrendData.length;
+                {effectiveTrendData.map((d: any, i: number) => {
+                  const total = effectiveTrendData.length;
                   let labelText = d.name;
                   if (total > 7) {
                     const interval = Math.max(2, Math.floor(total / 5));
@@ -718,11 +830,11 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
                   color: "bg-amber-500"
                 },
                 {
-                  label: "4. Продажі (Курс)",
-                  val: singleProjectStats.paidLeadsCount || 0,
+                  label: "4. Успішні оплати (Клієнти)",
+                  val: singleProjectStats.paidLeadsCount || singleProjectStats.totalSales || 0,
                   pct:
                     singleProjectStats.totalLeads > 0
-                      ? ((singleProjectStats.paidLeadsCount || 0) / singleProjectStats.totalLeads) * 100
+                      ? (((singleProjectStats.paidLeadsCount || singleProjectStats.totalSales || 0)) / singleProjectStats.totalLeads) * 100
                       : 0,
                   color: "bg-emerald-500"
                 }
@@ -764,7 +876,7 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
                 <th className="p-4 text-center">Зафіксовано кліків</th>
                 <th className="p-4 text-center">Кількість заявок</th>
                 <th className="p-4 text-center">Конверсія клік-ліди</th>
-                <th className="p-4 text-center">Сгенеровано оплати ($)</th>
+                <th className="p-4 text-center">Сгенеровано оплати (₴)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 text-white/80">

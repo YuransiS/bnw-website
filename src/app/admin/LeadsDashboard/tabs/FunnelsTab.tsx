@@ -880,6 +880,88 @@ export default function FunnelsTab({
       }
     });
 
+    // Offer / Landing variant breakdown
+    const variantMap: Record<string, {
+      key: string;
+      name: string;
+      leadsCount: number;
+      salesCount: number;
+      revenue: number;
+      percentage: number;
+      cr: number;
+    }> = {};
+
+    matchedLeads.forEach((lead: any) => {
+      const pageUrl = String(lead.page_url || lead.pageUrl || lead.metadata?.page_url || lead.metadata?.raw_row?.page_url || "").trim();
+      const pagePath = String(lead.page_path || lead.pagePath || lead.metadata?.page_path || lead.metadata?.raw_row?.page_path || "").trim();
+      const sourceFlag = String(lead.source_flag || lead.metadata?.source_flag || lead.metadata?.raw_row?.source_flag || lead.metadata?.raw_row?.raw_payload?.source_flag || "").trim();
+      const utmCampaign = String(lead.utm_campaign || lead.utmCampaign || lead.metadata?.utm_campaign || lead.metadata?.raw_row?.utm_campaign || "").trim();
+
+      let variantKey = "default";
+      let variantName = pagePath && pagePath !== "/" ? pagePath : "Головна сторінка";
+
+      const oMatch = pageUrl.match(/[?&]o=([a-zA-Z0-9_-]+)/i);
+      const vMatch = pageUrl.match(/[?&]v=([a-zA-Z0-9_-]+)/i);
+
+      if (oMatch && oMatch[1]) {
+        variantKey = `o_${oMatch[1]}`;
+        variantName = `Оффер ${oMatch[1]} (?o=${oMatch[1]})`;
+      } else if (vMatch && vMatch[1]) {
+        variantKey = `v_${vMatch[1]}`;
+        variantName = `Варіант ${vMatch[1]} (?v=${vMatch[1]})`;
+      } else if (sourceFlag && /Offer\s*(\d+)/i.test(sourceFlag)) {
+        const num = sourceFlag.match(/Offer\s*(\d+)/i)?.[1] || "1";
+        variantKey = `o_${num}`;
+        variantName = `Оффер ${num} (${sourceFlag})`;
+      } else if (utmCampaign && /OFFER\s*(\d+)/i.test(utmCampaign)) {
+        const num = utmCampaign.match(/OFFER\s*(\d+)/i)?.[1] || "1";
+        variantKey = `o_${num}`;
+        variantName = `Оффер ${num} (Camp: OFFER${num})`;
+      } else if (sourceFlag) {
+        variantKey = sourceFlag;
+        variantName = sourceFlag;
+      } else if (pagePath && pagePath !== "/") {
+        variantKey = pagePath;
+        variantName = pagePath;
+      }
+
+      if (!variantMap[variantKey]) {
+        variantMap[variantKey] = {
+          key: variantKey,
+          name: variantName,
+          leadsCount: 0,
+          salesCount: 0,
+          revenue: 0,
+          percentage: 0,
+          cr: 0
+        };
+      }
+
+      variantMap[variantKey].leadsCount++;
+
+      const isPaid = isPaidStatus(lead.status) || (Number(lead.uahPaid || lead.uah_paid || 0) > 0) || (Number(lead.usdPaid || lead.usd_paid || 0) > 0);
+      const uah = Number(lead.uahPaid || lead.uah_paid || lead.uahTripwirePaid || lead.uah_tripwire_paid || 0);
+      const usd = Number(lead.usdPaid || lead.usd_paid || lead.usdTripwirePaid || lead.usd_tripwire_paid || 0);
+      const rawAmt = Number(lead.amount || 0);
+
+      if (isPaid || uah > 0 || usd > 0 || rawAmt > 0) {
+        variantMap[variantKey].salesCount++;
+        if (uah > 0 || usd > 0) {
+          variantMap[variantKey].revenue += isUSD ? ((uah / 41.5) + usd) : (uah + (usd * 41.5));
+        } else if (rawAmt > 0) {
+          variantMap[variantKey].revenue += isUSD ? (rawAmt / 41.5) : rawAmt;
+        }
+      }
+    });
+
+    const offerVariants = Object.values(variantMap)
+      .map(v => ({
+        ...v,
+        percentage: leadsCount > 0 ? (v.leadsCount / leadsCount) * 100 : 0,
+        cr: v.leadsCount > 0 ? (v.salesCount / v.leadsCount) * 100 : 0
+      }))
+      .sort((a, b) => b.leadsCount - a.leadsCount);
+
     return {
       leadsCount,
       salesCount,
@@ -891,7 +973,8 @@ export default function FunnelsTab({
       roi,
       cr,
       manualSpend: manualSpendUAH,
-      manualIncome: manualIncomeUAH
+      manualIncome: manualIncomeUAH,
+      offerVariants
     };
   };
 
@@ -1625,11 +1708,17 @@ export default function FunnelsTab({
           }
         }
 
-        const planSpend = selectedFunnel.planned_spend || 0;
+        const isUSD = globalCurrency === "USD";
+        const usdRate = 41.5;
+        const planSpendUSD = selectedFunnel.planned_spend || 0;
+        const planSpendUAH = planSpendUSD * usdRate;
+        const planSpend = isUSD ? planSpendUSD : planSpendUAH;
         const actualSpend = stats.spend;
         const spendPercent = planSpend > 0 ? (actualSpend / planSpend) * 100 : 0;
         
-        const planRev = selectedFunnel.planned_revenue || 0;
+        const planRevUSD = selectedFunnel.planned_revenue || 0;
+        const planRevUAH = planRevUSD * usdRate;
+        const planRev = isUSD ? planRevUSD : planRevUAH;
         const actualRev = stats.revenue;
         const revPercent = planRev > 0 ? (actualRev / planRev) * 100 : 0;
 
@@ -1710,11 +1799,11 @@ export default function FunnelsTab({
                   <TrendingUp className="w-4 h-4 text-red-400" />
                 </div>
                 <div className="space-y-1">
-                  <span className="text-2xl font-black text-white">{Math.round(actualSpend).toLocaleString("uk-UA")} ₴</span>
+                  <span className="text-2xl font-black text-white">{Math.round(actualSpend).toLocaleString("uk-UA")} {isUSD ? "$" : "₴"}</span>
                   <div className="flex justify-between text-[10px] text-white/40 font-semibold">
-                    <span>План: {planSpend > 0 ? `${Math.round(planSpend).toLocaleString("uk-UA")} ₴` : "не вказано"}</span>
+                    <span>План: {planSpendUSD > 0 ? `$${Math.round(planSpendUSD).toLocaleString("uk-UA")} (~${Math.round(planSpendUAH).toLocaleString("uk-UA")} ₴)` : "не вказано"}</span>
                     {planSpend > 0 && (
-                      <span>{spendPercent > 100 ? "Перевитрата!" : `Залишок: ${Math.round(planSpend - actualSpend).toLocaleString("uk-UA")} ₴`}</span>
+                      <span>{spendPercent > 100 ? "Перевитрата!" : `Залишок: ${Math.round(Math.max(0, planSpend - actualSpend)).toLocaleString("uk-UA")} ${isUSD ? "$" : "₴"}`}</span>
                     )}
                   </div>
                 </div>
@@ -1734,8 +1823,8 @@ export default function FunnelsTab({
                 )}
                 {stats.manualSpend > 0 && (
                   <div className="text-[9px] bg-white/[0.01] border border-white/5 p-2 rounded-lg text-white/40">
-                    Рекламні витрати: {Math.round(actualSpend - stats.manualSpend).toLocaleString()} ₴ <br />
-                    Додаткові витрати (ручні): {Math.round(stats.manualSpend).toLocaleString()} ₴
+                    Рекламні витрати: {Math.round(actualSpend - stats.manualSpend).toLocaleString()} {isUSD ? "$" : "₴"} <br />
+                    Додаткові витрати (ручні): {Math.round(stats.manualSpend).toLocaleString()} {isUSD ? "$" : "₴"}
                   </div>
                 )}
               </div>
@@ -1746,12 +1835,12 @@ export default function FunnelsTab({
                   <Award className="w-4 h-4 text-emerald-450" />
                 </div>
                 <div className="space-y-1">
-                  <span className="text-2xl font-black text-emerald-400">{Math.round(actualRev).toLocaleString("uk-UA")} ₴</span>
+                  <span className="text-2xl font-black text-emerald-400">{Math.round(actualRev).toLocaleString("uk-UA")} {isUSD ? "$" : "₴"}</span>
                   <div className="flex justify-between text-[10px] text-white/40 font-semibold">
-                    <span>План: {planRev > 0 ? `${Math.round(planRev).toLocaleString("uk-UA")} ₴` : "не вказано"}</span>
+                    <span>План: {planRevUSD > 0 ? `$${Math.round(planRevUSD).toLocaleString("uk-UA")} (~${Math.round(planRevUAH).toLocaleString("uk-UA")} ₴)` : "не вказано"}</span>
                     {planRev > 0 && (
                       <span className={revPercent >= 100 ? "text-emerald-400 font-bold" : "text-amber-500"}>
-                        {revPercent >= 100 ? "Виконано! 🎉" : `Залишилось: ${Math.round(Math.max(0, planRev - actualRev)).toLocaleString("uk-UA")} ₴`}
+                        {revPercent >= 100 ? "Виконано! 🎉" : `Залишилось: ${Math.round(Math.max(0, planRev - actualRev)).toLocaleString("uk-UA")} ${isUSD ? "$" : "₴"}`}
                       </span>
                     )}
                   </div>
@@ -1772,8 +1861,8 @@ export default function FunnelsTab({
                 )}
                 {stats.manualIncome > 0 && (
                   <div className="text-[9px] bg-white/[0.01] border border-white/5 p-2 rounded-lg text-white/40">
-                    Надходження з курсів: {Math.round(actualRev - stats.manualIncome).toLocaleString()} ₴ <br />
-                    Додаткові надходження (ручні): {Math.round(stats.manualIncome).toLocaleString()} ₴
+                    Надходження з курсів: {Math.round(actualRev - stats.manualIncome).toLocaleString()} {isUSD ? "$" : "₴"} <br />
+                    Додаткові надходження (ручні): {Math.round(stats.manualIncome).toLocaleString()} {isUSD ? "$" : "₴"}
                   </div>
                 )}
               </div>
@@ -1785,7 +1874,7 @@ export default function FunnelsTab({
                 </div>
                 <div className="space-y-1">
                   <span className={`text-2xl font-black block ${stats.profit >= 0 ? "text-white" : "text-red-400"}`}>
-                    {Math.round(stats.profit).toLocaleString("uk-UA")} ₴
+                    {Math.round(stats.profit).toLocaleString("uk-UA")} {isUSD ? "$" : "₴"}
                   </span>
                   <div className="flex justify-between text-[10px] text-white/40 font-black mt-1">
                     <span>Сквозний ROI</span>
@@ -1862,6 +1951,55 @@ export default function FunnelsTab({
                 </div>
 
               </div>
+
+              {/* Step 2 Offer Variants Breakdown */}
+              {stats.offerVariants && stats.offerVariants.length > 0 && (
+                <div className="pt-4 border-t border-white/5 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] uppercase font-bold text-white/50 tracking-wider">
+                      🎯 Розподіл реєстрацій за офферами & лендінгами (A/B)
+                    </span>
+                    <span className="text-[9px] text-white/30 font-semibold">
+                      Всього: {stats.leadsCount} лідів
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {stats.offerVariants.map((v: any) => (
+                      <div
+                        key={v.key}
+                        className="bg-white/[0.02] border border-white/5 hover:border-white/15 p-3 rounded-xl space-y-2 transition-all"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="space-y-0.5">
+                            <span className="font-bold text-xs text-white block">{v.name}</span>
+                            <span className="text-[9px] text-white/40 block">
+                              {v.leadsCount} лідів ({v.percentage.toFixed(1)}% від усіх)
+                            </span>
+                          </div>
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            {v.percentage.toFixed(0)}%
+                          </span>
+                        </div>
+
+                        {/* Visual distribution bar */}
+                        <div className="w-full h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-300"
+                            style={{ width: `${Math.min(v.percentage, 100)}%` }}
+                          />
+                        </div>
+
+                        <div className="flex justify-between items-center text-[9px] text-white/40 pt-1 border-t border-white/5">
+                          <span>Оплати: <strong className="text-white">{v.salesCount}</strong></span>
+                          <span>CR: <strong className="text-emerald-400">{v.cr.toFixed(1)}%</strong></span>
+                          <span>Сума: <strong className="text-emerald-400">{Math.round(v.revenue).toLocaleString("uk-UA")} {isUSD ? "$" : "₴"}</strong></span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {funnelStagesList.length > 0 && (
@@ -2207,15 +2345,17 @@ export default function FunnelsTab({
                   <div className="flex flex-wrap md:flex-nowrap items-stretch border border-white/5 rounded-xl overflow-hidden text-xs bg-black/20">
                     <div className="flex-1 bg-white/[0.01] p-3 text-center border-r border-white/5">
                       <span className="text-[9px] uppercase font-bold text-white/40 block">Бюджет</span>
-                      <span className="text-sm font-black text-white block mt-0.5">{Math.round(stats.spend).toLocaleString("uk-UA")} ₴</span>
+                      <span className="text-sm font-black text-white block mt-0.5">{globalCurrency === "USD" ? `$${Math.round(stats.spend).toLocaleString("uk-UA")}` : `${Math.round(stats.spend).toLocaleString("uk-UA")} ₴`}</span>
                       {funnel.planned_spend ? (
-                        <span className="text-[8px] text-white/30 block mt-0.5">План: {Math.round(funnel.planned_spend).toLocaleString()} ₴</span>
+                        <span className="text-[8px] text-white/40 block mt-0.5" title={`Планові витрати: $${funnel.planned_spend}`}>
+                          План: ${funnel.planned_spend} ({Math.round(funnel.planned_spend * 41.5).toLocaleString()} ₴)
+                        </span>
                       ) : null}
                     </div>
                     <div className="flex-1 bg-white/[0.01] p-3 text-center border-r border-white/5">
                       <span className="text-[9px] uppercase font-bold text-white/40 block">Ліди (CPL)</span>
                       <span className="text-sm font-black text-emerald-450 block mt-0.5">{stats.leadsCount}</span>
-                      <span className="text-[9px] font-bold text-white/50 block">CPL: {stats.leadsCount > 0 ? Math.round(stats.spend / stats.leadsCount) : 0} ₴</span>
+                      <span className="text-[9px] font-bold text-white/50 block">CPL: {stats.leadsCount > 0 ? (globalCurrency === "USD" ? `$${(stats.spend / stats.leadsCount).toFixed(2)}` : `${Math.round(stats.spend / stats.leadsCount)} ₴`) : 0}</span>
                     </div>
                     <div className="flex-1 bg-white/[0.01] p-3 text-center border-r border-white/5">
                       <span className="text-[9px] uppercase font-bold text-white/40 block">Продажі (CR)</span>
@@ -2225,9 +2365,11 @@ export default function FunnelsTab({
                     <div className="flex-1 bg-emerald-500/10 p-3 text-center flex flex-col justify-between">
                       <span className="text-[9px] uppercase font-bold text-emerald-450 block">Виручка</span>
                       <div className="mt-auto">
-                        <span className="text-sm font-black text-emerald-450 block">{Math.round(stats.revenue).toLocaleString("uk-UA")} ₴</span>
+                        <span className="text-sm font-black text-emerald-450 block">{globalCurrency === "USD" ? `$${Math.round(stats.revenue).toLocaleString("uk-UA")}` : `${Math.round(stats.revenue).toLocaleString("uk-UA")} ₴`}</span>
                         {funnel.planned_revenue ? (
-                          <span className="text-[8px] text-emerald-400/50 block mt-0.5">План: {Math.round(funnel.planned_revenue).toLocaleString()} ₴</span>
+                          <span className="text-[8px] text-emerald-400/70 block mt-0.5" title={`Плановий дохід: $${funnel.planned_revenue}`}>
+                            План: ${funnel.planned_revenue} ({Math.round(funnel.planned_revenue * 41.5).toLocaleString()} ₴)
+                          </span>
                         ) : null}
                       </div>
                     </div>

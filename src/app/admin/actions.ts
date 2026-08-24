@@ -107,6 +107,12 @@ export async function getSessionAndAccess(selectedProjectSlug?: string) {
       .filter((p: any) => p.is_active !== false);
   }
 
+  // Filter out sandbox and bw_main for non-dev/admin users
+  const isDevOrAdmin = ["developer", "admin", "superman"].includes(profile.role);
+  if (!isDevOrAdmin) {
+    allowedProjects = allowedProjects.filter((p) => p.slug !== "sandbox" && p.slug !== "bw_main");
+  }
+
   // Resolve current active project slug
   let activeSlug = selectedProjectSlug;
   if (!activeSlug && allowedProjects.length > 0) {
@@ -306,15 +312,19 @@ export async function getUnifiedCRMData(
       let campaigns = [];
       let leaderboard = [];
 
-      if (globalSupermanSummaryCache && (now - globalSupermanSummaryCache.timestamp < 10000)) {
+      const startIso = filters?.startDate ? new Date(filters.startDate).toISOString() : null;
+      const endIso = filters?.endDate ? new Date(`${filters.endDate}T23:59:59.999Z`).toISOString() : null;
+      const hasDateFilter = Boolean(startIso || endIso);
+
+      if (!hasDateFilter && globalSupermanSummaryCache && (now - globalSupermanSummaryCache.timestamp < 10000)) {
         summary = globalSupermanSummaryCache.data.summaryData;
         campaigns = globalSupermanSummaryCache.data.campaignsData;
         leaderboard = globalSupermanSummaryCache.data.producersLeaderboard;
       } else {
         const [summaryRes, campaignRes, leaderboardRes] = await Promise.all([
-          supabase.rpc("get_superman_summary"),
+          adminSupabase.rpc("get_superman_summary", { p_start_date: startIso, p_end_date: endIso }),
           supabase.rpc("get_campaigns_summary"),
-          adminSupabase.rpc("get_producers_leaderboard")
+          adminSupabase.rpc("get_producers_leaderboard", { p_start_date: startIso, p_end_date: endIso })
         ]);
 
         const rawSummary = summaryRes.data || [];
@@ -324,16 +334,20 @@ export async function getUnifiedCRMData(
           project_slug: p.project_slug,
           cell_id: p.cell_id,
           revenue_uah: Number(p.uah_revenue || 0),
-          expenses_uah: Number(p.spend || 0),
           revenue_usd: Number(p.usd_revenue || 0),
           revenue_eur: Number(p.eur_revenue || 0),
+          expenses_uah: Number(p.spend_uah || 0),
+          expenses_usd: Number(p.spend_usd || p.spend || 0),
           leads_count: Number(p.leads_count || 0),
-          cpl: Number(p.cpl || 0),
-          roi: Number(p.spend || 0) > 0 ? ((Number(p.uah_revenue || 0) - Number(p.spend || 0)) / Number(p.spend || 0)) * 100 : 0
+          cpl: Number(p.cpl_usd || p.cpl || 0),
+          cpl_uah: Number(p.cpl_uah || 0),
+          profit_uah: Number(p.profit_uah || 0),
+          profit_usd: Number(p.profit_usd || 0),
+          roi: Number(p.roi || 0)
         }));
 
         campaigns = campaignRes.data || [];
-        leaderboard = (leaderboardRes.data || []).map((l: any) => ({
+        leaderboard = (leaderboardRes.data || []).map((l: any, idx: number) => ({
           producerId: l.producer_id,
           email: l.email,
           name: l.name,
@@ -348,21 +362,19 @@ export async function getUnifiedCRMData(
           blended_revenue: Number(l.blended_revenue || 0),
           profit: Number(l.profit || 0),
           roi: Number(l.roi || 0),
-          isLeaderOfMonth: false,
+          isLeaderOfMonth: idx === 0 && Number(l.blended_revenue || 0) > 0,
         }));
 
-        if (leaderboard.length > 0 && leaderboard[0].blended_revenue > 0) {
-          leaderboard[0].isLeaderOfMonth = true;
+        if (!hasDateFilter) {
+          globalSupermanSummaryCache = {
+            timestamp: now,
+            data: {
+              summaryData: summary,
+              campaignsData: campaigns,
+              producersLeaderboard: leaderboard
+            }
+          };
         }
-
-        globalSupermanSummaryCache = {
-          timestamp: now,
-          data: {
-            summaryData: summary,
-            campaignsData: campaigns,
-            producersLeaderboard: leaderboard
-          }
-        };
       }
 
       // Filter summary data based on user's allowed projects if they are not Superman
@@ -370,10 +382,16 @@ export async function getUnifiedCRMData(
       let filteredCampaigns = campaigns;
       let filteredLeaderboard = leaderboard;
 
+      const isDevOrAdmin = ["developer", "admin", "superman"].includes(profile.role);
+      if (!isDevOrAdmin) {
+        filteredSummary = filteredSummary.filter((p: any) => p.project_slug !== "sandbox" && p.project_slug !== "bw_main");
+        filteredCampaigns = filteredCampaigns.filter((c: any) => c.project_slug !== "sandbox" && c.project_slug !== "bw_main");
+      }
+
       if (!isSuperman) {
         const allowedIds = new Set(allowedProjects.map((p) => p.id));
-        filteredSummary = summary.filter((p: any) => allowedIds.has(p.project_id));
-        filteredCampaigns = campaigns.filter((c: any) => allowedProjects.some(ap => ap.slug === c.project_slug));
+        filteredSummary = filteredSummary.filter((p: any) => allowedIds.has(p.project_id));
+        filteredCampaigns = filteredCampaigns.filter((c: any) => allowedProjects.some(ap => ap.slug === c.project_slug));
         
         filteredLeaderboard = leaderboard.map((l: any) => {
           const lProjects = String(l.projectNames || "").split(", ").map(p => p.trim());
@@ -808,7 +826,7 @@ export async function getUnifiedCRMData(
     const subscriptionRevenueUah = Number(kpiData.subscription_revenue_uah || 0);
     const subscriptionRevenueUsd = Number(kpiData.subscription_revenue_usd || 0);
 
-    const paidLeadsCount = Number(kpiData.course_orders || 0);
+    const paidLeadsCount = Number(kpiData.paid_leads || kpiData.paid_orders || (Number(kpiData.course_orders || 0) + Number(kpiData.tripwire_orders || 0)));
     const paidTripwiresCount = Number(kpiData.tripwire_orders || 0);
     const totalSales = Number(kpiData.paid_orders || 0);
 
@@ -1195,6 +1213,135 @@ export async function createUnifiedLeadAction(
     return { success: true, orderId: order.id };
   } catch (err: any) {
     return { error: err.message || "Failed to create lead" };
+  }
+}
+
+export async function getFounderDashboardDataAction(startDate?: string, endDate?: string) {
+  try {
+    const { isSuperman, allowedProjects, profile, user } = await getSessionAndAccess("all");
+    const isDevOrAdmin = ["developer", "admin", "superman"].includes(profile.role);
+    const adminSupabase = createAdminClient();
+
+    const startIso = startDate ? new Date(startDate).toISOString() : null;
+    const endIso = endDate ? new Date(`${endDate}T23:59:59.999Z`).toISOString() : null;
+
+    const [summaryRes, leaderboardRes, cellsRes, taskLogsRes, dbProjectsRes] = await Promise.all([
+      adminSupabase.rpc("get_superman_summary", { p_start_date: startIso, p_end_date: endIso }),
+      adminSupabase.rpc("get_producers_leaderboard", { p_start_date: startIso, p_end_date: endIso }),
+      getCellsAction(),
+      getGlobalTaskLogsAction(),
+      adminSupabase.from("projects").select("id, cell_id, slug, is_active")
+    ]);
+
+    const rawSummary = summaryRes.data || [];
+    let summary = rawSummary.map((p: any) => ({
+      project_id: p.project_id,
+      project_name: p.project_name,
+      project_slug: p.project_slug,
+      cell_id: p.cell_id,
+      revenue_uah: Number(p.uah_revenue || 0),
+      revenue_usd: Number(p.usd_revenue || 0),
+      revenue_eur: Number(p.eur_revenue || 0),
+      expenses_uah: Number(p.spend_uah || 0),
+      expenses_usd: Number(p.spend_usd || p.spend || 0),
+      leads_count: Number(p.leads_count || 0),
+      cpl: Number(p.cpl_usd || p.cpl || 0),
+      cpl_uah: Number(p.cpl_uah || 0),
+      profit_uah: Number(p.profit_uah || 0),
+      profit_usd: Number(p.profit_usd || 0),
+      roi: Number(p.roi || 0)
+    }));
+
+    if (!isDevOrAdmin) {
+      summary = summary.filter((p: any) => p.project_slug !== "sandbox" && p.project_slug !== "bw_main");
+    }
+
+    const cells = Array.isArray(cellsRes) ? cellsRes : [];
+    const taskLogs = Array.isArray(taskLogsRes) ? taskLogsRes : [];
+    const projectCellMap = new Map((dbProjectsRes.data || []).map((p: any) => [p.id, p.cell_id]));
+
+    const summaryDataWithCell = summary.map((p: any) => ({
+      ...p,
+      cell_id: projectCellMap.get(p.project_id) || p.cell_id || null
+    }));
+
+    let totalRevenueUah = 0;
+    let totalSpendUah = 0;
+    summaryDataWithCell.forEach((p: any) => {
+      totalRevenueUah += Number(p.revenue_uah || 0);
+      totalSpendUah += Number(p.expenses_uah || 0);
+    });
+    const totalProfitUah = totalRevenueUah - totalSpendUah;
+    const globalRoi = totalSpendUah > 0 ? (totalProfitUah / totalSpendUah) * 100 : 0;
+
+    const cellsWithProjects = cells.map((cell: any) => {
+      const cellProjects = summaryDataWithCell.filter((p: any) => p.cell_id === cell.id);
+      let cellRevenue = 0;
+      let cellSpend = 0;
+      cellProjects.forEach((p: any) => {
+        cellRevenue += Number(p.revenue_uah || 0);
+        cellSpend += Number(p.expenses_uah || 0);
+      });
+      return {
+        ...cell,
+        projects: cellProjects,
+        revenue: cellRevenue,
+        spend: cellSpend,
+        profit: cellRevenue - cellSpend
+      };
+    });
+
+    const unassignedProjects = summaryDataWithCell.filter(
+      (p: any) => !p.cell_id && (isDevOrAdmin ? true : p.project_slug !== "bw_main" && p.project_slug !== "sandbox")
+    );
+
+    const leaderboard = (leaderboardRes.data || []).map((l: any, idx: number) => ({
+      producerId: l.producer_id,
+      email: l.email,
+      name: l.name,
+      avatar_url: l.avatar_url,
+      projectNames: l.project_names,
+      spend: Number(l.spend || 0),
+      leadsCount: Number(l.leads_count || 0),
+      cpl: Number(l.cpl || 0),
+      usd_revenue: Number(l.usd_revenue || 0),
+      uah_revenue: Number(l.uah_revenue || 0),
+      eur_revenue: Number(l.eur_revenue || 0),
+      blended_revenue: Number(l.blended_revenue || 0),
+      profit: Number(l.profit || 0),
+      roi: Number(l.roi || 0),
+      isLeaderOfMonth: idx === 0 && Number(l.blended_revenue || 0) > 0
+    }));
+
+    return {
+      success: true,
+      cellsWithProjects,
+      unassignedProjects,
+      leaderboard,
+      taskLogs,
+      totalRevenueUah,
+      totalSpendUah,
+      totalProfitUah,
+      globalRoi,
+      startDate: startDate || "",
+      endDate: endDate || "",
+      isDevOrAdmin
+    };
+  } catch (err: any) {
+    return {
+      error: err.message || "Failed to load founder dashboard data",
+      cellsWithProjects: [],
+      unassignedProjects: [],
+      leaderboard: [],
+      taskLogs: [],
+      totalRevenueUah: 0,
+      totalSpendUah: 0,
+      totalProfitUah: 0,
+      globalRoi: 0,
+      startDate: "",
+      endDate: "",
+      isDevOrAdmin: false
+    };
   }
 }
 
@@ -1775,17 +1922,17 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
 
     const adminSupabase = createAdminClient();
 
-    // 1. Fetch exchange rate dynamically from NBU (today's rate and historical rates in parallel)
+    // 1. Fetch exchange rate dynamically from NBU
     const { getExchangeRates } = await import("@/lib/exchange-rate");
     const todayRates = await getExchangeRates();
 
-    // 2. Fetch daily spend records
+    // 2. Fetch Meta Ads daily records strictly from daily_traffic_and_costs
     let costsQuery = adminSupabase
       .from("daily_traffic_and_costs")
       .select("*")
       .eq("project_id", projectId)
       .order("date", { ascending: false })
-      .limit(5000);
+      .limit(10000);
 
     if (startDateStr) {
       costsQuery = costsQuery.gte("date", startDateStr);
@@ -1797,78 +1944,131 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
     const { data: costsData, error: costsError } = await costsQuery;
     if (costsError) throw costsError;
 
-    // 3. Fetch orders
-    let ordersQuery = adminSupabase
-      .from("unified_orders")
-      .select("id, amount, status, created_at, utm_campaign, utm_medium, utm_source, campaign_id, customer_id, metadata")
-      .eq("project_id", projectId)
-      .order("created_at", { ascending: false })
-      .limit(5000);
+    // 3. Fetch real Meta campaign statuses from Meta Graph API
+    const metaCampaignStatuses: Record<string, string> = {};
+    try {
+      const { data: mapping } = await adminSupabase
+        .from("ad_spend_mappings")
+        .select("rule_value")
+        .eq("project_slug", projectSlug)
+        .eq("rule_type", "account")
+        .maybeSingle();
 
-    if (startDateStr) {
-      ordersQuery = ordersQuery.gte("created_at", `${startDateStr}T00:00:00Z`);
+      const tokens = await getAllActiveMetaTokens(adminSupabase, projectSlug);
+      if (mapping?.rule_value && tokens.length > 0) {
+        const accId = mapping.rule_value;
+        for (const token of tokens) {
+          try {
+            const campRes = await fetch(
+              `https://graph.facebook.com/v25.0/${accId}/campaigns?fields=id,name,effective_status&limit=100&access_token=${token}`
+            );
+            if (campRes.ok) {
+              const campData = await campRes.json();
+              campData.data?.forEach((c: any) => {
+                if (c.id) metaCampaignStatuses[c.id] = c.effective_status;
+                if (c.name) metaCampaignStatuses[c.name] = c.effective_status;
+              });
+              break;
+            }
+          } catch (err) {}
+        }
+      }
+    } catch (e) {
+      console.warn("Could not fetch live Meta campaign statuses:", e);
     }
-    if (endDateStr) {
-      ordersQuery = ordersQuery.lte("created_at", `${endDateStr}T23:59:59Z`);
-    }
 
-    const { data: ordersData, error: ordersError } = await ordersQuery;
-    if (ordersError) throw ordersError;
-
-    // Prefetch only unique order dates where UAH/EUR rates are missing in metadata
-    const uniqueDates = Array.from(
-      new Set(
-        (ordersData || [])
-          .filter((o: any) => {
-            const currency = String(o.metadata?.currency || o.metadata?.lead?.currency || 'usd').toLowerCase().trim();
-            if (currency === 'usd' || currency === '$') return false;
-            // Only require rates if they are not already in metadata
-            const hasRate = Number(o.metadata?.usd_rate) > 0 && Number(o.metadata?.eur_to_usd) > 0;
-            return !hasRate;
-          })
-          .map((o: any) => o.created_at ? o.created_at.split("T")[0] : null)
-          .filter(Boolean)
-      )
-    ) as string[];
-
-    const rateMap: Record<string, { usdRate: number, eurRate: number, eurToUsd: number }> = {};
-    if (uniqueDates.length > 0) {
-      await Promise.all(
-        uniqueDates.map(async (date) => {
-          rateMap[date] = await getExchangeRates(date);
-        })
+    // Helper to resolve lead count from actions if meta_leads is 0 but actions exist
+    const resolveMetaLeads = (row: any) => {
+      if (Number(row.meta_leads || 0) > 0) return Number(row.meta_leads);
+      const actions = row.actions || [];
+      if (!Array.isArray(actions) || actions.length === 0) return 0;
+      const leadAction = actions.find((a: any) =>
+        [
+          "offsite_conversion.fb_pixel_lead",
+          "onsite_web_lead",
+          "lead",
+          "onsite_conversion.lead_grouped",
+          "offsite_lead_add_20_s_calls",
+          "onsite_conversion.messaging_conversation_started_7d",
+          "onsite_conversion.total_messaging_connection"
+        ].includes(a.action_type) || (typeof a.action_type === "string" && a.action_type.startsWith("offsite_conversion.custom."))
       );
-    }
+      return leadAction ? Number(leadAction.value || 0) : 0;
+    };
 
-    const closedWonStatuses = [
-      'closed_won', 'approved', 'aprooved', 'оплачено', 'купив курс', 'купив_курс', 
-      'купив трипвайєр', 'купив трипвайер', 'купив(-ла) трипвайер', 'оплачено полностью'
-    ];
+    // Helper to resolve purchase count from actions if meta_purchases is 0 but actions exist
+    const resolveMetaPurchases = (row: any) => {
+      if (Number(row.meta_purchases || 0) > 0) return Number(row.meta_purchases);
+      const actions = row.actions || [];
+      if (!Array.isArray(actions) || actions.length === 0) return 0;
+      const purchaseAction = actions.find((a: any) =>
+        [
+          "offsite_conversion.fb_pixel_purchase",
+          "onsite_web_purchase",
+          "omni_purchase",
+          "purchase",
+          "onsite_web_app_purchase",
+          "web_in_store_purchase",
+          "web_app_in_store_purchase",
+          "offsite_purchase_add_20_s_calls"
+        ].includes(a.action_type)
+      );
+      return purchaseAction ? Number(purchaseAction.value || 0) : 0;
+    };
 
-    const leadStatusesToExclude = ['Клик', 'КликФормы'];
+    // Helper to resolve purchase value from action_values
+    const resolveMetaPurchaseValue = (row: any) => {
+      if (Number(row.meta_purchase_value_usd || 0) > 0) return Number(row.meta_purchase_value_usd);
+      const actionValues = row.action_values || [];
+      if (!Array.isArray(actionValues) || actionValues.length === 0) return 0;
+      const purchaseValAction = actionValues.find((a: any) =>
+        [
+          "offsite_conversion.fb_pixel_purchase",
+          "onsite_web_purchase",
+          "omni_purchase",
+          "purchase",
+          "onsite_web_app_purchase",
+          "web_in_store_purchase",
+          "web_app_in_store_purchase",
+          "offsite_purchase_add_20_s_calls"
+        ].includes(a.action_type)
+      );
+      return purchaseValAction ? Number(purchaseValAction.value || 0) : 0;
+    };
 
-    // Helper to convert amount to USD using historical rate map
-    const getAmountInUsd = (amount: number, metadata: any, dateStr?: string) => {
-      const currency = String(metadata?.currency || metadata?.lead?.currency || 'usd').toLowerCase();
-      
-      const metaUsdRate = Number(metadata?.usd_rate);
-      const metaEurToUsd = Number(metadata?.eur_to_usd);
+    // Helper to resolve consultation events from actions
+    const resolveMetaConsultations = (row: any) => {
+      const actions = row.actions || [];
+      if (!Array.isArray(actions) || actions.length === 0) return 0;
+      const consultAction = actions.find((a: any) => {
+        const type = String(a.action_type || "").toLowerCase();
+        return (
+          type.includes("schedule") ||
+          type.includes("contact") ||
+          type.includes("submit_application") ||
+          type.includes("consultation") ||
+          type.includes("anketa") ||
+          type.includes("diagnostik") ||
+          type.includes("appointment")
+        );
+      });
+      return consultAction ? Number(consultAction.value || 0) : 0;
+    };
 
-      const activeUsdRate = !isNaN(metaUsdRate) && metaUsdRate > 0 
-        ? metaUsdRate 
-        : (dateStr && rateMap[dateStr] ? rateMap[dateStr].usdRate : todayRates.usdRate);
-
-      const activeEurToUsd = !isNaN(metaEurToUsd) && metaEurToUsd > 0
-        ? metaEurToUsd
-        : (dateStr && rateMap[dateStr] ? rateMap[dateStr].eurToUsd : todayRates.eurToUsd);
-
-      if (currency === 'uah' || currency === '₴') {
-        return amount / activeUsdRate;
-      }
-      if (currency === 'eur' || currency === '€') {
-        return amount * activeEurToUsd;
-      }
-      return amount; // default to USD
+    // Helper to resolve applications / checkout intents from actions
+    const resolveMetaApplications = (row: any) => {
+      const actions = row.actions || [];
+      if (!Array.isArray(actions) || actions.length === 0) return 0;
+      const appAction = actions.find((a: any) => {
+        const type = String(a.action_type || "").toLowerCase();
+        return (
+          type.includes("initiate_checkout") ||
+          type.includes("complete_registration") ||
+          type.includes("zayavka") ||
+          type.includes("add_to_cart")
+        );
+      });
+      return appAction ? Number(appAction.value || 0) : 0;
     };
 
     // --- GROUP BY CAMPAIGN ---
@@ -1909,132 +2109,24 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
         if (!campaignMap[campId].min_date || dateStr < campaignMap[campId].min_date) campaignMap[campId].min_date = dateStr;
         if (!campaignMap[campId].max_date || dateStr > campaignMap[campId].max_date) campaignMap[campId].max_date = dateStr;
       }
-      campaignMap[campId].spend += Number(c.spend_usd || c.spend || 0);
-      campaignMap[campId].clicks += Number(c.clicks || 0);
-      campaignMap[campId].impressions += Number(c.impressions || 0);
-    });
 
-    // 4. Fetch real Meta campaign statuses from Meta Graph API if token & mapping available
-    const metaCampaignStatuses: Record<string, string> = {};
-    try {
-      const { data: mapping } = await adminSupabase
-        .from("ad_spend_mappings")
-        .select("rule_value")
-        .eq("project_slug", projectSlug)
-        .eq("rule_type", "account")
-        .maybeSingle();
+      const spend = Number(c.spend_usd || c.spend || 0);
+      const clicks = Number(c.clicks || 0);
+      const impressions = Number(c.impressions || 0);
+      const leads = resolveMetaLeads(c);
+      const sales = resolveMetaPurchases(c);
+      const purchaseValue = resolveMetaPurchaseValue(c);
+      const metaConsultations = resolveMetaConsultations(c);
+      const metaApps = resolveMetaApplications(c);
 
-      const tokens = await getAllActiveMetaTokens(adminSupabase, projectSlug);
-      if (mapping?.rule_value && tokens.length > 0) {
-        const accId = mapping.rule_value;
-        for (const token of tokens) {
-          try {
-            const campRes = await fetch(
-              `https://graph.facebook.com/v25.0/${accId}/campaigns?fields=id,name,effective_status&limit=50&access_token=${token}`
-            );
-            if (campRes.ok) {
-              const campData = await campRes.json();
-              campData.data?.forEach((c: any) => {
-                if (c.id) metaCampaignStatuses[c.id] = c.effective_status;
-                if (c.name) metaCampaignStatuses[c.name] = c.effective_status;
-              });
-              break; // Stop after first working token
-            }
-          } catch (err) {}
-        }
-      }
-    } catch (e) {
-      console.warn("Could not fetch live Meta campaign statuses:", e);
-    }
-
-    const normSlug = (str: any) => String(str || "").toLowerCase().trim().replace(/%20/g, " ").replace(/[\s_\-\/\.\|\:\,\;\(\)]+/g, "");
-
-    (ordersData || []).forEach((o: any) => {
-      const rawUtmCamp = String(o.utm_campaign || "").trim();
-      const rawUtmMedium = String(o.utm_medium || "").trim();
-      const rawId = String(o.campaign_id || o.metadata?.campaign_id || "").trim();
-
-      let matchedCampId: string | null = null;
-
-      // Strategy 1: Direct ID match
-      if (rawId && campaignMap[rawId]) {
-        matchedCampId = rawId;
-      }
-
-      // Strategy 2: Check utm_medium first (where campaign names are usually placed), then utm_campaign
-      if (!matchedCampId) {
-        for (const rawCandidate of [rawUtmMedium, rawUtmCamp]) {
-          if (!rawCandidate) continue;
-          if (campaignMap[rawCandidate]) {
-            matchedCampId = rawCandidate;
-            break;
-          }
-          // Extract numeric Meta ID if present
-          const digitsMatch = rawCandidate.match(/(\d{8,})/);
-          if (digitsMatch && campaignMap[digitsMatch[1]]) {
-            matchedCampId = digitsMatch[1];
-            break;
-          }
-          // Match normalized campaign name
-          const normCand = normSlug(rawCandidate);
-          for (const c of Object.values(campaignMap)) {
-            const normName = normSlug(c.campaign_name);
-            const normId = normSlug(c.campaign_id);
-            if (normName === normCand || normId === normCand || normCand.includes(normName) || normName.includes(normCand)) {
-              matchedCampId = c.campaign_id;
-              break;
-            }
-          }
-          if (matchedCampId) break;
-        }
-      }
-
-      // Strategy 3: Fallback for unmatched orders
-      const hasUtm = Boolean(rawUtmCamp || rawUtmMedium);
-      const isDynamicTemplate = rawUtmCamp.includes("{{") || rawUtmMedium.includes("{{");
-      const campId = matchedCampId || (hasUtm && !isDynamicTemplate ? `custom_${normSlug(rawUtmCamp || rawUtmMedium)}` : "organic_direct");
-      const fallbackName = hasUtm && !isDynamicTemplate ? (rawUtmCamp || rawUtmMedium) : "Прямий / Органічний трафік";
-
-      const orderDate = o.created_at ? o.created_at.split('T')[0] : undefined;
-
-      if (!campaignMap[campId]) {
-        campaignMap[campId] = {
-          campaign_id: campId,
-          campaign_name: fallbackName,
-          spend: 0,
-          clicks: 0,
-          impressions: 0,
-          leads_count: 0,
-          sales: 0,
-          applications: 0,
-          consultations: 0,
-          usd_revenue: 0,
-          min_date: orderDate || "",
-          max_date: orderDate || ""
-        };
-      } else if (orderDate) {
-        if (!campaignMap[campId].min_date || orderDate < campaignMap[campId].min_date) {
-          campaignMap[campId].min_date = orderDate;
-        }
-        if (!campaignMap[campId].max_date || orderDate > campaignMap[campId].max_date) {
-          campaignMap[campId].max_date = orderDate;
-        }
-      }
-
-      const orderStatus = String(o.status || '').toLowerCase();
-      const isLead = !leadStatusesToExclude.includes(o.status);
-      const isSale = closedWonStatuses.includes(orderStatus);
-      const amountUsd = getAmountInUsd(Number(o.amount || 0), o.metadata, orderDate);
-
-      if (isLead) campaignMap[campId].leads_count += 1;
-      if (isSale) {
-        campaignMap[campId].sales += 1;
-        campaignMap[campId].usd_revenue += amountUsd;
-      }
-      campaignMap[campId].applications += 1;
-      if (orderStatus.includes('consult') || orderStatus.includes('консульт')) {
-        campaignMap[campId].consultations += 1;
-      }
+      campaignMap[campId].spend += spend;
+      campaignMap[campId].clicks += clicks;
+      campaignMap[campId].impressions += impressions;
+      campaignMap[campId].leads_count += leads;
+      campaignMap[campId].sales += sales;
+      campaignMap[campId].usd_revenue += purchaseValue;
+      campaignMap[campId].consultations += metaConsultations;
+      campaignMap[campId].applications += (metaApps > 0 ? metaApps : leads);
     });
 
     // --- GROUP BY DATE ---
@@ -2065,40 +2157,24 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
           usd_revenue: 0
         };
       }
-      dailyMap[dateStr].spend += Number(c.spend_usd || c.spend || 0);
-      dailyMap[dateStr].clicks += Number(c.clicks || 0);
-      dailyMap[dateStr].impressions += Number(c.impressions || 0);
-    });
 
-    (ordersData || []).forEach(o => {
-      const dateStr = o.created_at ? o.created_at.split('T')[0] : "unknown";
-      if (!dailyMap[dateStr]) {
-        dailyMap[dateStr] = {
-          date: dateStr,
-          spend: 0,
-          clicks: 0,
-          impressions: 0,
-          leads_count: 0,
-          sales: 0,
-          applications: 0,
-          consultations: 0,
-          usd_revenue: 0
-        };
-      }
-      const orderStatus = String(o.status || '').toLowerCase();
-      const isLead = !leadStatusesToExclude.includes(o.status);
-      const isSale = closedWonStatuses.includes(orderStatus);
-      const amountUsd = getAmountInUsd(Number(o.amount || 0), o.metadata, dateStr);
+      const spend = Number(c.spend_usd || c.spend || 0);
+      const clicks = Number(c.clicks || 0);
+      const impressions = Number(c.impressions || 0);
+      const leads = resolveMetaLeads(c);
+      const sales = resolveMetaPurchases(c);
+      const purchaseValue = resolveMetaPurchaseValue(c);
+      const metaConsultations = resolveMetaConsultations(c);
+      const metaApps = resolveMetaApplications(c);
 
-      if (isLead) dailyMap[dateStr].leads_count += 1;
-      if (isSale) {
-        dailyMap[dateStr].sales += 1;
-        dailyMap[dateStr].usd_revenue += amountUsd;
-      }
-      dailyMap[dateStr].applications += 1;
-      if (orderStatus.includes('consult') || orderStatus.includes('консульт')) {
-        dailyMap[dateStr].consultations += 1;
-      }
+      dailyMap[dateStr].spend += spend;
+      dailyMap[dateStr].clicks += clicks;
+      dailyMap[dateStr].impressions += impressions;
+      dailyMap[dateStr].leads_count += leads;
+      dailyMap[dateStr].sales += sales;
+      dailyMap[dateStr].usd_revenue += purchaseValue;
+      dailyMap[dateStr].consultations += metaConsultations;
+      dailyMap[dateStr].applications += (metaApps > 0 ? metaApps : leads);
     });
 
     // Helper to calculate ratios and metrics
@@ -2109,7 +2185,7 @@ export async function getTrafficAnalyticsData(startDateStr: string, endDateStr: 
       const siteCr = item.clicks > 0 ? (item.leads_count / item.clicks) * 100 : 0;
       const cpl = item.leads_count > 0 ? item.spend / item.leads_count : 0;
       const appCr = item.leads_count > 0 ? (item.applications / item.leads_count) * 100 : 0;
-      const cpa = item.applications > 0 ? item.spend / item.applications : 0;
+      const cpa = item.sales > 0 ? item.spend / item.sales : (item.applications > 0 ? item.spend / item.applications : 0);
       const aov = item.sales > 0 ? item.usd_revenue / item.sales : 0;
       const roas = item.spend > 0 ? item.usd_revenue / item.spend : 0;
       const profit = item.usd_revenue - item.spend;
@@ -2358,169 +2434,37 @@ export async function getFunnelsAction(projectId: string) {
 
     if (txErr) throw txErr;
 
-    const [leadsRes, costsRes] = await Promise.all([
-      adminSupabase
-        .from("crm_leads_cache")
-        .select("id, name, phone, status, utm_medium, utm_campaign, utm_source, page_path, page_url, visited_landings, target_sheet, uah_paid, usd_paid, eur_paid, uah_tripwire_paid, usd_tripwire_paid, eur_tripwire_paid, diagnostics_comment, created_at")
-        .eq("project_id", projectId),
-      adminSupabase
-        .from("daily_traffic_and_costs")
-        .select("date, campaign_name, campaign_id, spend_usd, spend, clicks, impressions")
-        .eq("project_id", projectId)
-    ]);
+    const funnelsWithStats = await Promise.all(
+      (funnels || []).map(async (funnel: any) => {
+        const { data: kpi } = await adminSupabase.rpc("get_funnel_analytics_aggregated", {
+          p_funnel_id: funnel.id
+        });
 
-    const allLeads = leadsRes.data || [];
-    const allCosts = costsRes.data || [];
-    const allTx = transactions || [];
-
-    const funnelsWithStats = (funnels || []).map((funnel: any) => {
-      const campaignIds = (funnel.campaign_ids || []).map((c: string) => c.trim().toLowerCase()).filter(Boolean);
-      const landingSlugs = (funnel.landing_slugs || []).map((s: string) => s.trim().toLowerCase()).filter(Boolean);
-      const funnelName = String(funnel.name || "").trim().toLowerCase();
-
-      const startTs = funnel.start_date ? new Date(funnel.start_date).getTime() : null;
-      const endTs = funnel.end_date ? new Date(funnel.end_date + "T23:59:59").getTime() : null;
-
-      // 1. Matched Leads
-      const matchedLeads = allLeads.filter((lead: any) => {
-        const lTime = new Date(lead.created_at).getTime();
-        if (startTs && lTime < startTs) return false;
-        if (endTs && lTime > endTs) return false;
-
-        const utmCampaign = String(lead.utm_campaign || "").trim().toLowerCase();
-        const utmMedium = String(lead.utm_medium || "").trim().toLowerCase();
-        const utmSource = String(lead.utm_source || "").trim().toLowerCase();
-        const path = String(lead.page_path || "").trim().toLowerCase();
-        const url = String(lead.page_url || "").trim().toLowerCase();
-        const landings = (lead.visited_landings || []).map((l: string) => String(l).toLowerCase());
-        const targetSheet = String(lead.target_sheet || "").trim().toLowerCase();
-
-        const hasCampaigns = campaignIds.length > 0;
-        const hasLandings = landingSlugs.length > 0;
-
-        const campaignMatch = hasCampaigns && campaignIds.some((cid: string) => 
-          (utmCampaign && (utmCampaign.includes(cid) || cid.includes(utmCampaign))) ||
-          (utmMedium && (utmMedium.includes(cid) || cid.includes(utmMedium))) ||
-          (utmSource && (utmSource.includes(cid) || cid.includes(utmSource)))
-        );
-
-        const landingMatch = hasLandings && landingSlugs.some((slug: string) => 
-          path.includes(slug) || url.includes(slug) || landings.some((l: string) => l.includes(slug))
-        );
-
-        const sheetMatch = targetSheet && (targetSheet.includes(funnelName) || funnelName.includes(targetSheet));
-
-        if (!hasCampaigns && !hasLandings) {
-          return Boolean(sheetMatch);
-        }
-
-        return Boolean(campaignMatch || landingMatch || sheetMatch);
-      });
-
-      // 2. Revenue & Sales
-      let revenueUAH = 0;
-      let revenueUSD = 0;
-      let salesCount = 0;
-
-      matchedLeads.forEach((lead: any) => {
-        const isPaid = isPaidStatus(lead.status) || Number(lead.uah_paid || 0) > 0 || Number(lead.usd_paid || 0) > 0 || Number(lead.uah_tripwire_paid || 0) > 0 || Number(lead.usd_tripwire_paid || 0) > 0;
-        const uah = Number(lead.uah_paid || 0) + Number(lead.uah_tripwire_paid || 0);
-        const usd = Number(lead.usd_paid || 0) + Number(lead.usd_tripwire_paid || 0);
-
-        if (isPaid || uah > 0 || usd > 0) {
-          salesCount++;
-          if (uah > 0 || usd > 0) {
-            revenueUAH += uah + (usd * 41.5);
-            revenueUSD += (uah / 41.5) + usd;
+        const s = kpi || {};
+        return {
+          ...funnel,
+          stats: {
+            leadsCount: Number(s.total_leads || 0),
+            salesCount: Number(s.paid_orders || 0),
+            quizzesCount: Number(s.quizzes_count || 0),
+            totalClicks: Number(s.total_clicks || 0),
+            impressions: Number(s.impressions || 0),
+            revenue: Number(s.total_revenue_uah || 0),
+            revenueUSD: Number(s.total_revenue_usd || 0),
+            spend: Number(s.spend_uah || 0),
+            spendUSD: Number(s.spend_usd || 0),
+            profit: Number(s.profit_uah || 0),
+            profitUSD: Number(s.profit_usd || 0),
+            roi: Number(s.roi || 0),
+            cr: Number(s.conversion_rate || 0),
+            cplUSD: Number(s.cpl_usd || 0),
+            cpaUSD: Number(s.cpa_usd || 0),
+            manualSpend: Number(s.manual_expense_uah || 0),
+            manualIncome: Number(s.manual_income_uah || 0)
           }
-        }
-      });
-
-      // 3. Ad Spend & Clicks
-      let spendUSD = 0;
-      let spendUAH = 0;
-      let totalClicks = 0;
-      let impressions = 0;
-
-      allCosts.forEach((c: any) => {
-        const cDate = c.date ? new Date(c.date).getTime() : null;
-        if (startTs && cDate && cDate < startTs) return;
-        if (endTs && cDate && cDate > endTs) return;
-
-        const cName = String(c.campaign_name || "").toLowerCase();
-        const cId = String(c.campaign_id || "").toLowerCase();
-
-        const hasCampaigns = campaignIds.length > 0;
-        const isMatched = hasCampaigns
-          ? campaignIds.some((cid: string) => cName.includes(cid) || cid.includes(cName) || cId === cid || cid.includes(cId))
-          : false;
-
-        if (isMatched) {
-          const sUsd = Number(c.spend_usd || c.spend || 0);
-          spendUSD += sUsd;
-          spendUAH += sUsd * 41.5;
-          totalClicks += Number(c.clicks || 0);
-          impressions += Number(c.impressions || 0);
-        }
-      });
-
-      // 4. Manual Transactions
-      let manualSpendUAH = 0;
-      let manualIncomeUAH = 0;
-
-      allTx.forEach((tx: any) => {
-        if (tx.funnel_id === funnel.id) {
-          const amt = Number(tx.amount || 0);
-          const isUAH = tx.currency === "UAH";
-          const amtUAH = isUAH ? amt : amt * 41.5;
-          const amtUSD = isUAH ? amt / 41.5 : amt;
-          if (tx.type === "expense") {
-            spendUAH += amtUAH;
-            spendUSD += amtUSD;
-            manualSpendUAH += amtUAH;
-          } else {
-            revenueUAH += amtUAH;
-            revenueUSD += amtUSD;
-            manualIncomeUAH += amtUAH;
-          }
-        }
-      });
-
-      const quizzesCount = matchedLeads.filter(
-        (l: any) => (l.diagnostics_comment && l.diagnostics_comment.trim().length > 0)
-      ).length;
-
-      const leadsCount = matchedLeads.length;
-      const profitUAH = revenueUAH - spendUAH;
-      const profitUSD = revenueUSD - spendUSD;
-      const roi = spendUSD > 0 ? (profitUSD / spendUSD) * 100 : 0;
-      const cr = leadsCount > 0 ? (salesCount / leadsCount) * 100 : 0;
-      const cplUSD = leadsCount > 0 ? spendUSD / leadsCount : 0;
-      const cpaUSD = salesCount > 0 ? spendUSD / salesCount : 0;
-
-      return {
-        ...funnel,
-        stats: {
-          leadsCount,
-          salesCount,
-          quizzesCount,
-          totalClicks,
-          impressions,
-          revenue: revenueUAH,
-          revenueUSD,
-          spend: spendUAH,
-          spendUSD,
-          profit: profitUAH,
-          profitUSD,
-          roi,
-          cr,
-          cplUSD,
-          cpaUSD,
-          manualSpend: manualSpendUAH,
-          manualIncome: manualIncomeUAH
-        }
-      };
-    });
+        };
+      })
+    );
 
     return {
       funnels: funnelsWithStats || [],
@@ -2528,6 +2472,33 @@ export async function getFunnelsAction(projectId: string) {
     };
   } catch (err: any) {
     return { error: err.message || "Failed to fetch funnels" };
+  }
+}
+
+export async function getFunnelAnalyticsAction(
+  projectId: string,
+  funnelId: string,
+  startDate?: string | null,
+  endDate?: string | null
+) {
+  try {
+    await checkProjectAccess(projectId);
+    const adminSupabase = createAdminClient();
+
+    const { data: kpi, error } = await adminSupabase.rpc("get_funnel_analytics_aggregated", {
+      p_funnel_id: funnelId,
+      p_start_date: startDate ? new Date(startDate).toISOString() : null,
+      p_end_date: endDate ? new Date(endDate).toISOString() : null
+    });
+
+    if (error) throw error;
+
+    return {
+      success: true,
+      stats: kpi
+    };
+  } catch (err: any) {
+    return { error: err.message || "Failed to fetch funnel analytics" };
   }
 }
 
@@ -3748,6 +3719,132 @@ export async function bindProjectAdAccountAction(projectSlug: string, adAccountI
 
       if (insErr) throw insErr;
     }
+
+    // Trigger immediate background sync for this project
+    (async () => {
+      try {
+        const tokens = await getAllActiveMetaTokens(adminSupabase, projectSlug);
+        if (tokens.length > 0) {
+          const apiVersion = process.env.META_API_VERSION || "v25.0";
+          const today = new Date();
+          const until = today.toISOString().split("T")[0];
+          const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+          const { data: project } = await adminSupabase
+            .from("projects")
+            .select("id")
+            .eq("slug", projectSlug)
+            .single();
+
+          if (project?.id) {
+            const { getExchangeRates } = await import("@/lib/exchange-rate");
+            const todayRates = await getExchangeRates();
+
+            for (const token of tokens) {
+              const url = `https://graph.facebook.com/${apiVersion}/${cleanAccountId}/insights?access_token=${token}&level=ad&fields=campaign_id,campaign_name,adset_id,ad_id,spend,impressions,clicks,actions,action_values,date_start&time_increment=1&time_range=${JSON.stringify({ since, until })}&limit=500`;
+              const res = await fetch(url);
+              if (res.ok) {
+                const data = await res.json();
+                const insights = data.data || [];
+                if (insights.length > 0) {
+                  const recordsToInsert = insights.map((item: any) => {
+                    const spend = Number(item.spend || 0);
+                    const actions = item.actions || [];
+                    const actionValues = item.action_values || [];
+
+                    // Primary web & instant leads
+                    const primaryLeadAction = actions.find((a: any) =>
+                      [
+                        "offsite_conversion.fb_pixel_lead",
+                        "onsite_web_lead",
+                        "lead",
+                        "onsite_conversion.lead_grouped",
+                        "offsite_lead_add_20_s_calls"
+                      ].includes(a.action_type)
+                    );
+
+                    const messagingLeadAction = actions.find((a: any) =>
+                      [
+                        "onsite_conversion.messaging_conversation_started_7d",
+                        "onsite_conversion.total_messaging_connection"
+                      ].includes(a.action_type)
+                    );
+
+                    const customLeadAction = actions.find((a: any) =>
+                      typeof a.action_type === "string" && a.action_type.startsWith("offsite_conversion.custom.")
+                    );
+
+                    let metaLeads = 0;
+                    if (primaryLeadAction) {
+                      metaLeads = Number(primaryLeadAction.value || 0);
+                    } else if (messagingLeadAction) {
+                      metaLeads = Number(messagingLeadAction.value || 0);
+                    } else if (customLeadAction) {
+                      metaLeads = Number(customLeadAction.value || 0);
+                    }
+
+                    const purchaseAction = actions.find((a: any) =>
+                      [
+                        "offsite_conversion.fb_pixel_purchase",
+                        "onsite_web_purchase",
+                        "omni_purchase",
+                        "purchase",
+                        "onsite_web_app_purchase",
+                        "web_in_store_purchase",
+                        "web_app_in_store_purchase",
+                        "offsite_purchase_add_20_s_calls"
+                      ].includes(a.action_type)
+                    );
+                    const metaPurchases = purchaseAction ? Number(purchaseAction.value || 0) : 0;
+
+                    const purchaseValAction = actionValues.find((a: any) =>
+                      [
+                        "offsite_conversion.fb_pixel_purchase",
+                        "onsite_web_purchase",
+                        "omni_purchase",
+                        "purchase",
+                        "onsite_web_app_purchase",
+                        "web_in_store_purchase",
+                        "web_app_in_store_purchase",
+                        "offsite_purchase_add_20_s_calls"
+                      ].includes(a.action_type)
+                    );
+                    const metaPurchaseValueUsd = purchaseValAction ? Number(purchaseValAction.value || 0) : 0;
+
+                    return {
+                      project_id: project.id,
+                      date: item.date_start,
+                      utm_source: "meta",
+                      spend_usd: Number(spend.toFixed(2)),
+                      spend: Number(spend.toFixed(2)),
+                      spend_uah: Number((spend * todayRates.usdRate).toFixed(2)),
+                      clicks: Number(item.clicks || 0),
+                      impressions: Number(item.impressions || 0),
+                      campaign_id: item.campaign_id,
+                      campaign_name: item.campaign_name,
+                      adset_id: item.adset_id || "",
+                      ad_id: item.ad_id || "",
+                      actions,
+                      action_values: actionValues,
+                      meta_leads: metaLeads,
+                      meta_purchases: metaPurchases,
+                      meta_purchase_value_usd: Number(metaPurchaseValueUsd.toFixed(2))
+                    };
+                  });
+
+                  await adminSupabase
+                    .from("daily_traffic_and_costs")
+                    .upsert(recordsToInsert, { onConflict: "project_id,date,utm_source,campaign_id,ad_id" });
+                }
+                break;
+              }
+            }
+          }
+        }
+      } catch (syncErr) {
+        console.warn("Could not immediately sync Meta spend after binding:", syncErr);
+      }
+    })();
 
     return { success: true, projectSlug, adAccountId: cleanAccountId };
   } catch (err: any) {

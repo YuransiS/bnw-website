@@ -1,43 +1,56 @@
-"use strict";
+"use client";
 
 import React from "react";
-import { Loader2 } from "lucide-react";
+import { useParabolicProgress } from "@/components/ui/ParabolicProgressBar";
 
 export default function DashboardLoading() {
+  const { progress } = useParabolicProgress(true, { maxStallPercent: 95, durationMs: 2800 });
+
   return (
-    <div className="w-full min-h-[60vh] flex flex-col items-center justify-center relative">
-      {/* Horizontal Progress Bar sliding at the top of content */}
-      <div className="absolute top-0 left-0 right-0 h-1 bg-white/5 overflow-hidden">
+    <div className="w-full min-h-[65vh] flex flex-col items-center justify-center relative">
+      {/* Top horizontal parabolic progress bar */}
+      <div className="fixed top-0 left-0 right-0 h-[2.5px] bg-white/5 z-50 overflow-hidden">
         <div 
-          className="h-full bg-emerald-500 rounded-full" 
+          className="h-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-300 transition-all duration-75 ease-out rounded-r-full" 
           style={{
-            width: "30%",
-            animation: "loadingBar 1.8s infinite linear"
+            width: `${progress}%`,
+            boxShadow: "0 0 14px rgba(16, 185, 129, 0.7)"
           }}
         />
       </div>
 
-      {/* Styled Inline Keyframes */}
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes loadingBar {
-          0% { transform: translateX(-100%); }
-          50% { transform: translateX(120%); }
-          100% { transform: translateX(300%); }
-        }
-      `}} />
+      <div className="flex flex-col items-center gap-6 text-center max-w-sm px-6 w-full">
+        {/* Modern Centered Progress Card */}
+        <div className="w-full bg-white/[0.02] border border-white/10 rounded-2xl p-6 shadow-2xl backdrop-blur-md space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              </span>
+              <span className="text-[11px] font-black uppercase tracking-widest text-white/90">
+                Завантаження дашборду
+              </span>
+            </div>
+            <span className="text-xs font-mono font-bold text-emerald-400">
+              {Math.round(progress)}%
+            </span>
+          </div>
 
-      <div className="flex flex-col items-center gap-4 text-center max-w-sm px-4">
-        <div className="relative flex items-center justify-center">
-          {/* Neon/Emerald Glow Ring behind the spinner */}
-          <div className="absolute w-16 h-16 rounded-full bg-emerald-500/10 blur-xl animate-pulse" />
-          <Loader2 className="w-9 h-9 text-emerald-450 animate-spin relative z-10" />
-        </div>
-        
-        <div className="space-y-1.5 z-10">
-          <p className="text-[11px] font-black uppercase tracking-widest text-white/80">
-            Завантаження дашборду
-          </p>
-          <p className="text-[9px] text-white/40 uppercase tracking-widest font-bold leading-normal animate-pulse">
+          {/* Non-linear Parabolic Progress Track */}
+          <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden p-[1px] border border-white/5">
+            <div
+              className="h-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-300 rounded-full transition-all duration-75 ease-out relative"
+              style={{
+                width: `${progress}%`,
+                boxShadow: "0 0 10px rgba(16, 185, 129, 0.4)",
+              }}
+            >
+              <div className="absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-r from-transparent to-white/50 blur-[0.5px]" />
+            </div>
+          </div>
+
+          <p className="text-[9px] text-white/40 uppercase tracking-widest font-bold leading-normal">
             Синхронізація аналітики та метрик з базою даних...
           </p>
         </div>
