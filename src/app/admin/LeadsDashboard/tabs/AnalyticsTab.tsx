@@ -354,8 +354,14 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Spend card */}
             <div className={`${cardClass} p-4 rounded-xl shadow-md backdrop-blur-md`}>
-              <p className={`text-[9px] ${textMutedClass} font-black uppercase tracking-widest`}>Витрати на рекламу ($)</p>
-              <p className="text-2xl font-black text-red-400 mt-2">${singleProjectStats?.totalSpend?.toFixed(2) || "0.00"}</p>
+              <p className={`text-[9px] ${textMutedClass} font-black uppercase tracking-widest`}>
+                Витрати на рекламу {globalCurrency === "UAH" ? "(₴)" : "($)"}
+              </p>
+              <p className="text-2xl font-black text-red-400 mt-2">
+                {globalCurrency === "UAH"
+                  ? `${formatLocaleNumber(singleProjectStats?.totalSpendUah || ((singleProjectStats?.totalSpend || 0) * 41.5))} ₴`
+                  : `$${(singleProjectStats?.totalSpend || 0).toFixed(2)}`}
+              </p>
               <p className={`text-[10px] ${textMutedClass} mt-0.5 font-semibold`}>Сумарний бюджет усього періоду</p>
             </div>
 
@@ -402,26 +408,26 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
                 {globalCurrency === "UAH" ? (
                   <p
                     className={`text-lg font-black ${
-                      (singleProjectStats?.netProfitUah ?? (Number(singleProjectStats?.uahRevenue || 0) - Number(singleProjectStats?.totalSpendUah || 0))) >= 0 ? "text-emerald-455" : "text-red-400"
+                      (Number(singleProjectStats?.netProfitUah ?? 0)) >= 0 ? "text-emerald-455" : "text-red-400"
                     }`}
                   >
-                    {(singleProjectStats?.netProfitUah ?? (Number(singleProjectStats?.uahRevenue || 0) - Number(singleProjectStats?.totalSpendUah || 0))) >= 0 ? "" : "-"}
+                    {(Number(singleProjectStats?.netProfitUah ?? 0)) < 0 ? "-" : ""}
                     {formatLocaleNumber(
-                      Math.abs(singleProjectStats?.netProfitUah ?? (Number(singleProjectStats?.uahRevenue || 0) - Number(singleProjectStats?.totalSpendUah || 0)))
+                      Math.abs(Number(singleProjectStats?.netProfitUah ?? (Number(singleProjectStats?.uahRevenue || 0) - Number(singleProjectStats?.totalSpendUah || 0))))
                     )} ₴
                   </p>
                 ) : (
                   <p
                     className={`text-lg font-black ${
-                      (singleProjectStats?.netProfitUsd ?? (Number(singleProjectStats?.usdRevenue || 0) - Number(singleProjectStats?.totalSpend || 0))) >= 0 ? "text-emerald-455" : "text-red-400"
+                      (Number(singleProjectStats?.netProfitUsd ?? 0)) >= 0 ? "text-emerald-455" : "text-red-400"
                     }`}
                   >
-                    {(singleProjectStats?.netProfitUsd ?? (Number(singleProjectStats?.usdRevenue || 0) - Number(singleProjectStats?.totalSpend || 0))) >= 0 ? "" : "-"}$
-                    {formatLocaleNumber(Math.abs(singleProjectStats?.netProfitUsd ?? (Number(singleProjectStats?.usdRevenue || 0) - Number(singleProjectStats?.totalSpend || 0))))}
+                    {(Number(singleProjectStats?.netProfitUsd ?? 0)) < 0 ? "-" : ""}$
+                    {formatLocaleNumber(Math.abs(Number(singleProjectStats?.netProfitUsd ?? (Number(singleProjectStats?.usdRevenue || 0) - Number(singleProjectStats?.totalSpend || 0)))))}
                   </p>
                 )}
                 <span className="text-[9px] font-black uppercase text-yellow-400 block mt-1 tracking-wider">
-                  ROI за курс: {singleProjectStats?.roi?.toFixed(1) || "0.0"}%
+                  ROI: {(singleProjectStats?.roi || 0).toFixed(1)}%
                 </span>
               </div>
             </div>
@@ -488,7 +494,7 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
         {/* Right Side: Funnel events configuration & overview (col-span-3) */}
         <div className="lg:col-span-3 space-y-4">
           <div className="flex items-center justify-between border-b border-white/5 pb-2">
-            <h3 className="text-xs font-black uppercase tracking-widest text-indigo-400">Інтелектуальні події</h3>
+            <h3 className="text-xs font-black uppercase tracking-widest text-indigo-400">Маркетингові воронки</h3>
             <button
               onClick={() => setActiveTab("funnels")}
               className="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-black text-[10px] font-black rounded-lg cursor-pointer flex items-center gap-1 transition-all"
