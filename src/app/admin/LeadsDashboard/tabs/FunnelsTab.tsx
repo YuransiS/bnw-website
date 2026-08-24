@@ -2162,14 +2162,32 @@ export default function FunnelsTab({
               </div>
 
               {/* Bot Milestones Step Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                {[
-                  { step: "bot_started", label: "1. Старт бота (/start)", desc: "Активація ліда", count: botStepCounts["bot_started"] || 0, color: "text-white" },
-                  { step: "lesson_1", label: "2. Урок 1 (Контент)", desc: "Видача 1-го модуля", count: botStepCounts["lesson_1"] || 0, color: "text-cyan-400" },
-                  { step: "lesson_2", label: "3. Урок 2 (Контент)", desc: "Видача 2-го модуля", count: botStepCounts["lesson_2"] || 0, color: "text-cyan-400" },
-                  { step: "completed", label: "4. Анкета / ДЗ", desc: "Фініш мінікурсу", count: botStepCounts["completed"] || botStepCounts["quiz_completed"] || 0, color: "text-purple-400" },
-                  { step: "offer_clicked", label: "5. Клік по оферу", desc: "Намір купити", count: botStepCounts["offer_clicked"] || 0, color: "text-emerald-400" },
-                ].map((item) => {
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+                {(() => {
+                  const defaultItems = [
+                    { step: "bot_started", label: "1. Старт бота", desc: "Активація ліда", count: botStepCounts["bot_started"] || 0, color: "text-white" },
+                    { step: "lesson_1", label: "2. Урок 1", desc: "1-й модуль", count: botStepCounts["lesson_1"] || 0, color: "text-cyan-400" },
+                    { step: "lesson_2", label: "3. Урок 2", desc: "2-й модуль", count: botStepCounts["lesson_2"] || 0, color: "text-cyan-400" },
+                    { step: "lesson_3", label: "4. Урок 3", desc: "3-й модуль", count: botStepCounts["lesson_3"] || 0, color: "text-cyan-400" },
+                    { step: "completed", label: "5. Фініш/Бонуси", desc: "Завершення курсу", count: botStepCounts["completed"] || botStepCounts["quiz_completed"] || 0, color: "text-purple-400" },
+                    { step: "nedesign_clicked", label: "6. NEDESIGN", desc: "Клік флагману", count: botStepCounts["nedesign_clicked"] || 0, color: "text-amber-400" },
+                    { step: "offer_390_clicked", label: "7. Офер 390 грн", desc: "Клік за 390 грн", count: (botStepCounts["offer_390_clicked"] || 0) + (botStepCounts["offer_clicked"] || 0), color: "text-emerald-400" },
+                  ];
+
+                  // Dynamically include any other custom steps present in DB
+                  const knownSteps = new Set(defaultItems.map(d => d.step).concat(["offer_clicked", "quiz_completed", "other"]));
+                  const extraItems = Object.keys(botStepCounts)
+                    .filter(s => !knownSteps.has(s) && botStepCounts[s] > 0)
+                    .map(s => ({
+                      step: s,
+                      label: `Крок: ${s}`,
+                      desc: "Кастомна подія",
+                      count: botStepCounts[s],
+                      color: "text-pink-400"
+                    }));
+
+                  return [...defaultItems, ...extraItems];
+                })().map((item) => {
                   const currentBot = selectedBotUsername || sendPulseBots[0]?.username || "";
                   const botParam = currentBot ? `&bot=${currentBot}` : "";
                   const webhookUrl = `https://bnw-prod.vercel.app/api/v1/integrations/sendpulse/webhook?project=${activeProject?.slug || 'sergiy'}${botParam}&step=${item.step}`;
