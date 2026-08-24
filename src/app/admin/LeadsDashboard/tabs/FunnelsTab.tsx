@@ -716,6 +716,27 @@ export default function FunnelsTab({
       const sCount = Number(s.salesCount || 0);
       const convRate = lCount > 0 ? (sCount / lCount) * 100 : 0;
 
+      const rawTraffic = s.trafficAnalytics;
+      const trafficAnalytics = rawTraffic ? {
+        totalSpend: isUSD ? Number(rawTraffic.totalSpendUSD ?? rawTraffic.totalSpend ?? spd) : Number(rawTraffic.totalSpendUAH ?? rawTraffic.totalSpend ?? spd),
+        totalClicks: Number(rawTraffic.totalClicks || s.totalClicks || 0),
+        impressions: Number(rawTraffic.impressions || s.impressions || 0),
+        ctr: Number(rawTraffic.ctr || (rawTraffic.impressions > 0 ? (rawTraffic.totalClicks / rawTraffic.impressions) * 100 : 0) || 0),
+        cpc: isUSD ? Number(rawTraffic.cpcUSD ?? rawTraffic.cpc ?? 0) : Number(rawTraffic.cpcUAH ?? rawTraffic.cpc ?? 0),
+        cpm: isUSD ? Number(rawTraffic.cpmUSD ?? rawTraffic.cpm ?? 0) : Number(rawTraffic.cpmUAH ?? rawTraffic.cpm ?? 0),
+        cpl: isUSD ? Number(rawTraffic.cplUSD ?? rawTraffic.cpl ?? 0) : Number(rawTraffic.cplUAH ?? rawTraffic.cpl ?? 0),
+        dailyBreakdown: Array.isArray(rawTraffic.dailyBreakdown) ? rawTraffic.dailyBreakdown : []
+      } : {
+        totalSpend: spd,
+        totalClicks: Number(s.totalClicks || 0),
+        impressions: Number(s.impressions || 0),
+        ctr: Number(s.ctr || 0),
+        cpc: isUSD ? Number(s.cpcUSD || 0) : Number(s.cpcUAH || 0),
+        cpm: isUSD ? Number(s.cpmUSD || 0) : Number(s.cpmUAH || 0),
+        cpl: isUSD ? Number(s.cplUSD || 0) : Number(s.cplUAH || 0),
+        dailyBreakdown: []
+      };
+
       return {
         leadsCount: lCount,
         salesCount: sCount,
@@ -731,17 +752,8 @@ export default function FunnelsTab({
         cpaUSD: Number(s.cpaUSD || 0),
         manualSpend: Number(s.manualSpend || 0),
         manualIncome: Number(s.manualIncome || 0),
-        offerVariants: s.offerVariants || [],
-        trafficAnalytics: s.trafficAnalytics || {
-          totalSpend: spd,
-          totalClicks: Number(s.totalClicks || 0),
-          impressions: Number(s.impressions || 0),
-          ctr: Number(s.ctr || (s.impressions > 0 ? (s.totalClicks / s.impressions) * 100 : 0)),
-          cpc: isUSD ? Number(s.cpcUSD || 0) : Number(s.cpcUAH || 0),
-          cpm: isUSD ? Number(s.cpmUSD || 0) : Number(s.cpmUAH || 0),
-          cpl: isUSD ? Number(s.cplUSD || 0) : Number(s.cplUAH || 0),
-          dailyBreakdown: s.trafficAnalytics?.dailyBreakdown || []
-        }
+        offerVariants: Array.isArray(s.offerVariants) ? s.offerVariants : [],
+        trafficAnalytics
       };
     }
 
@@ -1879,38 +1891,46 @@ export default function FunnelsTab({
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {stats.offerVariants.map((v: any) => (
-                      <div
-                        key={v.key}
-                        className="bg-white/[0.02] border border-white/5 hover:border-white/15 p-3 rounded-xl space-y-2 transition-all"
-                      >
-                        <div className="flex justify-between items-start">
-                          <div className="space-y-0.5">
-                            <span className="font-bold text-xs text-white block">{v.name}</span>
-                            <span className="text-[9px] text-white/40 block">
-                              {v.leadsCount} лідів ({v.percentage.toFixed(1)}% від усіх)
+                    {stats.offerVariants.map((v: any) => {
+                      const pct = Number(v?.percentage) || 0;
+                      const crVal = Number(v?.cr) || 0;
+                      const revVal = Number(v?.revenue) || 0;
+                      const lCount = Number(v?.leadsCount) || 0;
+                      const sCount = Number(v?.salesCount) || 0;
+
+                      return (
+                        <div
+                          key={v?.key || Math.random()}
+                          className="bg-white/[0.02] border border-white/5 hover:border-white/15 p-3 rounded-xl space-y-2 transition-all"
+                        >
+                          <div className="flex justify-between items-start">
+                            <div className="space-y-0.5">
+                              <span className="font-bold text-xs text-white block">{v?.name || "Оффер"}</span>
+                              <span className="text-[9px] text-white/40 block">
+                                {lCount} лідів ({pct.toFixed(1)}% від усіх)
+                              </span>
+                            </div>
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                              {pct.toFixed(0)}%
                             </span>
                           </div>
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                            {v.percentage.toFixed(0)}%
-                          </span>
-                        </div>
 
-                        {/* Visual distribution bar */}
-                        <div className="w-full h-1.5 bg-neutral-800 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-300"
-                            style={{ width: `${Math.min(v.percentage, 100)}%` }}
-                          />
-                        </div>
+                          {/* Visual distribution bar */}
+                          <div className="w-full h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-300"
+                              style={{ width: `${Math.min(pct, 100)}%` }}
+                            />
+                          </div>
 
-                        <div className="flex justify-between items-center text-[9px] text-white/40 pt-1 border-t border-white/5">
-                          <span>Оплати: <strong className="text-white">{v.salesCount}</strong></span>
-                          <span>CR: <strong className="text-emerald-400">{v.cr.toFixed(1)}%</strong></span>
-                          <span>Сума: <strong className="text-emerald-400">{Math.round(v.revenue).toLocaleString("uk-UA")} {isUSD ? "$" : "₴"}</strong></span>
+                          <div className="flex justify-between items-center text-[9px] text-white/40 pt-1 border-t border-white/5">
+                            <span>Оплати: <strong className="text-white">{sCount}</strong></span>
+                            <span>CR: <strong className="text-emerald-400">{crVal.toFixed(1)}%</strong></span>
+                            <span>Сума: <strong className="text-emerald-400">{Math.round(revVal).toLocaleString("uk-UA")} {isUSD ? "$" : "₴"}</strong></span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -1938,48 +1958,48 @@ export default function FunnelsTab({
                   <div className="bg-white/[0.02] border border-white/5 p-3.5 rounded-xl space-y-1">
                     <span className="text-[9px] uppercase font-bold text-white/40 block">Покази (Impressions)</span>
                     <span className="text-lg font-black text-white block">
-                      {stats.trafficAnalytics.impressions.toLocaleString("uk-UA")}
+                      {(Number(stats.trafficAnalytics.impressions) || 0).toLocaleString("uk-UA")}
                     </span>
                   </div>
 
                   <div className="bg-white/[0.02] border border-white/5 p-3.5 rounded-xl space-y-1">
                     <span className="text-[9px] uppercase font-bold text-white/40 block">Кліки (Clicks)</span>
                     <span className="text-lg font-black text-emerald-400 block">
-                      {stats.trafficAnalytics.totalClicks.toLocaleString("uk-UA")}
+                      {(Number(stats.trafficAnalytics.totalClicks) || 0).toLocaleString("uk-UA")}
                     </span>
                   </div>
 
                   <div className="bg-white/[0.02] border border-white/5 p-3.5 rounded-xl space-y-1">
                     <span className="text-[9px] uppercase font-bold text-white/40 block">CTR (Клікабельність)</span>
                     <span className="text-lg font-black text-cyan-400 block">
-                      {stats.trafficAnalytics.ctr.toFixed(2)}%
+                      {(Number(stats.trafficAnalytics.ctr) || 0).toFixed(2)}%
                     </span>
                   </div>
 
                   <div className="bg-white/[0.02] border border-white/5 p-3.5 rounded-xl space-y-1">
                     <span className="text-[9px] uppercase font-bold text-white/40 block">CPC (Ціна кліку)</span>
                     <span className="text-lg font-black text-white block">
-                      {isUSD ? `$${stats.trafficAnalytics.cpc.toFixed(2)}` : `${stats.trafficAnalytics.cpc.toFixed(2)} ₴`}
+                      {isUSD ? `$${(Number(stats.trafficAnalytics.cpc) || 0).toFixed(2)}` : `${(Number(stats.trafficAnalytics.cpc) || 0).toFixed(2)} ₴`}
                     </span>
                   </div>
 
                   <div className="bg-white/[0.02] border border-white/5 p-3.5 rounded-xl space-y-1">
                     <span className="text-[9px] uppercase font-bold text-white/40 block">CPM (За 1000 показів)</span>
                     <span className="text-lg font-black text-purple-400 block">
-                      {isUSD ? `$${stats.trafficAnalytics.cpm.toFixed(2)}` : `${Math.round(stats.trafficAnalytics.cpm).toLocaleString("uk-UA")} ₴`}
+                      {isUSD ? `$${(Number(stats.trafficAnalytics.cpm) || 0).toFixed(2)}` : `${Math.round(Number(stats.trafficAnalytics.cpm) || 0).toLocaleString("uk-UA")} ₴`}
                     </span>
                   </div>
 
                   <div className="bg-white/[0.02] border border-white/5 p-3.5 rounded-xl space-y-1">
                     <span className="text-[9px] uppercase font-bold text-white/40 block">CPL (Ціна за лід)</span>
                     <span className="text-lg font-black text-emerald-400 block">
-                      {isUSD ? `$${stats.trafficAnalytics.cpl.toFixed(2)}` : `${Math.round(stats.trafficAnalytics.cpl).toLocaleString("uk-UA")} ₴`}
+                      {isUSD ? `$${(Number(stats.trafficAnalytics.cpl) || 0).toFixed(2)}` : `${Math.round(Number(stats.trafficAnalytics.cpl) || 0).toLocaleString("uk-UA")} ₴`}
                     </span>
                   </div>
                 </div>
 
                 {/* Daily Traffic Breakdown Table */}
-                {stats.trafficAnalytics.dailyBreakdown.length > 0 && (
+                {Array.isArray(stats.trafficAnalytics.dailyBreakdown) && stats.trafficAnalytics.dailyBreakdown.length > 0 && (
                   <div className="space-y-2 pt-2 border-t border-white/5">
                     <span className="text-[10px] uppercase font-black text-white/40 block">
                       📅 Щоденна динаміка трафіку та конверсій у ліди
@@ -2001,25 +2021,38 @@ export default function FunnelsTab({
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5 font-semibold text-white/70">
-                          {stats.trafficAnalytics.dailyBreakdown.map((row: any, i: number) => (
-                            <tr key={i} className="hover:bg-white/[0.02] transition-all">
-                              <td className="p-3 text-white font-bold">{row.date}</td>
-                              <td className="p-3 truncate max-w-xs text-white/60">{row.campaignName}</td>
-                              <td className="p-3 text-right text-white font-bold">
-                                {isUSD ? `$${row.spendUSD.toFixed(2)}` : `${Math.round(row.spendUAH).toLocaleString("uk-UA")} ₴`}
-                              </td>
-                              <td className="p-3 text-right">{row.impressions.toLocaleString("uk-UA")}</td>
-                              <td className="p-3 text-right text-cyan-400">{row.clicks.toLocaleString("uk-UA")}</td>
-                              <td className="p-3 text-right">{row.ctr.toFixed(2)}%</td>
-                              <td className="p-3 text-right">
-                                {isUSD ? `$${row.cpcUSD.toFixed(2)}` : `${row.cpcUAH.toFixed(2)} ₴`}
-                              </td>
-                              <td className="p-3 text-right text-emerald-400 font-bold">{row.leadsCount}</td>
-                              <td className="p-3 text-right text-emerald-400 font-bold">
-                                {row.leadsCount > 0 ? (isUSD ? `$${row.cplUSD.toFixed(2)}` : `${Math.round(row.cplUAH).toLocaleString("uk-UA")} ₴`) : "—"}
-                              </td>
-                            </tr>
-                          ))}
+                          {stats.trafficAnalytics.dailyBreakdown.map((row: any, i: number) => {
+                            const spendUSDVal = Number(row?.spendUSD) || 0;
+                            const spendUAHVal = Number(row?.spendUAH) || (spendUSDVal * 41.5);
+                            const imprVal = Number(row?.impressions) || 0;
+                            const clicksVal = Number(row?.clicks) || 0;
+                            const ctrVal = Number(row?.ctr) || (imprVal > 0 ? (clicksVal / imprVal) * 100 : 0);
+                            const cpcUSDVal = Number(row?.cpcUSD) || (clicksVal > 0 ? spendUSDVal / clicksVal : 0);
+                            const cpcUAHVal = Number(row?.cpcUAH) || (clicksVal > 0 ? spendUAHVal / clicksVal : 0);
+                            const leadsVal = Number(row?.leadsCount) || 0;
+                            const cplUSDVal = Number(row?.cplUSD) || (leadsVal > 0 ? spendUSDVal / leadsVal : 0);
+                            const cplUAHVal = Number(row?.cplUAH) || (leadsVal > 0 ? spendUAHVal / leadsVal : 0);
+
+                            return (
+                              <tr key={i} className="hover:bg-white/[0.02] transition-all">
+                                <td className="p-3 text-white font-bold">{row?.date || "—"}</td>
+                                <td className="p-3 truncate max-w-xs text-white/60">{row?.campaignName || "Кампанія"}</td>
+                                <td className="p-3 text-right text-white font-bold">
+                                  {isUSD ? `$${spendUSDVal.toFixed(2)}` : `${Math.round(spendUAHVal).toLocaleString("uk-UA")} ₴`}
+                                </td>
+                                <td className="p-3 text-right">{imprVal.toLocaleString("uk-UA")}</td>
+                                <td className="p-3 text-right text-cyan-400">{clicksVal.toLocaleString("uk-UA")}</td>
+                                <td className="p-3 text-right">{ctrVal.toFixed(2)}%</td>
+                                <td className="p-3 text-right">
+                                  {isUSD ? `$${cpcUSDVal.toFixed(2)}` : `${cpcUAHVal.toFixed(2)} ₴`}
+                                </td>
+                                <td className="p-3 text-right text-emerald-400 font-bold">{leadsVal}</td>
+                                <td className="p-3 text-right text-emerald-400 font-bold">
+                                  {leadsVal > 0 ? (isUSD ? `$${cplUSDVal.toFixed(2)}` : `${Math.round(cplUAHVal).toLocaleString("uk-UA")} ₴`) : "—"}
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
