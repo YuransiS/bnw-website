@@ -2502,6 +2502,312 @@ export async function getFunnelAnalyticsAction(
   }
 }
 
+export async function getFunnelDetailsAction(projectId: string, funnelId: string) {
+  try {
+    await checkProjectAccess(projectId);
+    const adminSupabase = createAdminClient();
+
+    // 1. Fetch funnel definition
+    const { data: funnel, error: fErr } = await adminSupabase
+      .from("funnels")
+      .select("*")
+      .eq("id", funnelId)
+      .single();
+
+    if (fErr || !funnel) throw new Error("Funnel not found: " + (fErr?.message || ""));
+
+    // 2. Fetch all project orders
+    const { data: orders, error: oErr } = await adminSupabase
+      .from("unified_orders")
+      .select("*")
+      .eq("project_id", projectId);
+
+    if (oErr) throw oErr;
+
+    // 3. Fetch all daily traffic costs
+    const { data: costs, error: cErr } = await adminSupabase
+      .from("daily_traffic_and_costs")
+      .select("*")
+      .eq("project_id", projectId);
+
+    if (cErr) throw cErr;
+
+    // 4. Fetch financial transactions
+    const { data: txs, error: txErr } = await adminSupabase
+      .from("financial_transactions")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("funnel_id", funnelId);
+
+    if (txErr) throw txErr;
+
+    // Parse start and end date
+    const startIso = funnel.start_date ? new Date(funnel.start_date).toISOString() : null;
+    const endIso = funnel.end_date ? new Date(funnel.end_date + "T23:59:59Z").toISOString() : null;
+    const startTs = startIso ? new Date(startIso).getTime() : null;
+    const endTs = endIso ? new Date(endIso).getTime() : null;
+
+    const campaignIds = (funnel.campaign_ids || []).map((c: string) => c.toLowerCase().trim()).filter(Boolean);
+    const landingSlugs = (funnel.landing_slugs || []).map((s: string) => {
+      let clean = s.toLowerCase().trim();
+      if (clean.startsWith("http://") || clean.startsWith("https://")) {
+        try {
+          const u = new URL(clean);
+          clean = u.pathname;
+        } catch {
+          // ignore
+        }
+      }
+      return clean.replace(/^\/+|\/+$/g, "");
+    }).filter(Boolean);
+
+    const hasCampaigns = campaignIds.length > 0;
+    const hasLandings = landingSlugs.length > 0;
+
+    // Filter matched orders
+    const matchedOrders = (orders || []).filter((o: any) => {
+      const orderTs = new Date(o.created_at).getTime();
+      if (startTs && orderTs < startTs) return false;
+      if (endTs && orderTs > endTs) return false;
+
+      const pUrl = String(o.page_url || o.metadata?.page_url || o.metadata?.raw_row?.page_url || "").toLowerCase();
+      const pPath = String(o.page_path || o.metadata?.page_path || o.metadata?.raw_row?.page_path || "").toLowerCase();
+      const sFlag = String(o.source_flag || o.metadata?.source_flag || o.metadata?.raw_row?.source_flag || "").toLowerCase();
+      const tSheet = String(o.metadata?.target_sheet || o.metadata?.raw_row?.target_sheet || "").toLowerCase();
+      const uMedium = String(o.utm_medium || o.metadata?.raw_row?.utm_medium || "").toLowerCase();
+      const uCamp = String(o.utm_campaign || o.metadata?.raw_row?.utm_campaign || "").toLowerCase();
+      const uSrc = String(o.utm_source || o.metadata?.raw_row?.utm_source || "").toLowerCase();
+      const cId = String(o.campaign_id || o.metadata?.campaign_id || "").toLowerCase();
+
+      // Clean path check: DO NOT match checkout or unrelated paths
+      if (pPath.includes("checkout") || pUrl.includes("/checkout")) {
+        return false;
+      }
+
+      const campMatch = hasCampaigns && campaignIds.some((cid: string) => (
+        uCamp.includes(cid) || cid.includes(uCamp) ||
+        uMedium.includes(cid) || cid.includes(uMedium) ||
+        uSrc.includes(cid) || cid.includes(uSrc) ||
+        cId === cid || cid.includes(cId)
+      ));
+
+      const landMatch = hasLandings && landingSlugs.some((slug: string) => {
+        if (!slug) return false;
+        return pPath.includes(slug) || pUrl.includes(slug) || tSheet.includes(slug) || sFlag.includes(slug);
+      });
+
+      if (hasCampaigns && hasLandings) {
+        return Boolean(campMatch || landMatch);
+      }
+      if (hasCampaigns) return campMatch;
+      if (hasLandings) return landMatch;
+      return true;
+    });
+
+    // Group into Offer Variants
+    // Rule: Default is ALWAYS Offer 1 (?o=1) if not explicitly ?o=2 or ?o=3!
+    const variantMap: Record<string, {
+      key: string;
+      name: string;
+      url: string;
+      leadsCount: number;
+      salesCount: number;
+      revenueUAH: number;
+      revenueUSD: number;
+      percentage: number;
+      cr: number;
+      color: string;
+    }> = {
+      o1: { key: "o1", name: "Оффер 1 (?o=1)", url: "?o=1", leadsCount: 0, salesCount: 0, revenueUAH: 0, revenueUSD: 0, percentage: 0, cr: 0, color: "cyan" },
+      o2: { key: "o2", name: "Оффер 2 (?o=2)", url: "?o=2", leadsCount: 0, salesCount: 0, revenueUAH: 0, revenueUSD: 0, percentage: 0, cr: 0, color: "emerald" },
+      o3: { key: "o3", name: "Оффер 3 (?o=3)", url: "?o=3", leadsCount: 0, salesCount: 0, revenueUAH: 0, revenueUSD: 0, percentage: 0, cr: 0, color: "purple" }
+    };
+
+    let salesCount = 0;
+    let revenueUAH = 0;
+    let revenueUSD = 0;
+
+    matchedOrders.forEach((o: any) => {
+      const pUrl = String(o.page_url || o.metadata?.page_url || o.metadata?.raw_row?.page_url || "").toLowerCase();
+      const sFlag = String(o.source_flag || o.metadata?.source_flag || o.metadata?.raw_row?.source_flag || "").toLowerCase();
+      const uCamp = String(o.utm_campaign || o.metadata?.raw_row?.utm_campaign || "").toLowerCase();
+
+      let targetKey = "o1"; // ALWAYS DEFAULT TO OFFER 1
+      if (pUrl.includes("?o=2") || pUrl.includes("&o=2") || sFlag.includes("offer 2") || uCamp.includes("offer2") || uCamp.includes("offer 2")) {
+        targetKey = "o2";
+      } else if (pUrl.includes("?o=3") || pUrl.includes("&o=3") || sFlag.includes("offer 3") || uCamp.includes("offer3") || uCamp.includes("offer 3")) {
+        targetKey = "o3";
+      }
+
+      variantMap[targetKey].leadsCount++;
+
+      // Check if lead paid for something explicitly tied to this funnel
+      const isPaid = (o.status && o.status.toLowerCase().includes("оплат") && !o.metadata?.raw_row?.is_free) && Number(o.amount || 0) > 0;
+      if (isPaid) {
+        const amt = Number(o.amount || 0);
+        salesCount++;
+        revenueUAH += amt;
+        revenueUSD += amt / 41.5;
+        variantMap[targetKey].salesCount++;
+        variantMap[targetKey].revenueUAH += amt;
+        variantMap[targetKey].revenueUSD += amt / 41.5;
+      }
+    });
+
+    const leadsCount = matchedOrders.length;
+    const offerVariants = Object.values(variantMap)
+      .map(v => ({
+        ...v,
+        percentage: leadsCount > 0 ? (v.leadsCount / leadsCount) * 100 : 0,
+        cr: v.leadsCount > 0 ? (v.salesCount / v.leadsCount) * 100 : 0
+      }))
+      .filter(v => v.leadsCount > 0)
+      .sort((a, b) => b.leadsCount - a.leadsCount);
+
+    // Matching traffic ad spends
+    const matchedCosts = (costs || []).filter((c: any) => {
+      const cName = String(c.campaign_name || "").toLowerCase();
+      const cId = String(c.campaign_id || "").toLowerCase();
+
+      if (hasCampaigns) {
+        return campaignIds.some((cid: string) => cName.includes(cid) || cid.includes(cName) || cId === cid || cid.includes(cId));
+      }
+      return true;
+    });
+
+    let totalSpendUSD = 0;
+    let totalSpendUAH = 0;
+    let totalClicks = 0;
+    let totalImpressions = 0;
+
+    const dailyMap: Record<string, any> = {};
+
+    matchedCosts.forEach((c: any) => {
+      const d = c.date;
+      const sUsd = Number(c.spend_usd || c.spend || 0);
+      const clk = Number(c.clicks || 0);
+      const imp = Number(c.impressions || 0);
+
+      totalSpendUSD += sUsd;
+      totalSpendUAH += sUsd * 41.5;
+      totalClicks += clk;
+      totalImpressions += imp;
+
+      if (!dailyMap[d]) {
+        dailyMap[d] = {
+          date: d,
+          campaignName: c.campaign_name || "Кампанія",
+          spendUSD: 0,
+          spendUAH: 0,
+          clicks: 0,
+          impressions: 0,
+          leadsCount: 0
+        };
+      }
+      dailyMap[d].spendUSD += sUsd;
+      dailyMap[d].spendUAH += sUsd * 41.5;
+      dailyMap[d].clicks += clk;
+      dailyMap[d].impressions += imp;
+    });
+
+    // Count daily leads
+    matchedOrders.forEach((o: any) => {
+      const d = (o.created_at || "").split("T")[0];
+      if (d && dailyMap[d]) {
+        dailyMap[d].leadsCount++;
+      }
+    });
+
+    const dailyBreakdown = Object.values(dailyMap)
+      .map(d => ({
+        ...d,
+        ctr: d.impressions > 0 ? (d.clicks / d.impressions) * 100 : 0,
+        cpcUSD: d.clicks > 0 ? d.spendUSD / d.clicks : 0,
+        cpcUAH: d.clicks > 0 ? d.spendUAH / d.clicks : 0,
+        cplUSD: d.leadsCount > 0 ? d.spendUSD / d.leadsCount : 0,
+        cplUAH: d.leadsCount > 0 ? d.spendUAH / d.leadsCount : 0
+      }))
+      .sort((a: any, b: any) => b.date.localeCompare(a.date));
+
+    // Manual transactions
+    let manualSpendUAH = 0;
+    let manualIncomeUAH = 0;
+    (txs || []).forEach((tx: any) => {
+      const amt = Number(tx.amount || 0);
+      const isUAH = tx.currency === "UAH";
+      const amtUAH = isUAH ? amt : amt * 41.5;
+      const amtUSD = isUAH ? amt / 41.5 : amt;
+      if (tx.type === "expense") {
+        totalSpendUAH += amtUAH;
+        totalSpendUSD += amtUSD;
+        manualSpendUAH += amtUAH;
+      } else {
+        revenueUAH += amtUAH;
+        revenueUSD += amtUSD;
+        manualIncomeUAH += amtUAH;
+      }
+    });
+
+    const profitUAH = revenueUAH - totalSpendUAH;
+    const profitUSD = revenueUSD - totalSpendUSD;
+    const roi = totalSpendUAH > 0 ? (profitUAH / totalSpendUAH) * 100 : 0;
+    const cr = leadsCount > 0 ? (salesCount / leadsCount) * 100 : 0;
+    const ctr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
+    const cpcUSD = totalClicks > 0 ? totalSpendUSD / totalClicks : 0;
+    const cpcUAH = totalClicks > 0 ? totalSpendUAH / totalClicks : 0;
+    const cpmUSD = totalImpressions > 0 ? (totalSpendUSD / totalImpressions) * 1000 : 0;
+    const cpmUAH = totalImpressions > 0 ? (totalSpendUAH / totalImpressions) * 1000 : 0;
+    const cplUSD = leadsCount > 0 ? totalSpendUSD / leadsCount : 0;
+    const cplUAH = leadsCount > 0 ? totalSpendUAH / leadsCount : 0;
+
+    return {
+      success: true,
+      funnel,
+      stats: {
+        leadsCount,
+        salesCount,
+        quizzesCount: 0,
+        totalClicks,
+        impressions: totalImpressions,
+        revenueUAH,
+        revenueUSD,
+        spendUAH: totalSpendUAH,
+        spendUSD: totalSpendUSD,
+        profitUAH,
+        profitUSD,
+        roi,
+        cr,
+        cplUSD,
+        cplUAH,
+        cpcUSD,
+        cpcUAH,
+        cpmUSD,
+        cpmUAH,
+        ctr,
+        manualSpend: manualSpendUAH,
+        manualIncome: manualIncomeUAH,
+        offerVariants,
+        trafficAnalytics: {
+          totalSpendUSD,
+          totalSpendUAH,
+          totalClicks,
+          impressions: totalImpressions,
+          ctr,
+          cpcUSD,
+          cpcUAH,
+          cpmUSD,
+          cpmUAH,
+          cplUSD,
+          cplUAH,
+          dailyBreakdown
+        }
+      }
+    };
+  } catch (err: any) {
+    return { error: err.message || "Failed to fetch funnel details" };
+  }
+}
+
 function checkJunkPath(rawPath: string): boolean {
   if (!rawPath || typeof rawPath !== "string") return true;
   const p = rawPath.toLowerCase().trim();

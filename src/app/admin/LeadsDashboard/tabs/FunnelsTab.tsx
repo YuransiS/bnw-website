@@ -8,7 +8,8 @@ import {
   deleteFunnelAction,
   getDiscoveredPagesAction,
   syncProjectPagesAction,
-  getProjectCampaignsForFunnelAction
+  getProjectCampaignsForFunnelAction,
+  getFunnelDetailsAction
 } from "../../actions";
 import {
   createTransactionAction,
@@ -313,6 +314,30 @@ export default function FunnelsTab({
   useEffect(() => {
     loadFunnels();
   }, [projectId]);
+
+  // Load deep real-time details (all leads, traffic, variants) when a funnel is opened
+  const [funnelDetailsLoading, setFunnelDetailsLoading] = useState(false);
+  useEffect(() => {
+    if (!selectedFunnel?.id) return;
+    let isCancelled = false;
+
+    const fetchDetails = async () => {
+      setFunnelDetailsLoading(true);
+      try {
+        const res = await getFunnelDetailsAction(projectId, selectedFunnel.id);
+        if (!isCancelled && res?.success && res.stats) {
+          setSelectedFunnel(prev => prev && prev.id === selectedFunnel.id ? { ...prev, stats: res.stats } : prev);
+        }
+      } catch (err) {
+        console.error("Failed to fetch detailed funnel data:", err);
+      } finally {
+        if (!isCancelled) setFunnelDetailsLoading(false);
+      }
+    };
+
+    fetchDetails();
+    return () => { isCancelled = true; };
+  }, [projectId, selectedFunnel?.id]);
 
   // Sync transaction default account
   useEffect(() => {
@@ -676,8 +701,50 @@ export default function FunnelsTab({
     }
   };
 
-  // Funnel Analytics Calculator
+  // Calculate Funnel Stats from deep data or matching leads
   const getFunnelStats = (funnel: Funnel) => {
+    const isUSD = globalCurrency === "USD";
+
+    // 1. If deep stats are preloaded or fetched via getFunnelDetailsAction, use them
+    if (funnel.stats) {
+      const s = funnel.stats;
+      const rev = isUSD ? Number(s.revenueUSD || 0) : Number(s.revenueUAH || s.revenue || 0);
+      const spd = isUSD ? Number(s.spendUSD || 0) : Number(s.spendUAH || s.spend || 0);
+      const prf = rev - spd;
+      const r = spd > 0 ? (prf / spd) * 100 : 0;
+      const lCount = Number(s.leadsCount || 0);
+      const sCount = Number(s.salesCount || 0);
+      const convRate = lCount > 0 ? (sCount / lCount) * 100 : 0;
+
+      return {
+        leadsCount: lCount,
+        salesCount: sCount,
+        quizzesCount: Number(s.quizzesCount || 0),
+        totalClicks: Number(s.totalClicks || 0),
+        impressions: Number(s.impressions || 0),
+        revenue: rev,
+        spend: spd,
+        profit: prf,
+        roi: r,
+        cr: convRate,
+        cplUSD: Number(s.cplUSD || 0),
+        cpaUSD: Number(s.cpaUSD || 0),
+        manualSpend: Number(s.manualSpend || 0),
+        manualIncome: Number(s.manualIncome || 0),
+        offerVariants: s.offerVariants || [],
+        trafficAnalytics: s.trafficAnalytics || {
+          totalSpend: spd,
+          totalClicks: Number(s.totalClicks || 0),
+          impressions: Number(s.impressions || 0),
+          ctr: Number(s.ctr || (s.impressions > 0 ? (s.totalClicks / s.impressions) * 100 : 0)),
+          cpc: isUSD ? Number(s.cpcUSD || 0) : Number(s.cpcUAH || 0),
+          cpm: isUSD ? Number(s.cpmUSD || 0) : Number(s.cpmUAH || 0),
+          cpl: isUSD ? Number(s.cplUSD || 0) : Number(s.cplUAH || 0),
+          dailyBreakdown: s.trafficAnalytics?.dailyBreakdown || []
+        }
+      };
+    }
+
     const parseSafeTs = (dStr: string | null | undefined, isEnd = false): number | null => {
       if (!dStr) return null;
       const clean = String(dStr).trim();
@@ -707,7 +774,6 @@ export default function FunnelsTab({
       return isNaN(d.getTime()) ? null : d.getTime();
     };
 
-    const isUSD = globalCurrency === "USD";
     const startDateTime = parseSafeTs(funnel.start_date, false);
     const endDateTime = parseSafeTs(funnel.end_date, true);
     
@@ -722,7 +788,9 @@ export default function FunnelsTab({
       const leadSource = String(lead.utm_source || lead.utmSource || lead.metadata?.raw_row?.utm_source || "").trim().toLowerCase();
       const leadCampaignId = String(lead.campaign_id || lead.campaignId || lead.metadata?.campaign_id || "").trim().toLowerCase();
       const leadLanding = String(lead.landing || lead.page_path || lead.page_url || lead.target_sheet || lead.targetSheet || lead.metadata?.target_sheet || lead.metadata?.raw_row?.page_path || lead.metadata?.raw_row?.page_url || "").trim().toLowerCase();
-      const visitedLandings = (lead.visited_landings || lead.visitedLandings || []).map((l: string) => String(l).toLowerCase());
+
+      // Exclude unrelated /checkout
+      if (leadLanding.includes("checkout")) return false;
 
       const hasCampaigns = Array.isArray(funnel.campaign_ids) && funnel.campaign_ids.length > 0;
       const hasLandings = Array.isArray(funnel.landing_slugs) && funnel.landing_slugs.length > 0;
@@ -740,8 +808,8 @@ export default function FunnelsTab({
 
       const landingMatch = hasLandings && funnel.landing_slugs.some((slug) => {
         if (!slug) return false;
-        const s = slug.toLowerCase().trim();
-        return leadLanding.includes(s) || s.includes(leadLanding) || visitedLandings.some((vl: string) => vl.includes(s) || s.includes(vl));
+        const s = slug.toLowerCase().trim().replace(/https?:\/\/[^\/]+/g, "");
+        return leadLanding.includes(s) || s.includes(leadLanding);
       });
 
       if (!hasCampaigns && !hasLandings) {
@@ -751,296 +819,75 @@ export default function FunnelsTab({
       return Boolean(campaignMatch || landingMatch);
     });
 
-    // Sum revenue from these leads
     let revenueUAH = 0;
     let revenueUSD = 0;
     let salesCount = 0;
     matchedLeads.forEach((lead: any) => {
-      const isPaid = isPaidStatus(lead.status) || (Number(lead.uahPaid || lead.uah_paid || 0) > 0) || (Number(lead.usdPaid || lead.usd_paid || 0) > 0);
-      const uah = Number(lead.uahPaid || lead.uah_paid || lead.uahTripwirePaid || lead.uah_tripwire_paid || 0);
-      const usd = Number(lead.usdPaid || lead.usd_paid || lead.usdTripwirePaid || lead.usd_tripwire_paid || 0);
-      const rawAmt = Number(lead.amount || 0);
-
-      if (isPaid || uah > 0 || usd > 0 || rawAmt > 0) {
+      const isPaid = !lead.metadata?.raw_row?.is_free && String(lead.status || "").toLowerCase().includes("оплат") && Number(lead.amount || 0) > 0;
+      if (isPaid) {
+        const amt = Number(lead.amount || 0);
         salesCount++;
-        if (uah > 0 || usd > 0) {
-          revenueUAH += uah + (usd * 41.5);
-          revenueUSD += (uah / 41.5) + usd;
-        } else if (rawAmt > 0) {
-          revenueUAH += rawAmt;
-          revenueUSD += rawAmt / 41.5;
-        }
+        revenueUAH += amt;
+        revenueUSD += amt / 41.5;
       }
     });
 
-    // Calculate surveys/quizzes count
-    const quizzesCount = matchedLeads.filter(
-      (l: any) => (l.diagnosticsComment && l.diagnosticsComment.trim().length > 0) || (l.diagnostics_comment && l.diagnostics_comment.trim().length > 0)
-    ).length;
+    // Offer variants (A/B testing)
+    // Rule: Default is ALWAYS Offer 1 (?o=1) if no ?o=2 or ?o=3
+    const variantMap: Record<string, any> = {
+      o1: { key: "o1", name: "Оффер 1 (?o=1)", url: "?o=1", leadsCount: 0, salesCount: 0, revenue: 0, percentage: 0, cr: 0, color: "cyan" },
+      o2: { key: "o2", name: "Оффер 2 (?o=2)", url: "?o=2", leadsCount: 0, salesCount: 0, revenue: 0, percentage: 0, cr: 0, color: "emerald" },
+      o3: { key: "o3", name: "Оффер 3 (?o=3)", url: "?o=3", leadsCount: 0, salesCount: 0, revenue: 0, percentage: 0, cr: 0, color: "purple" }
+    };
 
-    // Filter costs and sum Traffic Ad Spends in active range
-    let spendUSD = 0;
-    let spendUAH = 0;
-    let totalClicks = 0;
-    let totalImpressions = 0;
-    const matchingCostRecords: any[] = [];
+    matchedLeads.forEach((lead: any) => {
+      const pageUrl = String(lead.page_url || lead.pageUrl || lead.metadata?.page_url || lead.metadata?.raw_row?.page_url || "").toLowerCase();
+      const sourceFlag = String(lead.source_flag || lead.metadata?.source_flag || lead.metadata?.raw_row?.source_flag || "").toLowerCase();
+      const utmCampaign = String(lead.utm_campaign || lead.utmCampaign || lead.metadata?.utm_campaign || "").toLowerCase();
 
-    (costsList || []).forEach((c: any) => {
-      const hasCampaigns = Array.isArray(funnel.campaign_ids) && funnel.campaign_ids.length > 0;
-      const isMatched = hasCampaigns
-        ? funnel.campaign_ids.some((id) => {
-            const cid = id.toLowerCase().trim();
-            const cName = String(c.campaign_name || "").toLowerCase();
-            const cId = String(c.campaign_id || "").toLowerCase();
-            return cName.includes(cid) || cid.includes(cName) || cId === cid || cid.includes(cId);
-          })
-        : true;
-      if (!isMatched) return;
-      
-      const costDate = parseSafeTs(c.date, false);
-      if (costDate) {
-        if (startDateTime && costDate < startDateTime) return;
-        if (endDateTime && costDate > endDateTime) return;
+      let targetKey = "o1";
+      if (pageUrl.includes("?o=2") || pageUrl.includes("&o=2") || sourceFlag.includes("offer 2") || utmCampaign.includes("offer2")) {
+        targetKey = "o2";
+      } else if (pageUrl.includes("?o=3") || pageUrl.includes("&o=3") || sourceFlag.includes("offer 3") || utmCampaign.includes("offer3")) {
+        targetKey = "o3";
       }
-      
-      const sUsd = Number(c.spend_usd || c.spend || 0);
-      const clk = Number(c.clicks || 0);
-      const imp = Number(c.impressions || 0);
 
-      spendUSD += sUsd;
-      spendUAH += sUsd * 41.5;
-      totalClicks += clk;
-      totalImpressions += imp;
-      matchingCostRecords.push(c);
-    });
-
-    // Sum manual transactions bound to this funnel
-    let manualSpendUAH = 0;
-    let manualIncomeUAH = 0;
-
-    funnelTransactions.forEach((tx: any) => {
-      if (tx.funnel_id === funnel.id) {
-        const amt = Number(tx.amount || 0);
-        const isTxUAH = tx.currency === "UAH";
-        const amtUAH = isTxUAH ? amt : amt * 41.5;
-        const amtUSD = isTxUAH ? amt / 41.5 : amt;
-        if (tx.type === "expense") {
-          spendUAH += amtUAH;
-          spendUSD += amtUSD;
-          manualSpendUAH += amtUAH;
-        } else {
-          revenueUAH += amtUAH;
-          revenueUSD += amtUSD;
-          manualIncomeUAH += amtUAH;
-        }
-      }
+      variantMap[targetKey].leadsCount++;
     });
 
     const leadsCount = matchedLeads.length;
-    const finalRev = isUSD ? revenueUSD : revenueUAH;
-    const finalSpd = isUSD ? spendUSD : spendUAH;
-    const profit = finalRev - finalSpd;
-    const roi = finalSpd > 0 ? (profit / finalSpd) * 100 : 0;
-    const cr = leadsCount > 0 ? (salesCount / leadsCount) * 100 : 0;
-
-    // Traffic KPI calculation
-    const ctr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
-    const cpcUSD = totalClicks > 0 ? spendUSD / totalClicks : 0;
-    const cpcUAH = totalClicks > 0 ? spendUAH / totalClicks : 0;
-    const cpmUSD = totalImpressions > 0 ? (spendUSD / totalImpressions) * 1000 : 0;
-    const cpmUAH = totalImpressions > 0 ? (spendUAH / totalImpressions) * 1000 : 0;
-    const cplUSD = leadsCount > 0 ? spendUSD / leadsCount : 0;
-    const cplUAH = leadsCount > 0 ? spendUAH / leadsCount : 0;
-
-    // Detailed Daily Traffic Breakdown
-    const dailyMap: Record<string, {
-      date: string;
-      campaignName: string;
-      spendUSD: number;
-      spendUAH: number;
-      clicks: number;
-      impressions: number;
-      ctr: number;
-      cpcUSD: number;
-      cpcUAH: number;
-      leadsCount: number;
-      cplUSD: number;
-      cplUAH: number;
-    }> = {};
-
-    matchingCostRecords.forEach((c: any) => {
-      const d = c.date || "Інше";
-      const key = `${d}_${c.campaign_name || ""}`;
-      const sUsd = Number(c.spend_usd || c.spend || 0);
-      const clk = Number(c.clicks || 0);
-      const imp = Number(c.impressions || 0);
-
-      if (!dailyMap[key]) {
-        dailyMap[key] = {
-          date: d,
-          campaignName: c.campaign_name || "Кампанія",
-          spendUSD: 0,
-          spendUAH: 0,
-          clicks: 0,
-          impressions: 0,
-          ctr: 0,
-          cpcUSD: 0,
-          cpcUAH: 0,
-          leadsCount: 0,
-          cplUSD: 0,
-          cplUAH: 0
-        };
-      }
-      dailyMap[key].spendUSD += sUsd;
-      dailyMap[key].spendUAH += sUsd * 41.5;
-      dailyMap[key].clicks += clk;
-      dailyMap[key].impressions += imp;
-    });
-
-    // Count leads per day
-    matchedLeads.forEach((l: any) => {
-      const d = (l.created_at || l.createdAt || "").split("T")[0];
-      if (d) {
-        Object.keys(dailyMap).forEach((k) => {
-          if (dailyMap[k].date === d) {
-            dailyMap[k].leadsCount++;
-          }
-        });
-      }
-    });
-
-    const dailyBreakdown = Object.values(dailyMap)
-      .map(d => ({
-        ...d,
-        ctr: d.impressions > 0 ? (d.clicks / d.impressions) * 100 : 0,
-        cpcUSD: d.clicks > 0 ? d.spendUSD / d.clicks : 0,
-        cpcUAH: d.clicks > 0 ? d.spendUAH / d.clicks : 0,
-        cplUSD: d.leadsCount > 0 ? d.spendUSD / d.leadsCount : 0,
-        cplUAH: d.leadsCount > 0 ? d.spendUAH / d.leadsCount : 0
-      }))
-      .sort((a, b) => b.date.localeCompare(a.date));
-
-    // Offer / Landing variant breakdown (A/B testing)
-    const variantMap: Record<string, {
-      key: string;
-      name: string;
-      url: string;
-      leadsCount: number;
-      salesCount: number;
-      revenue: number;
-      percentage: number;
-      cr: number;
-      color: string;
-    }> = {};
-
-    matchedLeads.forEach((lead: any) => {
-      const pageUrl = String(lead.page_url || lead.pageUrl || lead.metadata?.page_url || lead.metadata?.raw_row?.page_url || "").trim();
-      const pagePath = String(lead.page_path || lead.pagePath || lead.metadata?.page_path || lead.metadata?.raw_row?.page_path || "").trim();
-      const sourceFlag = String(lead.source_flag || lead.metadata?.source_flag || lead.metadata?.raw_row?.source_flag || lead.metadata?.raw_row?.raw_payload?.source_flag || "").trim();
-      const utmCampaign = String(lead.utm_campaign || lead.utmCampaign || lead.metadata?.utm_campaign || lead.metadata?.raw_row?.utm_campaign || "").trim();
-
-      let variantKey = "default";
-      let variantName = pagePath && pagePath !== "/" ? pagePath : "Головний лендинг";
-      let variantUrl = pageUrl || pagePath || "/";
-      let variantColor = "cyan";
-
-      const oMatch = pageUrl.match(/[?&]o=([a-zA-Z0-9_-]+)/i);
-      const vMatch = pageUrl.match(/[?&]v=([a-zA-Z0-9_-]+)/i);
-
-      if (oMatch && oMatch[1]) {
-        variantKey = `o_${oMatch[1]}`;
-        variantName = `Оффер ${oMatch[1]} (?o=${oMatch[1]})`;
-        variantUrl = `?o=${oMatch[1]}`;
-        variantColor = oMatch[1] === "1" ? "cyan" : oMatch[1] === "2" ? "emerald" : "purple";
-      } else if (vMatch && vMatch[1]) {
-        variantKey = `v_${vMatch[1]}`;
-        variantName = `Варіант ${vMatch[1]} (?v=${vMatch[1]})`;
-        variantUrl = `?v=${vMatch[1]}`;
-        variantColor = "amber";
-      } else if (sourceFlag && /Offer\s*(\d+)/i.test(sourceFlag)) {
-        const num = sourceFlag.match(/Offer\s*(\d+)/i)?.[1] || "1";
-        variantKey = `o_${num}`;
-        variantName = `Оффер ${num} (${sourceFlag})`;
-        variantUrl = `?o=${num}`;
-        variantColor = num === "1" ? "cyan" : num === "2" ? "emerald" : "purple";
-      } else if (utmCampaign && /OFFER\s*(\d+)/i.test(utmCampaign)) {
-        const num = utmCampaign.match(/OFFER\s*(\d+)/i)?.[1] || "1";
-        variantKey = `o_${num}`;
-        variantName = `Оффер ${num} (Camp: OFFER${num})`;
-        variantUrl = `?o=${num}`;
-        variantColor = num === "1" ? "cyan" : num === "2" ? "emerald" : "purple";
-      } else if (sourceFlag) {
-        variantKey = sourceFlag;
-        variantName = sourceFlag;
-        variantColor = "blue";
-      } else if (pagePath && pagePath !== "/") {
-        variantKey = pagePath;
-        variantName = pagePath;
-        variantColor = "emerald";
-      }
-
-      if (!variantMap[variantKey]) {
-        variantMap[variantKey] = {
-          key: variantKey,
-          name: variantName,
-          url: variantUrl,
-          leadsCount: 0,
-          salesCount: 0,
-          revenue: 0,
-          percentage: 0,
-          cr: 0,
-          color: variantColor
-        };
-      }
-
-      variantMap[variantKey].leadsCount++;
-
-      const isPaid = isPaidStatus(lead.status) || (Number(lead.uahPaid || lead.uah_paid || 0) > 0) || (Number(lead.usdPaid || lead.usd_paid || 0) > 0);
-      const uah = Number(lead.uahPaid || lead.uah_paid || lead.uahTripwirePaid || lead.uah_tripwire_paid || 0);
-      const usd = Number(lead.usdPaid || lead.usd_paid || lead.usdTripwirePaid || lead.usd_tripwire_paid || 0);
-      const rawAmt = Number(lead.amount || 0);
-
-      if (isPaid || uah > 0 || usd > 0 || rawAmt > 0) {
-        variantMap[variantKey].salesCount++;
-        if (uah > 0 || usd > 0) {
-          variantMap[variantKey].revenue += isUSD ? ((uah / 41.5) + usd) : (uah + (usd * 41.5));
-        } else if (rawAmt > 0) {
-          variantMap[variantKey].revenue += isUSD ? (rawAmt / 41.5) : rawAmt;
-        }
-      }
-    });
-
     const offerVariants = Object.values(variantMap)
-      .map(v => ({
+      .map((v: any) => ({
         ...v,
         percentage: leadsCount > 0 ? (v.leadsCount / leadsCount) * 100 : 0,
         cr: v.leadsCount > 0 ? (v.salesCount / v.leadsCount) * 100 : 0
       }))
-      .sort((a, b) => b.leadsCount - a.leadsCount);
+      .filter((v: any) => v.leadsCount > 0)
+      .sort((a: any, b: any) => b.leadsCount - a.leadsCount);
 
     return {
       leadsCount,
       salesCount,
-      quizzesCount,
-      totalClicks,
-      impressions: totalImpressions,
-      revenue: finalRev,
-      spend: finalSpd,
-      profit,
-      roi,
-      cr,
-      manualSpend: manualSpendUAH,
-      manualIncome: manualIncomeUAH,
+      quizzesCount: 0,
+      totalClicks: 0,
+      impressions: 0,
+      revenue: isUSD ? revenueUSD : revenueUAH,
+      spend: 0,
+      profit: isUSD ? revenueUSD : revenueUAH,
+      roi: 0,
+      cr: 0,
+      manualSpend: 0,
+      manualIncome: 0,
       offerVariants,
       trafficAnalytics: {
-        totalSpend: finalSpd,
-        totalClicks,
-        impressions: totalImpressions,
-        ctr,
-        cpc: isUSD ? cpcUSD : cpcUAH,
-        cpm: isUSD ? cpmUSD : cpmUAH,
-        cpl: isUSD ? cplUSD : cplUAH,
-        dailyBreakdown
+        totalSpend: 0,
+        totalClicks: 0,
+        impressions: 0,
+        ctr: 0,
+        cpc: 0,
+        cpm: 0,
+        cpl: 0,
+        dailyBreakdown: []
       }
     };
   };
