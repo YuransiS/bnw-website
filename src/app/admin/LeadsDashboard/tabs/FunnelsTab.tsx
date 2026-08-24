@@ -413,7 +413,7 @@ export default function FunnelsTab({
   const [syncingBotContacts, setSyncingBotContacts] = useState<boolean>(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
   const [botContactSearch, setBotContactSearch] = useState<string>("");
-  const [botContactFilter, setBotContactFilter] = useState<"all" | "matched" | "unmatched">("all");
+  const [botContactFilter, setBotContactFilter] = useState<"all" | "active" | "trial" | "matched" | "unmatched" | "expired">("all");
 
   const loadBotContacts = async (botUsername?: string) => {
     const targetBot = botUsername || selectedBotUsername || selectedFunnel?.bot_username;
@@ -2547,7 +2547,7 @@ export default function FunnelsTab({
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1 bg-white/[0.03] p-1 rounded-xl border border-white/10 shrink-0">
+                    <div className="flex flex-wrap items-center gap-1 bg-white/[0.03] p-1 rounded-xl border border-white/10 shrink-0">
                       <button
                         type="button"
                         onClick={() => setBotContactFilter("all")}
@@ -2559,35 +2559,53 @@ export default function FunnelsTab({
                       </button>
                       <button
                         type="button"
+                        onClick={() => setBotContactFilter("active")}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-all flex items-center gap-1 cursor-pointer ${
+                          botContactFilter === "active" ? "bg-emerald-500/20 text-emerald-400" : "text-white/40 hover:text-white/70"
+                        }`}
+                      >
+                        🟢 Активні ({botContacts.filter(c => c.rawClubStatus === "active" && c.rawTariff !== "trial_1_week").length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBotContactFilter("trial")}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-all flex items-center gap-1 cursor-pointer ${
+                          botContactFilter === "trial" ? "bg-amber-500/20 text-amber-300" : "text-white/40 hover:text-white/70"
+                        }`}
+                      >
+                        🟡 Тріал ({botContacts.filter(c => c.rawTariff === "trial_1_week" || String(c.rawClubStatus || "").includes("trial") || String(c.rawClubStatus || "").includes("funnel")).length})
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setBotContactFilter("matched")}
                         className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-all flex items-center gap-1 cursor-pointer ${
-                          botContactFilter === "matched" ? "bg-emerald-500/20 text-emerald-400" : "text-white/40 hover:text-white/70"
+                          botContactFilter === "matched" ? "bg-cyan-500/20 text-cyan-300" : "text-white/40 hover:text-white/70"
                         }`}
                       >
                         <Check className="w-3 h-3" /> Зв'язані ({botContacts.filter(c => c.isMatched).length})
                       </button>
                       <button
                         type="button"
-                        onClick={() => setBotContactFilter("unmatched")}
+                        onClick={() => setBotContactFilter("expired")}
                         className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer ${
-                          botContactFilter === "unmatched" ? "bg-white/15 text-white" : "text-white/40 hover:text-white/70"
+                          botContactFilter === "expired" ? "bg-red-500/20 text-red-400" : "text-white/40 hover:text-white/70"
                         }`}
                       >
-                        Тільки бот ({botContacts.filter(c => !c.isMatched).length})
+                        🔴 Закінчились ({botContacts.filter(c => c.rawClubStatus === "expired" || c.rawClubStatus === "payment_failed").length})
                       </button>
                     </div>
                   </div>
 
                   {/* Contacts Table */}
                   <div className="overflow-hidden rounded-xl border border-white/5 bg-white/[0.01]">
-                    <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+                    <div className="overflow-x-auto max-h-[460px] overflow-y-auto custom-scrollbar">
                       <table className="w-full text-left text-xs">
                         <thead className="sticky top-0 bg-[#0c0c10] border-b border-white/10 text-[9px] uppercase font-black text-white/40 z-10">
                           <tr>
-                            <th className="p-3">Підписник / Telegram</th>
+                            <th className="p-3">Учасник / Telegram</th>
+                            <th className="p-3">Тариф & Статус Клубу</th>
                             <th className="p-3">Сквозний ID (bw_cid)</th>
                             <th className="p-3">Контакти (Телефон / Email)</th>
-                            <th className="p-3">Змінні SendPulse</th>
                             <th className="p-3 text-right">Оплати в CRM</th>
                             <th className="p-3 text-right">Останній актив</th>
                           </tr>
@@ -2595,16 +2613,20 @@ export default function FunnelsTab({
                         <tbody className="divide-y divide-white/5 font-semibold text-white/80">
                           {(() => {
                             const filtered = botContacts.filter((c: any) => {
+                              if (botContactFilter === "active" && !(c.rawClubStatus === "active" && c.rawTariff !== "trial_1_week")) return false;
+                              if (botContactFilter === "trial" && !(c.rawTariff === "trial_1_week" || String(c.rawClubStatus || "").includes("trial") || String(c.rawClubStatus || "").includes("funnel"))) return false;
                               if (botContactFilter === "matched" && !c.isMatched) return false;
-                              if (botContactFilter === "unmatched" && c.isMatched) return false;
+                              if (botContactFilter === "expired" && !(c.rawClubStatus === "expired" || c.rawClubStatus === "payment_failed")) return false;
                               if (!botContactSearch.trim()) return true;
                               const q = botContactSearch.toLowerCase();
                               const nameMatch = String(c.name || "").toLowerCase().includes(q);
                               const usernameMatch = String(c.username || "").toLowerCase().includes(q);
                               const phoneMatch = String(c.phone || "").toLowerCase().includes(q);
                               const bwMatch = String(c.bwCid || "").toLowerCase().includes(q);
+                              const tariffMatch = String(c.tariff || "").toLowerCase().includes(q);
+                              const statusMatch = String(c.clubStatus || "").toLowerCase().includes(q);
                               const varMatch = Object.values(c.variables || {}).some(v => String(v).toLowerCase().includes(q));
-                              return nameMatch || usernameMatch || phoneMatch || bwMatch || varMatch;
+                              return nameMatch || usernameMatch || phoneMatch || bwMatch || tariffMatch || statusMatch || varMatch;
                             });
 
                             if (loadingBotContacts) {
@@ -2612,7 +2634,7 @@ export default function FunnelsTab({
                                 <tr>
                                   <td colSpan={6} className="p-8 text-center text-white/40 italic">
                                     <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-emerald-400" />
-                                    Завантаження підписників із SendPulse...
+                                    Завантаження бази підписників та учасників клубу...
                                   </td>
                                 </tr>
                               );
@@ -2623,7 +2645,7 @@ export default function FunnelsTab({
                                 <tr>
                                   <td colSpan={6} className="p-8 text-center text-white/30 italic">
                                     {botContacts.length === 0
-                                      ? "Не знайдено підписників або перевірте API-ключі SendPulse у налаштуваннях проєкту."
+                                      ? "Не знайдено підписників або перевірте зв'язок з базою."
                                       : "Немає підписників, які відповідають критеріям пошуку."}
                                   </td>
                                 </tr>
@@ -2636,13 +2658,17 @@ export default function FunnelsTab({
                                 <tr key={c.id} className="hover:bg-white/[0.02] transition-all">
                                   <td className="p-3">
                                     <div className="flex items-center gap-2.5">
-                                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-black shrink-0 ${
-                                        c.isMatched ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-white/5 text-white/50 border border-white/5"
+                                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-black shrink-0 ${
+                                        c.rawClubStatus === "active"
+                                          ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                                          : c.isMatched
+                                          ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                                          : "bg-white/5 text-white/50 border border-white/5"
                                       }`}>
                                         {(c.name || "U")[0].toUpperCase()}
                                       </div>
                                       <div>
-                                        <span className="font-extrabold text-white block truncate max-w-[140px]" title={c.name}>
+                                        <span className="font-extrabold text-white block truncate max-w-[150px]" title={c.name}>
                                           {c.name}
                                         </span>
                                         {cleanUsername ? (
@@ -2655,9 +2681,39 @@ export default function FunnelsTab({
                                             @{cleanUsername} <ExternalLink className="w-2.5 h-2.5" />
                                           </a>
                                         ) : (
-                                          <span className="text-[9px] text-white/30 font-mono block">ID: {c.id?.substring(0, 10)}...</span>
+                                          <span className="text-[9px] text-white/30 font-mono block">ID: {String(c.telegramId || c.id)?.substring(0, 10)}</span>
                                         )}
                                       </div>
+                                    </div>
+                                  </td>
+
+                                  {/* Tariff & Club Status */}
+                                  <td className="p-3">
+                                    <div className="space-y-1">
+                                      {c.tariff ? (
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span className="px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-purple-300 text-[10px] font-extrabold">
+                                            {c.tariff}
+                                          </span>
+                                          {c.isSubscription && (
+                                            <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[9px] font-bold">
+                                              🔄 Рекурент
+                                            </span>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <span className="text-[10px] text-white/30 italic">Без тарифу</span>
+                                      )}
+                                      {c.clubStatus && (
+                                        <span className="text-[10px] text-white/60 block font-semibold">
+                                          {c.clubStatus}
+                                        </span>
+                                      )}
+                                      {c.expiresAt && (
+                                        <span className="text-[9px] text-white/30 font-mono block">
+                                          Діє до: {new Date(c.expiresAt).toLocaleDateString("uk-UA")}
+                                        </span>
+                                      )}
                                     </div>
                                   </td>
 
@@ -2687,23 +2743,6 @@ export default function FunnelsTab({
                                         <span className="text-white/50 text-[10px] flex items-center gap-1">
                                           <Mail className="w-3 h-3 text-white/30" /> {c.email}
                                         </span>
-                                      )}
-                                    </div>
-                                  </td>
-
-                                  <td className="p-3">
-                                    <div className="flex flex-wrap gap-1 max-w-xs">
-                                      {Object.entries(c.variables || {}).map(([key, val]: any) => (
-                                        <span
-                                          key={key}
-                                          className="text-[9px] px-1.5 py-0.5 rounded bg-white/[0.04] border border-white/5 text-white/70 font-mono truncate max-w-[140px]"
-                                          title={`${key}: ${String(val)}`}
-                                        >
-                                          {key}: <b className="text-white">{String(val)}</b>
-                                        </span>
-                                      ))}
-                                      {Object.keys(c.variables || {}).length === 0 && (
-                                        <span className="text-[10px] text-white/20 italic">—</span>
                                       )}
                                     </div>
                                   </td>

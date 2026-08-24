@@ -4329,15 +4329,17 @@ export async function getSendPulseBotContactsAction(projectId: string, botUserna
       return { error: `Бот @${cleanBotQuery} не знайдений у SendPulse акаунті проєкту` };
     }
 
-    // 2. Get bot contacts
+    // 2. Get bot contacts from SendPulse
     const contactsRes = await fetch(`https://api.sendpulse.com/telegram/contacts?bot_id=${bot.id}&limit=${limit}`, {
       headers: { Authorization: `Bearer ${token}` }
     });
     const contactsJson = await contactsRes.json();
     const rawContacts = contactsJson.data || [];
 
-    // 3. Fetch CRM customers and orders for matching
-    const [customersRes, ordersRes] = await Promise.all([
+    // 3. Fetch CRM customers, orders, and project-specific club subscriptions
+    const isViktoria = project.slug === "viktoria_chernysh";
+
+    const [customersRes, ordersRes, clubSubsRes, leadsRes] = await Promise.all([
       adminSupabase
         .from("unified_customers")
         .select("id, name, phone, email, telegram, telegram_id, created_at")
@@ -4345,20 +4347,86 @@ export async function getSendPulseBotContactsAction(projectId: string, botUserna
       adminSupabase
         .from("unified_orders")
         .select("id, customer_id, order_id, amount, status, metadata, created_at")
-        .eq("project_id", project.id)
+        .eq("project_id", project.id),
+      isViktoria
+        ? adminSupabase.from("viktoria_club_subscriptions").select("*").order("created_at", { ascending: false })
+        : adminSupabase.from("club_subscriptions").select("*").eq("project_id", project.id).order("created_at", { ascending: false }),
+      isViktoria
+        ? adminSupabase.from("viktoria_chernysh_leads").select("name, phone, telegram, amount, status, order_id")
+        : Promise.resolve({ data: [] })
     ]);
 
     const customers = customersRes.data || [];
     const orders = ordersRes.data || [];
+    const clubSubs = clubSubsRes.data || [];
+    const projectLeads = leadsRes.data || [];
 
-    // 4. Map contacts with CRM
+    // Helper to format tariff
+    const formatTariff = (t: string) => {
+      if (!t || t === "none") return "Без тарифу";
+      if (t === "trial_1_week") return "Тріал 7 днів (1 ₴)";
+      if (t === "standard_1_month") return "Стандарт 1 міс";
+      if (t === "standard_3_months") return "Стандарт 3 міс";
+      if (t === "vip_1_month") return "VIP 1 міс";
+      if (t === "mini_course_279") return "Практикум (279 ₴)";
+      if (t === "individual_consultation") return "Консультація";
+      return t;
+    };
+
+    // Helper to format club status
+    const formatClubStatus = (s: string, t?: string) => {
+      if (!s) return "Не визначено";
+      if (s === "active") return t === "trial_1_week" ? "🟡 Тріал активний" : "🟢 Активна підписка";
+      if (s === "expired") return "🔴 Закінчилась";
+      if (s === "pending_payment") return "⏳ Очікує оплати";
+      if (s === "payment_failed") return "⚠️ Помилка оплати";
+      if (s === "funnel_day_1") return "Воронка: День 1";
+      if (s === "funnel_day_2") return "Воронка: День 2";
+      if (s === "funnel_day_3") return "Воронка: День 3";
+      if (s === "funnel_trial_offer_1") return "Офер тріалу 1";
+      if (s === "funnel_trial_offer_2") return "Офер тріалу 2";
+      if (s === "funnel_completed") return "Воронку завершено";
+      return s;
+    };
+
+    const seenContactIds = new Set<string>();
+    const seenTgUserIds = new Set<string>();
+    const seenUsernames = new Set<string>();
+
+    // 4. Map contacts with CRM and Club Subscriptions
     const matchedContacts = rawContacts.map((c: any) => {
+      seenContactIds.add(c.id);
       const spUsername = (c.username || c.channel_data?.username || "").replace(/^@/, "").toLowerCase().trim();
       const spPhone = (c.phone || c.channel_data?.phone || c.variables?.phone || "").replace(/[^0-9]/g, "");
       const spOrderId = (c.variables?.order_id || "").trim();
       const spTgId = c.telegram_id || c.channel_data?.id || null;
 
-      let matchedCustomer = customers.find((cust: any) => {
+      if (spTgId) seenTgUserIds.add(String(spTgId));
+      if (spUsername) seenUsernames.add(spUsername);
+
+      // Match in Club Subscriptions
+      const matchedClubSub = clubSubs.find((sub: any) => {
+        if (spTgId && sub.tg_user_id && String(sub.tg_user_id) === String(spTgId)) return true;
+        const subTg = (sub.telegram_username || "").replace(/^@/, "").toLowerCase().trim();
+        if (spUsername && subTg && spUsername === subTg) return true;
+        const subPhone = (sub.phone || "").replace(/[^0-9]/g, "");
+        if (spPhone && subPhone && (spPhone.includes(subPhone) || subPhone.includes(spPhone))) return true;
+        if (spOrderId && sub.order_id === spOrderId) return true;
+        return false;
+      });
+
+      // Match in Project Leads
+      const matchedLead = projectLeads.find((l: any) => {
+        const lTg = (l.telegram || "").replace(/^@/, "").toLowerCase().trim();
+        if (spUsername && lTg && spUsername === lTg) return true;
+        const lPhone = (l.phone || "").replace(/[^0-9]/g, "");
+        if (spPhone && lPhone && (spPhone.includes(lPhone) || lPhone.includes(spPhone))) return true;
+        if (spOrderId && l.order_id === spOrderId) return true;
+        return false;
+      });
+
+      // Match in Unified CRM Customers
+      const matchedCustomer = customers.find((cust: any) => {
         if (spTgId && cust.telegram_id && String(cust.telegram_id) === String(spTgId)) return true;
         const custTg = (cust.telegram || "").replace(/^@/, "").toLowerCase().trim();
         if (spUsername && custTg && spUsername === custTg) return true;
@@ -4371,32 +4439,116 @@ export async function getSendPulseBotContactsAction(projectId: string, botUserna
         return false;
       });
 
+      // Calculate paid amounts
       const customerOrders = matchedCustomer ? orders.filter((o: any) => o.customer_id === matchedCustomer.id) : [];
-      const totalPaidAmount = customerOrders
+      let totalPaidAmount = customerOrders
         .filter((o: any) => ["closed_won", "paid", "Approved", "Оплачено"].includes(o.status))
         .reduce((sum: number, o: any) => sum + Number(o.amount || 0), 0);
 
+      if (totalPaidAmount === 0 && matchedLead && ["Оплачено", "Купив курс", "Купив(-ла) Трипвайер"].includes(matchedLead.status)) {
+        totalPaidAmount = Number(matchedLead.amount || 0);
+      }
+
+      const isMatched = !!(matchedCustomer || matchedClubSub || matchedLead);
+
+      const resolvedName =
+        matchedClubSub?.name ||
+        matchedLead?.name ||
+        matchedCustomer?.name ||
+        (c.name && c.name !== "Telegram User" && c.name !== "Пользователь Telegram" ? c.name : null) ||
+        (spUsername ? `@${spUsername}` : "Учасник клубу");
+
+      const resolvedPhone = matchedClubSub?.phone || matchedLead?.phone || matchedCustomer?.phone || spPhone || null;
+
       const bwCid = matchedCustomer
         ? `bw_${matchedCustomer.id.replace(/-/g, "").substring(0, 16)}`
+        : matchedClubSub
+        ? `bw_${matchedClubSub.id.replace(/-/g, "").substring(0, 16)}`
         : (c.variables?.bw_cid || null);
 
       return {
         id: c.id,
         telegramId: spTgId,
-        name: c.name || c.full_name || matchedCustomer?.name || "Користувач Telegram",
-        username: spUsername ? `@${spUsername}` : (matchedCustomer?.telegram ? `@${matchedCustomer.telegram.replace(/^@/, '')}` : null),
-        phone: spPhone || matchedCustomer?.phone || null,
+        name: resolvedName,
+        username: spUsername ? `@${spUsername}` : (matchedClubSub?.telegram_username ? `@${matchedClubSub.telegram_username.replace(/^@/, '')}` : (matchedCustomer?.telegram ? `@${matchedCustomer.telegram.replace(/^@/, '')}` : null)),
+        phone: resolvedPhone,
         email: matchedCustomer?.email || null,
         bwCid,
-        isMatched: !!matchedCustomer,
-        matchedCustomerId: matchedCustomer?.id || null,
-        ordersCount: customerOrders.length,
+        isMatched,
+        matchedCustomerId: matchedCustomer?.id || matchedClubSub?.id || null,
+        ordersCount: customerOrders.length || (totalPaidAmount > 0 ? 1 : 0),
         totalPaidAmount,
+        tariff: matchedClubSub?.tariff ? formatTariff(matchedClubSub.tariff) : null,
+        rawTariff: matchedClubSub?.tariff || null,
+        clubStatus: matchedClubSub?.status ? formatClubStatus(matchedClubSub.status, matchedClubSub.tariff) : null,
+        rawClubStatus: matchedClubSub?.status || null,
+        isSubscription: Boolean(matchedClubSub?.is_subscription),
+        expiresAt: matchedClubSub?.expires_at || null,
         variables: c.variables || {},
         tags: c.tags || [],
-        lastActivity: c.last_activity_at || c.created_at
+        lastActivity: c.last_activity_at || matchedClubSub?.updated_at || c.created_at
       };
     });
+
+    // 5. Append Club Subscriptions that were not present in the SendPulse page
+    if (clubSubs.length > 0) {
+      for (const sub of clubSubs) {
+        const subTgId = sub.tg_user_id ? String(sub.tg_user_id) : null;
+        const subUsername = (sub.telegram_username || "").replace(/^@/, "").toLowerCase().trim();
+
+        if (subTgId && seenTgUserIds.has(subTgId)) continue;
+        if (subUsername && seenUsernames.has(subUsername)) continue;
+
+        // Find customer/orders/leads for this club sub
+        const matchedCust = customers.find((c: any) =>
+          (subTgId && c.telegram_id && String(c.telegram_id) === subTgId) ||
+          (subUsername && c.telegram && c.telegram.toLowerCase().replace(/^@/, '') === subUsername) ||
+          (sub.phone && c.phone && (c.phone.includes(sub.phone) || sub.phone.includes(c.phone)))
+        );
+
+        const matchedLead = projectLeads.find((l: any) =>
+          (subUsername && l.telegram && l.telegram.toLowerCase().replace(/^@/, '') === subUsername) ||
+          (sub.phone && l.phone && (l.phone.includes(sub.phone) || sub.phone.includes(l.phone))) ||
+          (sub.order_id && l.order_id === sub.order_id)
+        );
+
+        const custOrders = matchedCust ? orders.filter((o: any) => o.customer_id === matchedCust.id) : [];
+        let totalPaid = custOrders
+          .filter((o: any) => ["closed_won", "paid", "Approved", "Оплачено"].includes(o.status))
+          .reduce((sum: number, o: any) => sum + Number(o.amount || 0), 0);
+
+        if (totalPaid === 0 && matchedLead && ["Оплачено", "Купив курс", "Купив(-ла) Трипвайер"].includes(matchedLead.status)) {
+          totalPaid = Number(matchedLead.amount || 0);
+        }
+
+        const bwCid = matchedCust
+          ? `bw_${matchedCust.id.replace(/-/g, "").substring(0, 16)}`
+          : `bw_${sub.id.replace(/-/g, "").substring(0, 16)}`;
+
+        matchedContacts.push({
+          id: sub.id,
+          telegramId: sub.tg_user_id,
+          name: sub.name || matchedCust?.name || matchedLead?.name || (subUsername ? `@${subUsername}` : "Учасник клубу"),
+          username: sub.telegram_username ? `@${sub.telegram_username.replace(/^@/, '')}` : null,
+          phone: sub.phone || matchedCust?.phone || matchedLead?.phone || null,
+          email: matchedCust?.email || null,
+          bwCid,
+          isMatched: true,
+          matchedCustomerId: matchedCust?.id || sub.id,
+          ordersCount: custOrders.length || (totalPaid > 0 ? 1 : 0),
+          totalPaidAmount: totalPaid,
+          tariff: formatTariff(sub.tariff),
+          rawTariff: sub.tariff,
+          clubStatus: formatClubStatus(sub.status, sub.tariff),
+          rawClubStatus: sub.status,
+          isSubscription: Boolean(sub.is_subscription),
+          expiresAt: sub.expires_at,
+          variables: { tariff: sub.tariff, status: sub.status, order_id: sub.order_id },
+          tags: [sub.tariff, sub.status].filter(Boolean),
+          lastActivity: sub.updated_at || sub.created_at
+        });
+      }
+    }
 
     return {
       success: true,
@@ -4404,7 +4556,7 @@ export async function getSendPulseBotContactsAction(projectId: string, botUserna
         id: bot.id,
         name: bot.name,
         username: bot.channel_data?.username || bot.username,
-        totalSubscribers: bot.inbox?.total || 0
+        totalSubscribers: Math.max(bot.inbox?.total || 0, matchedContacts.length)
       },
       contacts: matchedContacts
     };
@@ -4451,8 +4603,10 @@ export async function syncSendPulseBotContactsAction(projectId: string, botUsern
     const contactsJson = await contactsRes.json();
     const rawContacts = contactsJson.data || [];
 
-    // 3. Fetch CRM customers
-    const [customersRes, ordersRes] = await Promise.all([
+    const isViktoria = project.slug === "viktoria_chernysh";
+
+    // 3. Fetch CRM customers & club subscriptions
+    const [customersRes, ordersRes, clubSubsRes] = await Promise.all([
       adminSupabase
         .from("unified_customers")
         .select("id, name, phone, email, telegram, telegram_id")
@@ -4460,11 +4614,15 @@ export async function syncSendPulseBotContactsAction(projectId: string, botUsern
       adminSupabase
         .from("unified_orders")
         .select("id, customer_id, order_id, amount, status")
-        .eq("project_id", project.id)
+        .eq("project_id", project.id),
+      isViktoria
+        ? adminSupabase.from("viktoria_club_subscriptions").select("*")
+        : adminSupabase.from("club_subscriptions").select("*").eq("project_id", project.id)
     ]);
 
     const customers = customersRes.data || [];
     const orders = ordersRes.data || [];
+    const clubSubs = clubSubsRes.data || [];
 
     let syncedCount = 0;
 
@@ -4473,6 +4631,16 @@ export async function syncSendPulseBotContactsAction(projectId: string, botUsern
       const spPhone = (c.phone || c.channel_data?.phone || c.variables?.phone || "").replace(/[^0-9]/g, "");
       const spOrderId = (c.variables?.order_id || "").trim();
       const spTgId = c.telegram_id || c.channel_data?.id || null;
+
+      const matchedClubSub = clubSubs.find((sub: any) => {
+        if (spTgId && sub.tg_user_id && String(sub.tg_user_id) === String(spTgId)) return true;
+        const subTg = (sub.telegram_username || "").replace(/^@/, "").toLowerCase().trim();
+        if (spUsername && subTg && spUsername === subTg) return true;
+        const subPhone = (sub.phone || "").replace(/[^0-9]/g, "");
+        if (spPhone && subPhone && (spPhone.includes(subPhone) || subPhone.includes(spPhone))) return true;
+        if (spOrderId && sub.order_id === spOrderId) return true;
+        return false;
+      });
 
       let matchedCustomer = customers.find((cust: any) => {
         if (spTgId && cust.telegram_id && String(cust.telegram_id) === String(spTgId)) return true;
@@ -4487,20 +4655,24 @@ export async function syncSendPulseBotContactsAction(projectId: string, botUsern
         return false;
       });
 
-      if (matchedCustomer) {
+      if (matchedCustomer || matchedClubSub) {
         syncedCount++;
-        const bwCid = `bw_${matchedCustomer.id.replace(/-/g, "").substring(0, 16)}`;
+        const targetPhone = matchedCustomer?.phone || matchedClubSub?.phone;
+        const targetName = matchedCustomer?.name || matchedClubSub?.name;
+        const targetBwCid = matchedCustomer
+          ? `bw_${matchedCustomer.id.replace(/-/g, "").substring(0, 16)}`
+          : `bw_${matchedClubSub.id.replace(/-/g, "").substring(0, 16)}`;
 
         // Update customer telegram_id if missing
-        if (spTgId && !matchedCustomer.telegram_id) {
+        if (matchedCustomer && spTgId && !matchedCustomer.telegram_id) {
           await adminSupabase
             .from("unified_customers")
             .update({ telegram_id: spTgId })
             .eq("id", matchedCustomer.id);
         }
 
-        // Set phone variable in SendPulse if missing
-        if (matchedCustomer.phone && !c.variables?.phone) {
+        // Set variables in SendPulse
+        if (targetPhone && !c.variables?.phone) {
           try {
             await fetch("https://api.sendpulse.com/telegram/contacts/setVariable", {
               method: "POST",
@@ -4509,7 +4681,22 @@ export async function syncSendPulseBotContactsAction(projectId: string, botUsern
                 bot_id: bot.id,
                 contact_id: c.id,
                 variable_name: "phone",
-                variable_value: matchedCustomer.phone
+                variable_value: targetPhone
+              })
+            });
+          } catch {}
+        }
+
+        if (targetBwCid && !c.variables?.bw_cid) {
+          try {
+            await fetch("https://api.sendpulse.com/telegram/contacts/setVariable", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                bot_id: bot.id,
+                contact_id: c.id,
+                variable_name: "bw_cid",
+                variable_value: targetBwCid
               })
             });
           } catch {}
