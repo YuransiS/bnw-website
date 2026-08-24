@@ -2328,7 +2328,8 @@ export async function createFunnelAction(
   plannedRevenue?: number,
   plannedSpend?: number,
   stages?: any[],
-  botUsername?: string | null
+  botUsername?: string | null,
+  botSteps?: any[]
 ) {
   try {
     await checkProjectAccess(projectId);
@@ -2343,6 +2344,7 @@ export async function createFunnelAction(
         campaign_ids: campaignIds,
         landing_slugs: landingSlugs,
         bot_username: botUsername || null,
+        bot_steps: botSteps || [],
         description: description || "",
         planned_revenue: plannedRevenue || 0,
         planned_spend: plannedSpend || 0,
@@ -2368,6 +2370,7 @@ export async function updateFunnelAction(
     campaignIds: string[];
     landingSlugs: string[];
     botUsername?: string | null;
+    botSteps?: any[];
     description?: string;
     plannedRevenue?: number;
     plannedSpend?: number;
@@ -2377,20 +2380,25 @@ export async function updateFunnelAction(
   try {
     await checkProjectAccess(projectId);
     const adminSupabase = createAdminClient();
+    const updatePayload: any = {
+      name: updates.name,
+      start_date: updates.startDate,
+      end_date: updates.endDate || null,
+      campaign_ids: updates.campaignIds,
+      landing_slugs: updates.landingSlugs,
+      bot_username: updates.botUsername !== undefined ? updates.botUsername : null,
+      description: updates.description || "",
+      planned_revenue: updates.plannedRevenue || 0,
+      planned_spend: updates.plannedSpend || 0,
+      stages: updates.stages || []
+    };
+    if (updates.botSteps !== undefined) {
+      updatePayload.bot_steps = updates.botSteps;
+    }
+
     const { data, error } = await adminSupabase
       .from("funnels")
-      .update({
-        name: updates.name,
-        start_date: updates.startDate,
-        end_date: updates.endDate || null,
-        campaign_ids: updates.campaignIds,
-        landing_slugs: updates.landingSlugs,
-        bot_username: updates.botUsername !== undefined ? updates.botUsername : null,
-        description: updates.description || "",
-        planned_revenue: updates.plannedRevenue || 0,
-        planned_spend: updates.plannedSpend || 0,
-        stages: updates.stages || []
-      })
+      .update(updatePayload)
       .eq("id", funnelId)
       .select()
       .single();
@@ -2399,6 +2407,31 @@ export async function updateFunnelAction(
     return { success: true, funnel: data };
   } catch (err: any) {
     return { error: err.message || "Failed to update funnel" };
+  }
+}
+
+export async function saveProjectSendPulseCredentialsAction(
+  projectId: string,
+  clientId: string,
+  clientSecret: string
+) {
+  try {
+    await checkProjectAccess(projectId);
+    const adminSupabase = createAdminClient();
+    const { data, error } = await adminSupabase
+      .from("projects")
+      .update({
+        sendpulse_client_id: clientId.trim(),
+        sendpulse_client_secret: clientSecret.trim()
+      })
+      .eq("id", projectId)
+      .select("id, slug, name, sendpulse_client_id")
+      .single();
+
+    if (error) throw error;
+    return { success: true, project: data };
+  } catch (err: any) {
+    return { error: err.message || "Failed to save SendPulse credentials" };
   }
 }
 

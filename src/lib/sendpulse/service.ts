@@ -26,9 +26,33 @@ interface TokenCache {
 const tokenCache: Record<string, TokenCache> = {};
 
 export async function getSendPulseAccessToken(projectSlug: string = 'sergiy'): Promise<string> {
-  const creds = SENDPULSE_CREDENTIALS[projectSlug] || SENDPULSE_CREDENTIALS['default'];
-  const now = Date.now();
+  let clientId = SENDPULSE_CREDENTIALS[projectSlug]?.clientId;
+  let clientSecret = SENDPULSE_CREDENTIALS[projectSlug]?.clientSecret;
 
+  if (!clientId || !clientSecret) {
+    try {
+      const { createAdminClient } = await import('@/utils/supabase/server');
+      const admin = createAdminClient();
+      const { data: p } = await admin
+        .from('projects')
+        .select('sendpulse_client_id, sendpulse_client_secret')
+        .eq('slug', projectSlug)
+        .maybeSingle();
+
+      if (p?.sendpulse_client_id && p?.sendpulse_client_secret) {
+        clientId = p.sendpulse_client_id;
+        clientSecret = p.sendpulse_client_secret;
+      }
+    } catch {}
+  }
+
+  if (!clientId || !clientSecret) {
+    const fallback = SENDPULSE_CREDENTIALS['default'];
+    clientId = fallback.clientId;
+    clientSecret = fallback.clientSecret;
+  }
+
+  const now = Date.now();
   const cached = tokenCache[projectSlug];
   if (cached && cached.expiresAt > now + 60000) {
     return cached.accessToken;
@@ -39,8 +63,8 @@ export async function getSendPulseAccessToken(projectSlug: string = 'sergiy'): P
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       grant_type: 'client_credentials',
-      client_id: creds.clientId,
-      client_secret: creds.clientSecret
+      client_id: clientId,
+      client_secret: clientSecret
     })
   });
 

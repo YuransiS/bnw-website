@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import ProjectSettingsModal from "../components/ProjectSettingsModal";
 import { isPaidStatus } from "@/lib/statusMapper";
+import { transliterateToSlug } from "@/utils/transliterate";
 
 interface FunnelsTabProps {
   projectId: string;
@@ -42,6 +43,7 @@ interface FunnelsTabProps {
 
 interface Funnel {
   id: string;
+  project_id: string;
   name: string;
   start_date: string;
   end_date?: string | null;
@@ -49,6 +51,7 @@ interface Funnel {
   landing_slugs: string[];
   description: string;
   bot_username?: string | null;
+  bot_steps?: any[] | null;
   planned_revenue?: number;
   planned_spend?: number;
   stages?: any[] | string[] | null;
@@ -386,6 +389,97 @@ export default function FunnelsTab({
     loadSendPulseData();
     return () => { isCancelled = true; };
   }, [projectId, selectedFunnel?.id, selectedBotUsername]);
+
+  const [customStepInput, setCustomStepInput] = useState<string>("");
+
+  const handleAddCustomBotStep = async () => {
+    if (!customStepInput.trim() || !selectedFunnel) return;
+    const label = customStepInput.trim();
+    const slug = transliterateToSlug(label);
+
+    const existingSteps = Array.isArray(selectedFunnel.bot_steps) && selectedFunnel.bot_steps.length > 0
+      ? selectedFunnel.bot_steps
+      : [
+          { id: "bot_started", label: "1. Старт бота", slug: "bot_started", color: "text-white" },
+          { id: "lesson_1", label: "2. Урок 1", slug: "lesson_1", color: "text-cyan-400" },
+          { id: "lesson_2", label: "3. Урок 2", slug: "lesson_2", color: "text-cyan-400" },
+          { id: "lesson_3", label: "4. Урок 3", slug: "lesson_3", color: "text-cyan-400" },
+          { id: "completed", label: "5. Фініш / Бонуси", slug: "completed", color: "text-purple-400" }
+        ];
+
+    if (existingSteps.some((s: any) => s.slug === slug)) {
+      alert(`Крок з ідентифікатором "${slug}" вже існує у цій воронці!`);
+      return;
+    }
+
+    const updatedSteps = [
+      ...existingSteps,
+      {
+        id: slug,
+        label,
+        slug,
+        desc: "Кастомний крок",
+        color: "text-emerald-400"
+      }
+    ];
+
+    try {
+      const res = await updateFunnelAction(projectId, selectedFunnel.id, {
+        name: selectedFunnel.name,
+        startDate: selectedFunnel.start_date,
+        endDate: selectedFunnel.end_date,
+        campaignIds: selectedFunnel.campaign_ids || [],
+        landingSlugs: selectedFunnel.landing_slugs || [],
+        botUsername: selectedFunnel.bot_username || null,
+        botSteps: updatedSteps,
+        description: selectedFunnel.description || "",
+        plannedRevenue: selectedFunnel.planned_revenue,
+        plannedSpend: selectedFunnel.planned_spend,
+        stages: selectedFunnel.stages || []
+      });
+
+      if (res.success && res.funnel) {
+        setSelectedFunnel(res.funnel);
+        setCustomStepInput("");
+        loadFunnels(selectedFunnel.id);
+      } else {
+        alert("Помилка додавання кроку: " + res.error);
+      }
+    } catch (err: any) {
+      alert("Помилка: " + err.message);
+    }
+  };
+
+  const handleRemoveCustomBotStep = async (stepSlug: string) => {
+    if (!selectedFunnel) return;
+    if (!confirm(`Видалити крок "${stepSlug}" із воронки?`)) return;
+
+    const existingSteps = Array.isArray(selectedFunnel.bot_steps) ? selectedFunnel.bot_steps : [];
+    const updatedSteps = existingSteps.filter((s: any) => s.slug !== stepSlug);
+
+    try {
+      const res = await updateFunnelAction(projectId, selectedFunnel.id, {
+        name: selectedFunnel.name,
+        startDate: selectedFunnel.start_date,
+        endDate: selectedFunnel.end_date,
+        campaignIds: selectedFunnel.campaign_ids || [],
+        landingSlugs: selectedFunnel.landing_slugs || [],
+        botUsername: selectedFunnel.bot_username || null,
+        botSteps: updatedSteps,
+        description: selectedFunnel.description || "",
+        plannedRevenue: selectedFunnel.planned_revenue,
+        plannedSpend: selectedFunnel.planned_spend,
+        stages: selectedFunnel.stages || []
+      });
+
+      if (res.success && res.funnel) {
+        setSelectedFunnel(res.funnel);
+        loadFunnels(selectedFunnel.id);
+      }
+    } catch (err: any) {
+      alert("Помилка: " + err.message);
+    }
+  };
 
   // Sync transaction default account
   useEffect(() => {
@@ -2009,8 +2103,8 @@ export default function FunnelsTab({
               )}
             </div>
 
-            {/* Detailed Traffic Analytics Section */}
-            {stats.trafficAnalytics && (
+            {/* Detailed Traffic Analytics Section - ONLY RENDER IF FUNNEL HAS ASSIGNED CAMPAIGNS */}
+            {stats.trafficAnalytics && Array.isArray(selectedFunnel.campaign_ids) && selectedFunnel.campaign_ids.length > 0 && (
               <div className="bg-neutral-900 border border-white/5 p-6 rounded-2xl space-y-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-white/5 pb-3">
                   <div>
@@ -2022,7 +2116,7 @@ export default function FunnelsTab({
                     </p>
                   </div>
                   <span className="text-[10px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded-full font-bold">
-                    Активний трафік
+                    Активний трафік ({selectedFunnel.campaign_ids.length} камп.)
                   </span>
                 </div>
 
@@ -2164,113 +2258,126 @@ export default function FunnelsTab({
               </div>
             )}
 
-            {/* SendPulse Chatbot Integration & Live Milestones */}
-            <div className="bg-neutral-900 border border-white/5 p-6 rounded-2xl space-y-5">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-white/5 pb-3">
-                <div>
-                  <h4 className="font-black text-xs text-white uppercase tracking-wider flex items-center gap-2">
-                    <Bot className="w-4 h-4 text-emerald-400" /> SendPulse Чат-бот Інтеграція & Сквозний трекінг (bw_cid)
-                  </h4>
-                  <p className="text-[10px] text-white/40 mt-0.5 font-medium">
-                    Автоматична прив'язка підписників до заявок із сайту та фіксація кожного кроку воронки
-                  </p>
-                </div>
-                {sendPulseBots.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[10px] text-white/40 font-bold uppercase mr-1">Оберіть бота:</span>
-                    {sendPulseBots.map((b: any) => {
-                      const isSelected = (selectedBotUsername || sendPulseBots[0]?.username) === b.username;
-                      return (
-                        <button
-                          key={b.id}
-                          type="button"
-                          onClick={() => setSelectedBotUsername(b.username)}
-                          className={`text-[10px] px-2.5 py-1 rounded-full font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                            isSelected
-                              ? "bg-emerald-500/20 border border-emerald-400 text-emerald-300 shadow-[0_0_10px_rgba(52,211,153,0.2)]"
-                              : "bg-white/5 border border-white/10 text-white/50 hover:text-white hover:bg-white/10"
-                          }`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? "bg-emerald-400 animate-pulse" : "bg-white/30"}`} />
-                          {b.username ? `@${b.username}` : b.name} ({b.totalSubscribers} підписн.)
-                        </button>
-                      );
-                    })}
+            {/* SendPulse Chatbot Integration & Live Milestones - ONLY RENDER IF BOT IS BOUND */}
+            {Boolean(selectedFunnel.bot_username) && (
+              <div className="bg-neutral-900 border border-white/5 p-6 rounded-2xl space-y-5">
+                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-white/5 pb-4">
+                  <div>
+                    <h4 className="font-black text-xs text-white uppercase tracking-wider flex items-center gap-2">
+                      <Bot className="w-4 h-4 text-emerald-400" /> SendPulse Чат-бот: @{selectedFunnel.bot_username?.replace('@', '')}
+                    </h4>
+                    <p className="text-[10px] text-white/40 mt-0.5 font-medium">
+                      Наскрізний трекінг кроків ланцюжка. Створюйте кроки та копіюйте Webhook для блоків «Дія» в SendPulse.
+                    </p>
                   </div>
-                )}
-              </div>
 
-              {/* Bot Milestones Step Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
-                {(() => {
-                  const defaultItems = [
-                    { step: "bot_started", label: "1. Старт бота", desc: "Активація ліда", count: botStepCounts["bot_started"] || 0, color: "text-white" },
-                    { step: "lesson_1", label: "2. Урок 1", desc: "1-й модуль", count: botStepCounts["lesson_1"] || 0, color: "text-cyan-400" },
-                    { step: "lesson_2", label: "3. Урок 2", desc: "2-й модуль", count: botStepCounts["lesson_2"] || 0, color: "text-cyan-400" },
-                    { step: "lesson_3", label: "4. Урок 3", desc: "3-й модуль", count: botStepCounts["lesson_3"] || 0, color: "text-cyan-400" },
-                    { step: "completed", label: "5. Фініш/Бонуси", desc: "Завершення курсу", count: botStepCounts["completed"] || botStepCounts["quiz_completed"] || 0, color: "text-purple-400" },
-                    { step: "nedesign_clicked", label: "6. NEDESIGN", desc: "Клік флагману", count: botStepCounts["nedesign_clicked"] || 0, color: "text-amber-400" },
-                    { step: "offer_390_clicked", label: "7. Офер 390 грн", desc: "Клік за 390 грн", count: (botStepCounts["offer_390_clicked"] || 0) + (botStepCounts["offer_clicked"] || 0), color: "text-emerald-400" },
-                  ];
-
-                  // Dynamically include any other custom steps present in DB
-                  const knownSteps = new Set(defaultItems.map(d => d.step).concat(["offer_clicked", "quiz_completed", "other"]));
-                  const extraItems = Object.keys(botStepCounts)
-                    .filter(s => !knownSteps.has(s) && botStepCounts[s] > 0)
-                    .map(s => ({
-                      step: s,
-                      label: `Крок: ${s}`,
-                      desc: "Кастомна подія",
-                      count: botStepCounts[s],
-                      color: "text-pink-400"
-                    }));
-
-                  return [...defaultItems, ...extraItems];
-                })().map((item) => {
-                  const currentBot = selectedBotUsername || sendPulseBots[0]?.username || "";
-                  const botParam = currentBot ? `&bot=${currentBot}` : "";
-                  const webhookUrl = `https://bnw-prod.vercel.app/api/v1/integrations/sendpulse/webhook?project=${activeProject?.slug || 'sergiy'}${botParam}&step=${item.step}`;
-                  const isCopied = copiedStep === item.step;
-
-                  return (
-                    <div key={item.step} className="bg-white/[0.02] border border-white/5 p-3 rounded-xl space-y-2 flex flex-col justify-between">
-                      <div>
-                        <div className="flex justify-between items-start">
-                          <span className="text-[10px] font-extrabold text-white block">{item.label}</span>
-                          <span className={`text-base font-black ${item.color}`}>{item.count}</span>
-                        </div>
-                        <span className="text-[9px] text-white/40 block mt-0.5">{item.desc}</span>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (navigator?.clipboard) {
-                            navigator.clipboard.writeText(webhookUrl);
-                            setCopiedStep(item.step);
-                            setTimeout(() => setCopiedStep(null), 2500);
+                  {/* Add Step Input & Button */}
+                  <div className="flex items-center gap-2 w-full lg:w-auto">
+                    <div className="relative flex-1 lg:w-72">
+                      <input
+                        type="text"
+                        value={customStepInput}
+                        onChange={(e) => setCustomStepInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddCustomBotStep();
                           }
                         }}
-                        className="w-full mt-2 px-2 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-bold text-white/70 hover:text-white rounded-lg flex items-center justify-center gap-1 transition-all cursor-pointer"
-                        title="Скопіювати Webhook URL для SendPulse"
-                      >
-                        {isCopied ? (
-                          <>
-                            <Check className="w-3 h-3 text-emerald-400" />
-                            <span className="text-emerald-400">Скопійовано!</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3 h-3 text-white/50" />
-                            <span>Копіювати Webhook</span>
-                          </>
-                        )}
-                      </button>
+                        placeholder="Назва кроку (напр. Урок 1, Здав ДЗ)..."
+                        className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-xs text-white placeholder-white/30 focus:outline-none focus:border-emerald-500"
+                      />
                     </div>
-                  );
-                })}
+                    <button
+                      type="button"
+                      onClick={handleAddCustomBotStep}
+                      disabled={!customStepInput.trim()}
+                      className="px-3 py-2 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-black font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Додати крок</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Bot Milestones Step Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+                  {(() => {
+                    const funnelSteps = Array.isArray(selectedFunnel.bot_steps) && selectedFunnel.bot_steps.length > 0
+                      ? selectedFunnel.bot_steps
+                      : [
+                          { id: "bot_started", label: "1. Старт бота", slug: "bot_started", desc: "Активація ліда", color: "text-white" },
+                          { id: "lesson_1", label: "2. Урок 1", slug: "lesson_1", desc: "1-й модуль", color: "text-cyan-400" },
+                          { id: "lesson_2", label: "3. Урок 2", slug: "lesson_2", desc: "2-й модуль", color: "text-cyan-400" },
+                          { id: "lesson_3", label: "4. Урок 3", slug: "lesson_3", desc: "3-й модуль", color: "text-cyan-400" },
+                          { id: "completed", label: "5. Фініш / Бонуси", slug: "completed", desc: "Завершення", color: "text-purple-400" },
+                          { id: "offer_clicked", label: "6. Клік на офер", slug: "offer_clicked", desc: "Намір купити", color: "text-emerald-400" }
+                        ];
+
+                    return funnelSteps.map((item: any) => {
+                      const cleanSlug = item.slug || transliterateToSlug(item.label || item.name || 'step');
+                      const count = botStepCounts[cleanSlug] || 0;
+                      const boundBot = selectedFunnel.bot_username?.replace('@', '') || '';
+                      const webhookUrl = `https://bnw-prod.vercel.app/api/v1/integrations/sendpulse/webhook?project=${activeProject?.slug || 'sergiy'}&bot=${boundBot}&step=${cleanSlug}`;
+                      const isCopied = copiedStep === cleanSlug;
+
+                      return (
+                        <div key={cleanSlug} className="bg-white/[0.02] border border-white/5 hover:border-white/15 p-3 rounded-xl space-y-2 flex flex-col justify-between transition-all group">
+                          <div>
+                            <div className="flex justify-between items-start">
+                              <span className="text-[11px] font-extrabold text-white block truncate" title={item.label}>
+                                {item.label}
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <span className={`text-sm font-black ${item.color || 'text-white'}`}>{count}</span>
+                                {Array.isArray(selectedFunnel.bot_steps) && selectedFunnel.bot_steps.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveCustomBotStep(cleanSlug)}
+                                    className="opacity-0 group-hover:opacity-100 hover:text-rose-400 text-white/30 transition-all p-0.5 cursor-pointer"
+                                    title="Видалити крок"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            <span className="text-[9px] text-white/40 block font-mono mt-0.5 truncate" title={`step=${cleanSlug}`}>
+                              step={cleanSlug}
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (navigator?.clipboard) {
+                                navigator.clipboard.writeText(webhookUrl);
+                                setCopiedStep(cleanSlug);
+                                setTimeout(() => setCopiedStep(null), 2500);
+                              }
+                            }}
+                            className="w-full mt-2 px-2 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-bold text-white/70 hover:text-white rounded-lg flex items-center justify-center gap-1 transition-all cursor-pointer"
+                            title="Скопіювати Webhook URL для SendPulse"
+                          >
+                            {isCopied ? (
+                              <>
+                                <Check className="w-3 h-3 text-emerald-400" />
+                                <span className="text-emerald-400">Скопійовано!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3 h-3 text-white/50" />
+                                <span>Копіювати Webhook</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
