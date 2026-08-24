@@ -708,36 +708,6 @@ export default function FunnelsTab({
     };
 
     const isUSD = globalCurrency === "USD";
-
-    // 1. If server precomputed stats exist on the funnel, use them directly for 100% precision
-    if (funnel.stats) {
-      const s = funnel.stats;
-      const rev = isUSD ? Number(s.revenueUSD || (s.revenue ? s.revenue / 41.5 : 0) || 0) : Number(s.revenue || 0);
-      const spd = isUSD ? Number(s.spendUSD || (s.spend ? s.spend / 41.5 : 0) || 0) : Number(s.spend || 0);
-      const prf = rev - spd;
-      const r = spd > 0 ? (prf / spd) * 100 : 0;
-      const lCount = Number(s.leadsCount || 0);
-      const sCount = Number(s.salesCount || 0);
-      const convRate = lCount > 0 ? (sCount / lCount) * 100 : 0;
-
-      return {
-        leadsCount: lCount,
-        salesCount: sCount,
-        quizzesCount: Number(s.quizzesCount || 0),
-        totalClicks: Number(s.totalClicks || 0),
-        impressions: Number(s.impressions || 0),
-        revenue: rev,
-        spend: spd,
-        profit: prf,
-        roi: r,
-        cr: convRate,
-        cplUSD: Number(s.cplUSD || 0),
-        cpaUSD: Number(s.cpaUSD || 0),
-        manualSpend: Number(s.manualSpend || 0),
-        manualIncome: Number(s.manualIncome || 0)
-      };
-    }
-
     const startDateTime = parseSafeTs(funnel.start_date, false);
     const endDateTime = parseSafeTs(funnel.end_date, true);
     
@@ -747,11 +717,11 @@ export default function FunnelsTab({
       if (startDateTime && leadTime < startDateTime) return false;
       if (endDateTime && leadTime > endDateTime) return false;
 
-      const leadCampaign = String(lead.utm_campaign || lead.utmCampaign || "").trim().toLowerCase();
-      const leadMedium = String(lead.utm_medium || lead.utmMedium || "").trim().toLowerCase();
-      const leadSource = String(lead.utm_source || lead.utmSource || "").trim().toLowerCase();
+      const leadCampaign = String(lead.utm_campaign || lead.utmCampaign || lead.metadata?.raw_row?.utm_campaign || "").trim().toLowerCase();
+      const leadMedium = String(lead.utm_medium || lead.utmMedium || lead.metadata?.raw_row?.utm_medium || "").trim().toLowerCase();
+      const leadSource = String(lead.utm_source || lead.utmSource || lead.metadata?.raw_row?.utm_source || "").trim().toLowerCase();
       const leadCampaignId = String(lead.campaign_id || lead.campaignId || lead.metadata?.campaign_id || "").trim().toLowerCase();
-      const leadLanding = String(lead.landing || lead.page_path || lead.page_url || lead.target_sheet || lead.targetSheet || lead.metadata?.target_sheet || "").trim().toLowerCase();
+      const leadLanding = String(lead.landing || lead.page_path || lead.page_url || lead.target_sheet || lead.targetSheet || lead.metadata?.target_sheet || lead.metadata?.raw_row?.page_path || lead.metadata?.raw_row?.page_url || "").trim().toLowerCase();
       const visitedLandings = (lead.visited_landings || lead.visitedLandings || []).map((l: string) => String(l).toLowerCase());
 
       const hasCampaigns = Array.isArray(funnel.campaign_ids) && funnel.campaign_ids.length > 0;
@@ -771,7 +741,7 @@ export default function FunnelsTab({
       const landingMatch = hasLandings && funnel.landing_slugs.some((slug) => {
         if (!slug) return false;
         const s = slug.toLowerCase().trim();
-        return leadLanding.includes(s) || visitedLandings.some((vl: string) => vl.includes(s));
+        return leadLanding.includes(s) || s.includes(leadLanding) || visitedLandings.some((vl: string) => vl.includes(s) || s.includes(vl));
       });
 
       if (!hasCampaigns && !hasLandings) {
@@ -808,10 +778,14 @@ export default function FunnelsTab({
       (l: any) => (l.diagnosticsComment && l.diagnosticsComment.trim().length > 0) || (l.diagnostics_comment && l.diagnostics_comment.trim().length > 0)
     ).length;
 
-    // Sum Ad Spends from daily traffic costs in the active range
+    // Filter costs and sum Traffic Ad Spends in active range
     let spendUSD = 0;
     let spendUAH = 0;
-    costsList.forEach((c: any) => {
+    let totalClicks = 0;
+    let totalImpressions = 0;
+    const matchingCostRecords: any[] = [];
+
+    (costsList || []).forEach((c: any) => {
       const hasCampaigns = Array.isArray(funnel.campaign_ids) && funnel.campaign_ids.length > 0;
       const isMatched = hasCampaigns
         ? funnel.campaign_ids.some((id) => {
@@ -830,8 +804,14 @@ export default function FunnelsTab({
       }
       
       const sUsd = Number(c.spend_usd || c.spend || 0);
+      const clk = Number(c.clicks || 0);
+      const imp = Number(c.impressions || 0);
+
       spendUSD += sUsd;
       spendUAH += sUsd * 41.5;
+      totalClicks += clk;
+      totalImpressions += imp;
+      matchingCostRecords.push(c);
     });
 
     // Sum manual transactions bound to this funnel
@@ -841,9 +821,9 @@ export default function FunnelsTab({
     funnelTransactions.forEach((tx: any) => {
       if (tx.funnel_id === funnel.id) {
         const amt = Number(tx.amount || 0);
-        const isUAH = tx.currency === "UAH";
-        const amtUAH = isUAH ? amt : amt * 41.5;
-        const amtUSD = isUAH ? amt / 41.5 : amt;
+        const isTxUAH = tx.currency === "UAH";
+        const amtUAH = isTxUAH ? amt : amt * 41.5;
+        const amtUSD = isTxUAH ? amt / 41.5 : amt;
         if (tx.type === "expense") {
           spendUAH += amtUAH;
           spendUSD += amtUSD;
@@ -863,32 +843,94 @@ export default function FunnelsTab({
     const roi = finalSpd > 0 ? (profit / finalSpd) * 100 : 0;
     const cr = leadsCount > 0 ? (salesCount / leadsCount) * 100 : 0;
 
-    // Click sum from campaigns
-    let totalClicks = 0;
-    campaignsList.forEach((c: any) => {
-      const hasCampaigns = Array.isArray(funnel.campaign_ids) && funnel.campaign_ids.length > 0;
-      const isMatched = hasCampaigns
-        ? funnel.campaign_ids.some((id) => {
-            const cid = id.toLowerCase().trim();
-            const cName = String(c.campaign_name || "").toLowerCase();
-            const cId = String(c.campaign_id || "").toLowerCase();
-            return cName.includes(cid) || cid.includes(cName) || cId === cid || cid.includes(cId);
-          })
-        : true;
-      if (isMatched) {
-        totalClicks += Number(c.clicks || 0);
+    // Traffic KPI calculation
+    const ctr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
+    const cpcUSD = totalClicks > 0 ? spendUSD / totalClicks : 0;
+    const cpcUAH = totalClicks > 0 ? spendUAH / totalClicks : 0;
+    const cpmUSD = totalImpressions > 0 ? (spendUSD / totalImpressions) * 1000 : 0;
+    const cpmUAH = totalImpressions > 0 ? (spendUAH / totalImpressions) * 1000 : 0;
+    const cplUSD = leadsCount > 0 ? spendUSD / leadsCount : 0;
+    const cplUAH = leadsCount > 0 ? spendUAH / leadsCount : 0;
+
+    // Detailed Daily Traffic Breakdown
+    const dailyMap: Record<string, {
+      date: string;
+      campaignName: string;
+      spendUSD: number;
+      spendUAH: number;
+      clicks: number;
+      impressions: number;
+      ctr: number;
+      cpcUSD: number;
+      cpcUAH: number;
+      leadsCount: number;
+      cplUSD: number;
+      cplUAH: number;
+    }> = {};
+
+    matchingCostRecords.forEach((c: any) => {
+      const d = c.date || "Інше";
+      const key = `${d}_${c.campaign_name || ""}`;
+      const sUsd = Number(c.spend_usd || c.spend || 0);
+      const clk = Number(c.clicks || 0);
+      const imp = Number(c.impressions || 0);
+
+      if (!dailyMap[key]) {
+        dailyMap[key] = {
+          date: d,
+          campaignName: c.campaign_name || "Кампанія",
+          spendUSD: 0,
+          spendUAH: 0,
+          clicks: 0,
+          impressions: 0,
+          ctr: 0,
+          cpcUSD: 0,
+          cpcUAH: 0,
+          leadsCount: 0,
+          cplUSD: 0,
+          cplUAH: 0
+        };
+      }
+      dailyMap[key].spendUSD += sUsd;
+      dailyMap[key].spendUAH += sUsd * 41.5;
+      dailyMap[key].clicks += clk;
+      dailyMap[key].impressions += imp;
+    });
+
+    // Count leads per day
+    matchedLeads.forEach((l: any) => {
+      const d = (l.created_at || l.createdAt || "").split("T")[0];
+      if (d) {
+        Object.keys(dailyMap).forEach((k) => {
+          if (dailyMap[k].date === d) {
+            dailyMap[k].leadsCount++;
+          }
+        });
       }
     });
 
-    // Offer / Landing variant breakdown
+    const dailyBreakdown = Object.values(dailyMap)
+      .map(d => ({
+        ...d,
+        ctr: d.impressions > 0 ? (d.clicks / d.impressions) * 100 : 0,
+        cpcUSD: d.clicks > 0 ? d.spendUSD / d.clicks : 0,
+        cpcUAH: d.clicks > 0 ? d.spendUAH / d.clicks : 0,
+        cplUSD: d.leadsCount > 0 ? d.spendUSD / d.leadsCount : 0,
+        cplUAH: d.leadsCount > 0 ? d.spendUAH / d.leadsCount : 0
+      }))
+      .sort((a, b) => b.date.localeCompare(a.date));
+
+    // Offer / Landing variant breakdown (A/B testing)
     const variantMap: Record<string, {
       key: string;
       name: string;
+      url: string;
       leadsCount: number;
       salesCount: number;
       revenue: number;
       percentage: number;
       cr: number;
+      color: string;
     }> = {};
 
     matchedLeads.forEach((lead: any) => {
@@ -898,7 +940,9 @@ export default function FunnelsTab({
       const utmCampaign = String(lead.utm_campaign || lead.utmCampaign || lead.metadata?.utm_campaign || lead.metadata?.raw_row?.utm_campaign || "").trim();
 
       let variantKey = "default";
-      let variantName = pagePath && pagePath !== "/" ? pagePath : "Головна сторінка";
+      let variantName = pagePath && pagePath !== "/" ? pagePath : "Головний лендинг";
+      let variantUrl = pageUrl || pagePath || "/";
+      let variantColor = "cyan";
 
       const oMatch = pageUrl.match(/[?&]o=([a-zA-Z0-9_-]+)/i);
       const vMatch = pageUrl.match(/[?&]v=([a-zA-Z0-9_-]+)/i);
@@ -906,34 +950,46 @@ export default function FunnelsTab({
       if (oMatch && oMatch[1]) {
         variantKey = `o_${oMatch[1]}`;
         variantName = `Оффер ${oMatch[1]} (?o=${oMatch[1]})`;
+        variantUrl = `?o=${oMatch[1]}`;
+        variantColor = oMatch[1] === "1" ? "cyan" : oMatch[1] === "2" ? "emerald" : "purple";
       } else if (vMatch && vMatch[1]) {
         variantKey = `v_${vMatch[1]}`;
         variantName = `Варіант ${vMatch[1]} (?v=${vMatch[1]})`;
+        variantUrl = `?v=${vMatch[1]}`;
+        variantColor = "amber";
       } else if (sourceFlag && /Offer\s*(\d+)/i.test(sourceFlag)) {
         const num = sourceFlag.match(/Offer\s*(\d+)/i)?.[1] || "1";
         variantKey = `o_${num}`;
         variantName = `Оффер ${num} (${sourceFlag})`;
+        variantUrl = `?o=${num}`;
+        variantColor = num === "1" ? "cyan" : num === "2" ? "emerald" : "purple";
       } else if (utmCampaign && /OFFER\s*(\d+)/i.test(utmCampaign)) {
         const num = utmCampaign.match(/OFFER\s*(\d+)/i)?.[1] || "1";
         variantKey = `o_${num}`;
         variantName = `Оффер ${num} (Camp: OFFER${num})`;
+        variantUrl = `?o=${num}`;
+        variantColor = num === "1" ? "cyan" : num === "2" ? "emerald" : "purple";
       } else if (sourceFlag) {
         variantKey = sourceFlag;
         variantName = sourceFlag;
+        variantColor = "blue";
       } else if (pagePath && pagePath !== "/") {
         variantKey = pagePath;
         variantName = pagePath;
+        variantColor = "emerald";
       }
 
       if (!variantMap[variantKey]) {
         variantMap[variantKey] = {
           key: variantKey,
           name: variantName,
+          url: variantUrl,
           leadsCount: 0,
           salesCount: 0,
           revenue: 0,
           percentage: 0,
-          cr: 0
+          cr: 0,
+          color: variantColor
         };
       }
 
@@ -967,6 +1023,7 @@ export default function FunnelsTab({
       salesCount,
       quizzesCount,
       totalClicks,
+      impressions: totalImpressions,
       revenue: finalRev,
       spend: finalSpd,
       profit,
@@ -974,7 +1031,17 @@ export default function FunnelsTab({
       cr,
       manualSpend: manualSpendUAH,
       manualIncome: manualIncomeUAH,
-      offerVariants
+      offerVariants,
+      trafficAnalytics: {
+        totalSpend: finalSpd,
+        totalClicks,
+        impressions: totalImpressions,
+        ctr,
+        cpc: isUSD ? cpcUSD : cpcUAH,
+        cpm: isUSD ? cpmUSD : cpmUAH,
+        cpl: isUSD ? cplUSD : cplUAH,
+        dailyBreakdown
+      }
     };
   };
 
@@ -2001,6 +2068,118 @@ export default function FunnelsTab({
                 </div>
               )}
             </div>
+
+            {/* Detailed Traffic Analytics Section */}
+            {stats.trafficAnalytics && (
+              <div className="bg-neutral-900 border border-white/5 p-6 rounded-2xl space-y-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-white/5 pb-3">
+                  <div>
+                    <h4 className="font-black text-xs text-white uppercase tracking-wider flex items-center gap-2">
+                      <Megaphone className="w-4 h-4 text-emerald-400" /> Детальна аналітика рекламного трафіку воронки
+                    </h4>
+                    <p className="text-[10px] text-white/40 mt-0.5 font-medium">
+                      Показники ефективності рекламних кампаній, що живлять дану воронку
+                    </p>
+                  </div>
+                  <span className="text-[10px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded-full font-bold">
+                    Активний трафік
+                  </span>
+                </div>
+
+                {/* 6 Metric KPI Badges */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                  <div className="bg-white/[0.02] border border-white/5 p-3.5 rounded-xl space-y-1">
+                    <span className="text-[9px] uppercase font-bold text-white/40 block">Покази (Impressions)</span>
+                    <span className="text-lg font-black text-white block">
+                      {stats.trafficAnalytics.impressions.toLocaleString("uk-UA")}
+                    </span>
+                  </div>
+
+                  <div className="bg-white/[0.02] border border-white/5 p-3.5 rounded-xl space-y-1">
+                    <span className="text-[9px] uppercase font-bold text-white/40 block">Кліки (Clicks)</span>
+                    <span className="text-lg font-black text-emerald-400 block">
+                      {stats.trafficAnalytics.totalClicks.toLocaleString("uk-UA")}
+                    </span>
+                  </div>
+
+                  <div className="bg-white/[0.02] border border-white/5 p-3.5 rounded-xl space-y-1">
+                    <span className="text-[9px] uppercase font-bold text-white/40 block">CTR (Клікабельність)</span>
+                    <span className="text-lg font-black text-cyan-400 block">
+                      {stats.trafficAnalytics.ctr.toFixed(2)}%
+                    </span>
+                  </div>
+
+                  <div className="bg-white/[0.02] border border-white/5 p-3.5 rounded-xl space-y-1">
+                    <span className="text-[9px] uppercase font-bold text-white/40 block">CPC (Ціна кліку)</span>
+                    <span className="text-lg font-black text-white block">
+                      {isUSD ? `$${stats.trafficAnalytics.cpc.toFixed(2)}` : `${stats.trafficAnalytics.cpc.toFixed(2)} ₴`}
+                    </span>
+                  </div>
+
+                  <div className="bg-white/[0.02] border border-white/5 p-3.5 rounded-xl space-y-1">
+                    <span className="text-[9px] uppercase font-bold text-white/40 block">CPM (За 1000 показів)</span>
+                    <span className="text-lg font-black text-purple-400 block">
+                      {isUSD ? `$${stats.trafficAnalytics.cpm.toFixed(2)}` : `${Math.round(stats.trafficAnalytics.cpm).toLocaleString("uk-UA")} ₴`}
+                    </span>
+                  </div>
+
+                  <div className="bg-white/[0.02] border border-white/5 p-3.5 rounded-xl space-y-1">
+                    <span className="text-[9px] uppercase font-bold text-white/40 block">CPL (Ціна за лід)</span>
+                    <span className="text-lg font-black text-emerald-400 block">
+                      {isUSD ? `$${stats.trafficAnalytics.cpl.toFixed(2)}` : `${Math.round(stats.trafficAnalytics.cpl).toLocaleString("uk-UA")} ₴`}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Daily Traffic Breakdown Table */}
+                {stats.trafficAnalytics.dailyBreakdown.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-white/5">
+                    <span className="text-[10px] uppercase font-black text-white/40 block">
+                      📅 Щоденна динаміка трафіку та конверсій у ліди
+                    </span>
+
+                    <div className="overflow-x-auto rounded-xl border border-white/5">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-white/[0.02] border-b border-white/5 text-[9px] uppercase font-black text-white/40">
+                          <tr>
+                            <th className="p-3">Дата</th>
+                            <th className="p-3">Кампанія</th>
+                            <th className="p-3 text-right">Витрати</th>
+                            <th className="p-3 text-right">Покази</th>
+                            <th className="p-3 text-right">Кліки</th>
+                            <th className="p-3 text-right">CTR</th>
+                            <th className="p-3 text-right">CPC</th>
+                            <th className="p-3 text-right">Ліди</th>
+                            <th className="p-3 text-right">CPL</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5 font-semibold text-white/70">
+                          {stats.trafficAnalytics.dailyBreakdown.map((row: any, i: number) => (
+                            <tr key={i} className="hover:bg-white/[0.02] transition-all">
+                              <td className="p-3 text-white font-bold">{row.date}</td>
+                              <td className="p-3 truncate max-w-xs text-white/60">{row.campaignName}</td>
+                              <td className="p-3 text-right text-white font-bold">
+                                {isUSD ? `$${row.spendUSD.toFixed(2)}` : `${Math.round(row.spendUAH).toLocaleString("uk-UA")} ₴`}
+                              </td>
+                              <td className="p-3 text-right">{row.impressions.toLocaleString("uk-UA")}</td>
+                              <td className="p-3 text-right text-cyan-400">{row.clicks.toLocaleString("uk-UA")}</td>
+                              <td className="p-3 text-right">{row.ctr.toFixed(2)}%</td>
+                              <td className="p-3 text-right">
+                                {isUSD ? `$${row.cpcUSD.toFixed(2)}` : `${row.cpcUAH.toFixed(2)} ₴`}
+                              </td>
+                              <td className="p-3 text-right text-emerald-400 font-bold">{row.leadsCount}</td>
+                              <td className="p-3 text-right text-emerald-400 font-bold">
+                                {row.leadsCount > 0 ? (isUSD ? `$${row.cplUSD.toFixed(2)}` : `${Math.round(row.cplUAH).toLocaleString("uk-UA")} ₴`) : "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {funnelStagesList.length > 0 && (
               <div className="bg-neutral-900 border border-white/5 p-6 rounded-2xl space-y-4">
