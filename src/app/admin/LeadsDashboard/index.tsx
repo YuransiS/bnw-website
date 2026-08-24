@@ -1001,6 +1001,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             defaultCategories={financeData?.categories?.default || { income: [], expense: [] }}
             onFinanceRefresh={fetchFinanceData}
             globalCurrency={globalCurrency}
+            isLoading={isLoading}
           />
         )}
 
@@ -1021,8 +1022,12 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             </div>
 
             {isFinanceLoading && !financeData ? (
-              <div className="flex h-[200px] items-center justify-center">
-                <RefreshCw className="w-6 h-6 animate-spin text-emerald-500" />
+              <div className="relative min-h-[200px] flex items-center justify-center">
+                <ParabolicLoadingOverlay
+                  isLoading={isFinanceLoading}
+                  title="Завантаження фінансів..."
+                  subtitle="Синхронізація рахунків та транзакцій..."
+                />
               </div>
             ) : financeData?.error ? (
               <div className={`p-8 rounded-2xl border text-center ${cardClass} ${borderClass} flex flex-col items-center justify-center gap-3 animate-in fade-in duration-300`}>
@@ -1130,6 +1135,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             leadsList={processedLeads}
             setActiveTab={setActiveTab}
             globalCurrency={globalCurrency}
+            isLoading={isLoading}
           />
         )}
 
@@ -1167,6 +1173,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             openLeadModal={openLeadModal}
             setShowAddLead={setShowAddLead}
             isDevMode={isDevMode}
+            isLoading={isLoading}
           />
         )}
 
@@ -1186,6 +1193,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             setDateRangePreset={setDateRangePreset}
             openLeadModal={openLeadModal}
             activeSlug={activeSlug}
+            isLoading={isLoading}
           />
         )}
 

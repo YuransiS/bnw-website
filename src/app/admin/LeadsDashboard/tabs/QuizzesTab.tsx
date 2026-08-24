@@ -6,6 +6,7 @@ import { useTheme } from "../../ThemeProvider";
 import { getLeadDate, isLeadMatchingLanding } from "@/app/admin/utils";
 import { LeadItem } from "../types";
 import { DEFAULT_PROJECT_LANDINGS } from "@/lib/projectLandings";
+import { SkeletonPulse } from "@/components/ui/ParabolicProgressBar";
 
 const PROJECT_LANDINGS = DEFAULT_PROJECT_LANDINGS;
 
@@ -22,6 +23,7 @@ interface QuizzesTabProps {
   setDateRangePreset: (val: any) => void;
   openLeadModal: (lead: any) => void;
   activeSlug: string;
+  isLoading?: boolean;
 }
 
 export const QuizzesTab = React.memo(function QuizzesTab({
@@ -36,7 +38,8 @@ export const QuizzesTab = React.memo(function QuizzesTab({
   setEndDate,
   setDateRangePreset,
   openLeadModal,
-  activeSlug
+  activeSlug,
+  isLoading = false,
 }: QuizzesTabProps) {
   const { theme } = useTheme();
   const isLight = theme === "light";
@@ -158,7 +161,29 @@ export const QuizzesTab = React.memo(function QuizzesTab({
         </div>
       </div>
 
-      {leadsWithQuizzes.length === 0 ? (
+      {isLoading ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+          <div className="lg:col-span-1 space-y-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="p-4 rounded-xl border border-white/5 bg-[#0C0C0F] space-y-2.5 animate-pulse">
+                <SkeletonPulse className="h-5 w-32" />
+                <SkeletonPulse className="h-3 w-40" />
+                <SkeletonPulse className="h-3 w-20" />
+              </div>
+            ))}
+          </div>
+          <div className="lg:col-span-2">
+            <div className={`${cardClass} p-6 rounded-2xl shadow-xl space-y-6 animate-pulse`}>
+              <SkeletonPulse className="h-6 w-48" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <SkeletonPulse key={i} className="h-20 w-full" />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : leadsWithQuizzes.length === 0 ? (
         <div className={`${cardClass} py-16 text-center text-white/20 italic rounded-2xl shadow-xl`}>
           Для цього проекту ще не знайдено жодної заповненої анкети
         </div>

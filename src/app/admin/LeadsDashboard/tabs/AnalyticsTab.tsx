@@ -25,6 +25,7 @@ import { useTheme } from "../../ThemeProvider";
 import { formatLocaleNumber, formatDualCurrency, formatDualProfit } from "@/app/admin/utils";
 import { traceVisitorUuidAction } from "../../actions";
 import { isPaidStatus } from "@/lib/statusMapper";
+import { SkeletonPulse } from "@/components/ui/ParabolicProgressBar";
 
 interface AnalyticsTabProps {
   singleProjectStats: any;
@@ -50,6 +51,7 @@ interface AnalyticsTabProps {
   leadsList: any[];
   setActiveTab: (val: string) => void;
   globalCurrency?: "USD" | "UAH";
+  isLoading?: boolean;
 }
 
 export const AnalyticsTab = React.memo(function AnalyticsTab({
@@ -75,7 +77,8 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
   campaignsList,
   leadsList,
   setActiveTab,
-  globalCurrency = "UAH"
+  globalCurrency = "UAH",
+  isLoading = false,
 }: AnalyticsTabProps) {
   const { theme } = useTheme();
   const isLight = theme === "light";
@@ -357,11 +360,15 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
               <p className={`text-[9px] ${textMutedClass} font-black uppercase tracking-widest`}>
                 Витрати на рекламу {globalCurrency === "UAH" ? "(₴)" : "($)"}
               </p>
-              <p className="text-2xl font-black text-red-400 mt-2">
-                {globalCurrency === "UAH"
-                  ? `${formatLocaleNumber(singleProjectStats?.totalSpendUah || ((singleProjectStats?.totalSpend || 0) * 41.5))} ₴`
-                  : `$${(singleProjectStats?.totalSpend || 0).toFixed(2)}`}
-              </p>
+              {isLoading ? (
+                <SkeletonPulse className="h-8 w-28 mt-2" />
+              ) : (
+                <p className="text-2xl font-black text-red-400 mt-2">
+                  {globalCurrency === "UAH"
+                    ? `${formatLocaleNumber(singleProjectStats?.totalSpendUah || ((singleProjectStats?.totalSpend || 0) * 41.5))} ₴`
+                    : `$${(singleProjectStats?.totalSpend || 0).toFixed(2)}`}
+                </p>
+              )}
               <p className={`text-[10px] ${textMutedClass} mt-0.5 font-semibold`}>Сумарний бюджет усього періоду</p>
             </div>
 
@@ -369,7 +376,9 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
             <div className={`${cardClass} p-4 rounded-xl shadow-md backdrop-blur-md`}>
               <p className={`text-[9px] ${textMutedClass} font-black uppercase tracking-widest`}>Виручка за курс</p>
               <div className="mt-2 space-y-0.5">
-                {globalCurrency === "UAH" ? (
+                {isLoading ? (
+                  <SkeletonPulse className="h-7 w-28" />
+                ) : globalCurrency === "UAH" ? (
                   <p className="text-xl font-black text-emerald-455">
                     {formatLocaleNumber(singleProjectStats?.uahCourseRevenue || 0)} ₴
                   </p>
@@ -386,7 +395,9 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
             <div className={`${cardClass} p-4 rounded-xl shadow-md backdrop-blur-md`}>
               <p className={`text-[9px] ${textMutedClass} font-black uppercase tracking-widest`}>Виручка за трипвайєри</p>
               <div className="mt-2 space-y-0.5">
-                {globalCurrency === "UAH" ? (
+                {isLoading ? (
+                  <SkeletonPulse className="h-7 w-28" />
+                ) : globalCurrency === "UAH" ? (
                   <p className="text-xl font-black text-indigo-400">
                     {formatLocaleNumber(singleProjectStats?.uahTripwireRevenue || 0)} ₴
                   </p>
@@ -405,7 +416,9 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
                 Чистий Прибуток (Маржа)
               </p>
               <div className="mt-2 space-y-0.5">
-                {globalCurrency === "UAH" ? (
+                {isLoading ? (
+                  <SkeletonPulse className="h-7 w-32" />
+                ) : globalCurrency === "UAH" ? (
                   <p
                     className={`text-lg font-black ${
                       (Number(singleProjectStats?.netProfitUah ?? 0)) >= 0 ? "text-emerald-455" : "text-red-400"
@@ -426,36 +439,52 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
                     {formatLocaleNumber(Math.abs(Number(singleProjectStats?.netProfitUsd ?? (Number(singleProjectStats?.usdRevenue || 0) - Number(singleProjectStats?.totalSpend || 0)))))}
                   </p>
                 )}
-                <span className="text-[9px] font-black uppercase text-yellow-400 block mt-1 tracking-wider">
-                  ROI: {(singleProjectStats?.roi || 0).toFixed(1)}%
-                </span>
+                {isLoading ? (
+                  <SkeletonPulse className="h-3 w-16 mt-1" />
+                ) : (
+                  <span className="text-[9px] font-black uppercase text-yellow-400 block mt-1 tracking-wider">
+                    ROI: {(singleProjectStats?.roi || 0).toFixed(1)}%
+                  </span>
+                )}
               </div>
             </div>
 
             {/* Clicks card */}
             <div className={`${cardClass} p-4 rounded-xl shadow-md backdrop-blur-md`}>
               <p className={`text-[9px] ${textMutedClass} font-black uppercase tracking-widest`}>Трафік (Кліки)</p>
-              <p className={`text-2xl font-black ${isLight ? "text-neutral-900" : "text-white"} mt-2`}>
-                {singleProjectStats?.totalClicks || 0}
-              </p>
+              {isLoading ? (
+                <SkeletonPulse className="h-8 w-20 mt-2" />
+              ) : (
+                <p className={`text-2xl font-black ${isLight ? "text-neutral-900" : "text-white"} mt-2`}>
+                  {singleProjectStats?.totalClicks || 0}
+                </p>
+              )}
               <p className={`text-[10px] ${textMutedClass} mt-0.5 font-semibold`}>Загальна кількість переходів на сайт</p>
             </div>
 
             {/* Leads Card */}
             <div className={`${cardClass} p-4 rounded-xl shadow-md backdrop-blur-md`}>
               <p className={`text-[9px] ${textMutedClass} font-black uppercase tracking-widest`}>Реєстрації (Ліди)</p>
-              <p className={`text-2xl font-black ${isLight ? "text-neutral-900" : "text-white"} mt-2`}>
-                {singleProjectStats?.totalLeads || 0}
-              </p>
+              {isLoading ? (
+                <SkeletonPulse className="h-8 w-20 mt-2" />
+              ) : (
+                <p className={`text-2xl font-black ${isLight ? "text-neutral-900" : "text-white"} mt-2`}>
+                  {singleProjectStats?.totalLeads || 0}
+                </p>
+              )}
               <p className={`text-[10px] ${textMutedClass} mt-0.5 font-semibold`}>
-                Конверсія клік-лід: {singleProjectStats?.conversionRate?.toFixed(1) || "0.0"}%
+                Конверсія клік-лід: {isLoading ? "..." : `${singleProjectStats?.conversionRate?.toFixed(1) || "0.0"}%`}
               </p>
             </div>
 
             {/* Sales Card */}
             <div className={`${cardClass} p-4 rounded-xl shadow-md backdrop-blur-md`}>
               <p className={`text-[9px] ${textMutedClass} font-black uppercase tracking-widest`}>Успішні Оплати</p>
-              <p className="text-2xl font-black text-emerald-400 mt-2">{singleProjectStats?.totalSales || 0}</p>
+              {isLoading ? (
+                <SkeletonPulse className="h-8 w-20 mt-2" />
+              ) : (
+                <p className="text-2xl font-black text-emerald-400 mt-2">{singleProjectStats?.totalSales || 0}</p>
+              )}
               <p className={`text-[10px] ${textMutedClass} mt-0.5 font-semibold`}>Кількість зафіксованих продажів</p>
             </div>
 
@@ -463,7 +492,9 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
             <div className={`${cardClass} p-4 rounded-xl shadow-md backdrop-blur-md`}>
               <p className={`text-[9px] ${textMutedClass} font-black uppercase tracking-widest`}>CR & Середній Чек</p>
               <div className="mt-2 space-y-1.5">
-                {globalCurrency === "UAH" ? (
+                {isLoading ? (
+                  <SkeletonPulse className="h-6 w-36" />
+                ) : globalCurrency === "UAH" ? (
                   singleProjectStats && (singleProjectStats.aovUah > 0 || singleProjectStats.leadToSaleConvUah > 0) ? (
                     <div className="flex justify-between items-center text-[10px]">
                       <span className="text-white/50">UAH:</span>

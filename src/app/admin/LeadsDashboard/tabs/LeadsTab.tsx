@@ -5,6 +5,7 @@ import { Grid, Plus, Search, ChevronDown, Calendar, X, XCircle, Copy, Check, Ale
 import { useTheme } from "../../ThemeProvider";
 import { formatDualCurrency, formatLocaleNumber } from "@/app/admin/utils";
 import { LeadItem } from "../types";
+import { SkeletonPulse } from "@/components/ui/ParabolicProgressBar";
 
 // Sales pipeline columns mapping
 const PIPELINE_COLUMNS = [
@@ -51,6 +52,7 @@ interface LeadsTabProps {
   setShowAddLead: (val: boolean) => void;
   isDevMode: boolean;
   funnels?: any[];
+  isLoading?: boolean;
 }
 
 export const LeadsTab = React.memo(function LeadsTab({
@@ -83,7 +85,8 @@ export const LeadsTab = React.memo(function LeadsTab({
   openLeadModal,
   setShowAddLead,
   isDevMode,
-  funnels
+  funnels,
+  isLoading = false,
 }: LeadsTabProps) {
   const [localSearch, setLocalSearch] = React.useState(searchQuery);
 
@@ -400,7 +403,18 @@ export const LeadsTab = React.memo(function LeadsTab({
               </tr>
             </thead>
             <tbody className={`divide-y ${borderClass} ${isLight ? "text-neutral-700" : "text-white/80"}`}>
-              {processedLeads.length === 0 ? (
+              {isLoading ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <tr key={i} className="animate-pulse">
+                    <td className="p-4"><SkeletonPulse className="h-5 w-36" /></td>
+                    <td className="p-4"><SkeletonPulse className="h-4 w-28" /></td>
+                    <td className="p-4"><SkeletonPulse className="h-4 w-24" /></td>
+                    <td className="p-4 text-center"><SkeletonPulse className="h-4 w-12 mx-auto" /></td>
+                    <td className="p-4 text-center"><SkeletonPulse className="h-4 w-16 mx-auto" /></td>
+                    <td className="p-4 text-center"><SkeletonPulse className="h-6 w-24 mx-auto rounded-full" /></td>
+                  </tr>
+                ))
+              ) : processedLeads.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="p-8 text-center text-white/20 italic">
                     Заявки за заданими параметрами відсутні

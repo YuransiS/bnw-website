@@ -28,6 +28,7 @@ import {
 import ProjectSettingsModal from "../components/ProjectSettingsModal";
 import { isPaidStatus } from "@/lib/statusMapper";
 import { transliterateToSlug } from "@/utils/transliterate";
+import { SkeletonPulse } from "@/components/ui/ParabolicProgressBar";
 
 interface FunnelsTabProps {
   projectId: string;
@@ -42,6 +43,7 @@ interface FunnelsTabProps {
   defaultCategories: { income: string[]; expense: string[] };
   onFinanceRefresh?: () => void;
   globalCurrency?: string;
+  isLoading?: boolean;
 }
 
 interface Funnel {
@@ -1960,7 +1962,11 @@ export default function FunnelsTab({
                   <TrendingUp className="w-4 h-4 text-red-400" />
                 </div>
                 <div className="space-y-1">
-                  <span className="text-2xl font-black text-white">{Math.round(actualSpend).toLocaleString("uk-UA")} {isUSD ? "$" : "₴"}</span>
+                  {funnelDetailsLoading ? (
+                    <SkeletonPulse className="h-8 w-28" />
+                  ) : (
+                    <span className="text-2xl font-black text-white">{Math.round(actualSpend).toLocaleString("uk-UA")} {isUSD ? "$" : "₴"}</span>
+                  )}
                   <div className="flex justify-between text-[10px] text-white/40 font-semibold">
                     <span>План: {planSpendUSD > 0 ? `$${Math.round(planSpendUSD).toLocaleString("uk-UA")} (~${Math.round(planSpendUAH).toLocaleString("uk-UA")} ₴)` : "не вказано"}</span>
                     {planSpend > 0 && (
@@ -1996,7 +2002,11 @@ export default function FunnelsTab({
                   <Award className="w-4 h-4 text-emerald-450" />
                 </div>
                 <div className="space-y-1">
-                  <span className="text-2xl font-black text-emerald-400">{Math.round(actualRev).toLocaleString("uk-UA")} {isUSD ? "$" : "₴"}</span>
+                  {funnelDetailsLoading ? (
+                    <SkeletonPulse className="h-8 w-28" />
+                  ) : (
+                    <span className="text-2xl font-black text-emerald-400">{Math.round(actualRev).toLocaleString("uk-UA")} {isUSD ? "$" : "₴"}</span>
+                  )}
                   <div className="flex justify-between text-[10px] text-white/40 font-semibold">
                     <span>План: {planRevUSD > 0 ? `$${Math.round(planRevUSD).toLocaleString("uk-UA")} (~${Math.round(planRevUAH).toLocaleString("uk-UA")} ₴)` : "не вказано"}</span>
                     {planRev > 0 && (
@@ -2034,9 +2044,13 @@ export default function FunnelsTab({
                   <TrendingUp className="w-4 h-4 text-emerald-455" />
                 </div>
                 <div className="space-y-1">
-                  <span className={`text-2xl font-black block ${stats.profit >= 0 ? "text-white" : "text-red-400"}`}>
-                    {Math.round(stats.profit).toLocaleString("uk-UA")} {isUSD ? "$" : "₴"}
-                  </span>
+                  {funnelDetailsLoading ? (
+                    <SkeletonPulse className="h-8 w-28" />
+                  ) : (
+                    <span className={`text-2xl font-black block ${stats.profit >= 0 ? "text-white" : "text-red-400"}`}>
+                      {Math.round(stats.profit).toLocaleString("uk-UA")} {isUSD ? "$" : "₴"}
+                    </span>
+                  )}
                   <div className="flex justify-between text-[10px] text-white/40 font-black mt-1">
                     <span>{actualSpend > 0 ? "Сквозний ROI" : "Маржинальність"}</span>
                     <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
@@ -2057,8 +2071,9 @@ export default function FunnelsTab({
             </div>
 
             <div className="bg-neutral-900 border border-white/5 p-6 rounded-2xl space-y-6">
-              <div className="border-b border-white/5 pb-2">
+              <div className="border-b border-white/5 pb-2 flex justify-between items-center">
                 <h4 className="font-black text-xs text-white uppercase tracking-wider">Сквозна Конверсійна Воронка</h4>
+                {funnelDetailsLoading && <span className="text-[10px] text-emerald-400 animate-pulse font-mono">Оновлення метрик...</span>}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
@@ -2066,7 +2081,11 @@ export default function FunnelsTab({
                 <div className="bg-white/5 p-4 rounded-2xl border border-white/5 flex flex-col justify-between min-h-28 relative">
                   <div>
                     <span className="text-[9px] uppercase font-bold text-white/40 block">Крок 1: Трафік</span>
-                    <span className="text-xl font-black block mt-2 text-white">{stats.totalClicks.toLocaleString()}</span>
+                    {funnelDetailsLoading ? (
+                      <SkeletonPulse className="h-7 w-16 mx-auto mt-2" />
+                    ) : (
+                      <span className="text-xl font-black block mt-2 text-white">{stats.totalClicks.toLocaleString()}</span>
+                    )}
                     <span className="text-[9px] text-white/30 block mt-1">унікальні кліки з UTM</span>
                   </div>
                   <div className="absolute right-[-10px] top-[40%] transform -translate-y-1/2 z-10 hidden md:block">
@@ -2077,7 +2096,11 @@ export default function FunnelsTab({
                 <div className="bg-white/5 p-4 rounded-2xl border border-white/5 flex flex-col justify-between min-h-28 relative">
                   <div>
                     <span className="text-[9px] uppercase font-bold text-white/40 block">Крок 2: Реєстрації</span>
-                    <span className="text-xl font-black block mt-2 text-emerald-450">{stats.leadsCount.toLocaleString()}</span>
+                    {funnelDetailsLoading ? (
+                      <SkeletonPulse className="h-7 w-16 mx-auto mt-2" />
+                    ) : (
+                      <span className="text-xl font-black block mt-2 text-emerald-450">{stats.leadsCount.toLocaleString()}</span>
+                    )}
                     <span className="text-[10px] text-emerald-400 font-bold block mt-1">
                       Конверсія: {stats.totalClicks > 0 ? ((stats.leadsCount / stats.totalClicks) * 100).toFixed(1) : 0}%
                     </span>
@@ -2090,7 +2113,11 @@ export default function FunnelsTab({
                 <div className="bg-white/5 p-4 rounded-2xl border border-white/5 flex flex-col justify-between min-h-28 relative">
                   <div>
                     <span className="text-[9px] uppercase font-bold text-white/40 block">Крок 3: Анкети</span>
-                    <span className="text-xl font-black block mt-2 text-purple-400">{stats.quizzesCount.toLocaleString()}</span>
+                    {funnelDetailsLoading ? (
+                      <SkeletonPulse className="h-7 w-16 mx-auto mt-2" />
+                    ) : (
+                      <span className="text-xl font-black block mt-2 text-purple-400">{stats.quizzesCount.toLocaleString()}</span>
+                    )}
                     <span className="text-[10px] text-purple-400 font-bold block mt-1">
                       Конверсія: {stats.leadsCount > 0 ? ((stats.quizzesCount / stats.leadsCount) * 100).toFixed(1) : 0}%
                     </span>
@@ -2103,7 +2130,11 @@ export default function FunnelsTab({
                 <div className="bg-white/5 p-4 rounded-2xl border border-white/5 flex flex-col justify-between min-h-28">
                   <div>
                     <span className="text-[9px] uppercase font-bold text-white/40 block">Крок 4: Оплати</span>
-                    <span className="text-xl font-black block mt-2 text-emerald-450">{stats.salesCount.toLocaleString()}</span>
+                    {funnelDetailsLoading ? (
+                      <SkeletonPulse className="h-7 w-16 mx-auto mt-2" />
+                    ) : (
+                      <span className="text-xl font-black block mt-2 text-emerald-450">{stats.salesCount.toLocaleString()}</span>
+                    )}
                     <span className="text-[10px] text-emerald-400 font-bold block mt-1 text-center">
                       CR з ліда: {stats.cr.toFixed(1)}% <br />
                       {stats.totalClicks > 0 && <span className="text-[9px] text-white/40 font-semibold block mt-0.5">Клік-в-оплату: {((stats.salesCount / stats.totalClicks) * 100).toFixed(2)}%</span>}

@@ -19,6 +19,7 @@ import {
   FolderOpen
 } from "lucide-react";
 import { getTrafficAnalyticsData } from "./actions";
+import { ParabolicLoadingOverlay } from "@/components/ui/ParabolicProgressBar";
 
 interface PerformanceViewProps {
   activeSlug: string;
@@ -249,11 +250,12 @@ export default function PerformanceView({
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-4">
-        <RefreshCw className="w-8 h-8 animate-spin text-emerald-450" />
-        <p className={`text-xs font-semibold uppercase tracking-widest ${isLight ? "text-neutral-400" : "text-white/40"}`}>
-          Завантаження аналітики трафіку...
-        </p>
+      <div className="relative min-h-[350px] flex items-center justify-center">
+        <ParabolicLoadingOverlay
+          isLoading={loading}
+          title="Завантаження аналітики трафіку..."
+          subtitle="Синхронізація показів, кліків та витрат Meta Ads з базою..."
+        />
       </div>
     );
   }

@@ -203,3 +203,27 @@ export function ParabolicLoadingOverlay({
     </AnimatePresence>
   );
 }
+
+/**
+ * Shimmering pulsing skeleton block for KPI metrics and UI placeholders
+ */
+export function SkeletonPulse({ className = "h-6 w-24" }: { className?: string }) {
+  return (
+    <div
+      className={`animate-pulse rounded-lg bg-white/[0.08] border border-white/5 ${className}`}
+    />
+  );
+}
+
+/**
+ * Clean SaaS Skeleton card for KPI dashboards
+ */
+export function SkeletonMetricCard({ cardClass = "bg-[#111116] border-white/5" }: { cardClass?: string }) {
+  return (
+    <div className={`${cardClass} p-4 rounded-xl shadow-md border space-y-2.5 animate-pulse`}>
+      <div className="h-3 w-28 bg-white/10 rounded-md" />
+      <div className="h-7 w-32 bg-white/15 rounded-lg" />
+      <div className="h-2.5 w-40 bg-white/5 rounded-md" />
+    </div>
+  );
+}
