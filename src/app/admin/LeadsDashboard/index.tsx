@@ -63,6 +63,7 @@ import AddLeadModal from "./components/AddLeadModal";
 import UnresolvedOrdersModal from "./components/UnresolvedOrdersModal";
 import ProjectSettingsModal from "./components/ProjectSettingsModal";
 import { ParabolicLoadingOverlay, ParabolicProgressBar } from "@/components/ui/ParabolicProgressBar";
+import CustomCalendarPicker, { CustomDateRangeInputs } from "@/components/ui/CustomCalendarPicker";
 import { createClient } from "@/utils/supabase/client";
 
 interface LeadsDashboardProps {
@@ -864,25 +865,21 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 text-xs">
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => {
-                setStartDate(e.target.value);
+          <div className="flex items-center gap-2">
+            <CustomCalendarPicker
+              startDate={startDate}
+              endDate={endDate}
+              onChange={(s, e) => {
+                setStartDate(s);
+                setEndDate(e);
                 setDateRangePreset("custom");
               }}
-              className="bg-white/5 border border-white/10 rounded-xl px-2.5 py-1 text-white focus:outline-none focus:border-emerald-500 text-[10px] cursor-pointer"
-            />
-            <span className="text-white/30">—</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => {
-                setEndDate(e.target.value);
+              onApply={(s, e) => {
+                setStartDate(s);
+                setEndDate(e);
                 setDateRangePreset("custom");
               }}
-              className="bg-white/5 border border-white/10 rounded-xl px-2.5 py-1 text-white focus:outline-none focus:border-emerald-500 text-[10px] cursor-pointer"
+              align="right"
             />
           </div>
         </div>

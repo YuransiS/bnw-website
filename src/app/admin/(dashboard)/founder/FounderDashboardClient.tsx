@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Layers, Users, BarChart4, ClipboardCheck, ArrowRight, ShieldAlert, Award, Calendar, Eye, EyeOff, Globe, Sparkles, AlertCircle, RefreshCw } from "lucide-react";
 import { getFounderDashboardDataAction } from "../../actions";
 import { ParabolicProgressBar } from "@/components/ui/ParabolicProgressBar";
+import CustomCalendarPicker, { CustomDateRangeInputs } from "@/components/ui/CustomCalendarPicker";
 
 interface FounderDashboardClientProps {
   cellsWithProjects: any[];
@@ -202,26 +203,16 @@ export default function FounderDashboardClient({
           </div>
 
           {activePreset === "custom" && (
-            <div className="flex items-center gap-2 bg-white/5 p-1 rounded-xl border border-white/5 text-xs">
-              <input
-                type="date"
-                value={customStart}
-                onChange={(e) => setCustomStart(e.target.value)}
-                className="bg-black/40 border border-white/10 text-white rounded-lg px-2 py-1 text-[11px] focus:outline-none focus:border-emerald-500"
+            <div className="bg-white/5 p-1 rounded-xl border border-white/5">
+              <CustomDateRangeInputs
+                startDate={customStart}
+                endDate={customEnd}
+                onChange={(s, e) => {
+                  setCustomStart(s);
+                  setCustomEnd(e);
+                }}
+                onApply={handleCustomApply}
               />
-              <span className="text-white/30 text-[10px]">—</span>
-              <input
-                type="date"
-                value={customEnd}
-                onChange={(e) => setCustomEnd(e.target.value)}
-                className="bg-black/40 border border-white/10 text-white rounded-lg px-2 py-1 text-[11px] focus:outline-none focus:border-emerald-500"
-              />
-              <button
-                onClick={handleCustomApply}
-                className="bg-emerald-500 hover:bg-emerald-400 text-black px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider cursor-pointer"
-              >
-                ОК
-              </button>
             </div>
           )}
 

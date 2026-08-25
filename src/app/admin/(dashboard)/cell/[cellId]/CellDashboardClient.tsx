@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { getCellAnalyticsAction, updateProjectPlanAction } from "./cellActions";
 import { ParabolicProgressBar } from "@/components/ui/ParabolicProgressBar";
+import CustomCalendarPicker, { CustomDateRangeInputs } from "@/components/ui/CustomCalendarPicker";
 
 interface CellDashboardClientProps {
   cell: any;
@@ -280,32 +281,16 @@ export default function CellDashboardClient({
 
         {/* Custom date range picker if selected */}
         {showCustomDates && (
-          <div className="flex items-center gap-3 pt-2 border-t border-white/5 animate-in fade-in flex-wrap text-xs">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] uppercase font-bold text-white/40">Від:</span>
-              <input
-                type="date"
-                value={customStart}
-                onChange={(e) => setCustomStart(e.target.value)}
-                className="bg-black/50 border border-white/10 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] uppercase font-bold text-white/40">До:</span>
-              <input
-                type="date"
-                value={customEnd}
-                onChange={(e) => setCustomEnd(e.target.value)}
-                className="bg-black/50 border border-white/10 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-            <button
-              onClick={handleApplyCustomDates}
-              disabled={isPending || !customStart}
-              className="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black font-black rounded-xl cursor-pointer disabled:opacity-40 transition-all"
-            >
-              Застосувати
-            </button>
+          <div className="pt-2 border-t border-white/5 animate-in fade-in">
+            <CustomDateRangeInputs
+              startDate={customStart}
+              endDate={customEnd}
+              onChange={(s, e) => {
+                setCustomStart(s);
+                setCustomEnd(e);
+              }}
+              onApply={handleApplyCustomDates}
+            />
           </div>
         )}
       </div>

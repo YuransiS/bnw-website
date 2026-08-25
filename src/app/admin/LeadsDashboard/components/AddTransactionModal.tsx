@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { X, Check, Plus, Calendar, DollarSign, RefreshCw, Layers, CreditCard, ChevronDown } from "lucide-react";
 import { createTransactionAction, createCustomCategoryAction } from "../../(dashboard)/project/financeActions";
+import { SingleDatePicker } from "@/components/ui/CustomCalendarPicker";
 
 interface AddTransactionModalProps {
   projectId: string;
@@ -485,11 +486,11 @@ export default function AddTransactionModal({
                   <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400">
                     Дата операції
                   </label>
-                  <input
-                    type="date"
+                  <SingleDatePicker
                     value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className={`w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs ${inputClass}`}
+                    onChange={(d) => setDate(d)}
+                    isLight={isLight}
+                    required
                   />
                 </div>
                 <div className="space-y-1.5">

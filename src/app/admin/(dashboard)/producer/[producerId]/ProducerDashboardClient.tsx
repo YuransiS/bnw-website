@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { getProducerPerformanceDataAction, ProducerDashboardData, ProducerProjectData } from "./producerActions";
 import { ParabolicProgressBar } from "@/components/ui/ParabolicProgressBar";
+import CustomCalendarPicker, { CustomDateRangeInputs } from "@/components/ui/CustomCalendarPicker";
 
 interface ProducerDashboardClientProps {
   initialData: ProducerDashboardData;
@@ -203,33 +204,16 @@ export default function ProducerDashboardClient({ initialData }: ProducerDashboa
         </div>
 
         {showCustomDates && (
-          <div className="w-full pt-3 border-t border-white/5 flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-white/40">Від:</span>
-              <input
-                type="date"
-                value={customStart}
-                onChange={(e) => setCustomStart(e.target.value)}
-                className="bg-black/40 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-white/40">До:</span>
-              <input
-                type="date"
-                value={customEnd}
-                onChange={(e) => setCustomEnd(e.target.value)}
-                className="bg-black/40 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-            <button
-              onClick={handleApplyCustomDates}
-              disabled={isPending || !customStart}
-              className="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-black rounded-xl transition-all flex items-center gap-1.5 shadow-md shadow-emerald-500/20 disabled:opacity-50"
-            >
-              <Check className="w-3.5 h-3.5" />
-              Застосувати
-            </button>
+          <div className="w-full pt-3 border-t border-white/5">
+            <CustomDateRangeInputs
+              startDate={customStart}
+              endDate={customEnd}
+              onChange={(s, e) => {
+                setCustomStart(s);
+                setCustomEnd(e);
+              }}
+              onApply={handleApplyCustomDates}
+            />
           </div>
         )}
       </div>

@@ -5,6 +5,7 @@ import { TrendingUp, TrendingDown, Wallet, DollarSign, Activity, Percent, ArrowU
 import { saveFinanceSettingsAction, createAccountAction, createCustomCategoryAction, generatePnlReportAction } from "../../(dashboard)/project/financeActions";
 import PnlReportModal from "../components/PnlReportModal";
 import { RollingCounter } from "@/components/ui/RollingCounter";
+import CustomCalendarPicker from "@/components/ui/CustomCalendarPicker";
 
 interface FinanceDashboardTabProps {
   summary: {
@@ -306,24 +307,16 @@ export default function FinanceDashboardTab({
 
         {/* 1-Click Act Report Generator with Period Selection */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-xl border border-white/5">
-            <span className="text-[10px] text-neutral-400 font-bold uppercase">Період:</span>
-            <input
-              type="date"
-              value={reportStartDate}
-              onChange={(e) => setReportStartDate(e.target.value)}
-              className="bg-transparent border-none text-[10px] font-bold text-white focus:outline-none focus:ring-0 w-24 cursor-pointer"
-              title="Початок періоду"
-            />
-            <span className="text-white/20 text-[10px]">—</span>
-            <input
-              type="date"
-              value={reportEndDate}
-              onChange={(e) => setReportEndDate(e.target.value)}
-              className="bg-transparent border-none text-[10px] font-bold text-white focus:outline-none focus:ring-0 w-24 cursor-pointer"
-              title="Кінець періоду"
-            />
-          </div>
+          <CustomCalendarPicker
+            startDate={reportStartDate}
+            endDate={reportEndDate}
+            onChange={(s, e) => {
+              setReportStartDate(s);
+              setReportEndDate(e);
+            }}
+            placeholder="Період звіту..."
+            align="right"
+          />
           <button
             onClick={handleGenerateReport}
             disabled={isGeneratingReport}

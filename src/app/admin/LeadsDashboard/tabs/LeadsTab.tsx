@@ -6,6 +6,7 @@ import { useTheme } from "../../ThemeProvider";
 import { formatDualCurrency, formatLocaleNumber } from "@/app/admin/utils";
 import { LeadItem } from "../types";
 import { SkeletonPulse } from "@/components/ui/ParabolicProgressBar";
+import CustomCalendarPicker from "@/components/ui/CustomCalendarPicker";
 
 // Sales pipeline columns mapping
 const PIPELINE_COLUMNS = [
@@ -494,32 +495,21 @@ export const LeadsTab = React.memo(function LeadsTab({
               За останню добу
             </button>
             <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => {
-                  setStartDate(e.target.value);
+              <CustomCalendarPicker
+                startDate={startDate}
+                endDate={endDate}
+                onChange={(s, e) => {
+                  setStartDate(s);
+                  setEndDate(e);
                   setDateRangePreset("custom");
                 }}
-                className={`px-3 py-2 rounded-lg text-[10px] font-extrabold focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
-                  isLight
-                    ? "bg-neutral-100 border border-neutral-300 text-neutral-900"
-                    : "bg-white/[0.02] border border-white/10 text-white"
-                }`}
-              />
-              <span className={isLight ? "text-neutral-300" : "text-white/20"}>—</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => {
-                  setEndDate(e.target.value);
+                onApply={(s, e) => {
+                  setStartDate(s);
+                  setEndDate(e);
                   setDateRangePreset("custom");
                 }}
-                className={`px-3 py-2 rounded-lg text-[10px] font-extrabold focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
-                  isLight
-                    ? "bg-neutral-100 border border-neutral-300 text-neutral-900"
-                    : "bg-white/[0.02] border border-white/10 text-white"
-                }`}
+                isLight={isLight}
+                align="right"
               />
               {(startDate || endDate) && (
                 <button
@@ -527,9 +517,10 @@ export const LeadsTab = React.memo(function LeadsTab({
                   onClick={() => {
                     applyPreset("all");
                   }}
-                  className={`p-2 transition-all rounded-lg ${
+                  className={`p-2 transition-all rounded-lg cursor-pointer ${
                     isLight ? "text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100" : "text-white/40 hover:text-white hover:bg-white/5"
                   }`}
+                  title="Очистити фільтр дат"
                 >
                   <XCircle className="w-3.5 h-3.5" />
                 </button>

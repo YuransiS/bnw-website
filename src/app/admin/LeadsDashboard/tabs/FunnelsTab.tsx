@@ -28,6 +28,7 @@ import {
 import ProjectSettingsModal from "../components/ProjectSettingsModal";
 import { isPaidStatus } from "@/lib/statusMapper";
 import { transliterateToSlug } from "@/utils/transliterate";
+import { SingleDatePicker } from "@/components/ui/CustomCalendarPicker";
 import { SkeletonPulse } from "@/components/ui/ParabolicProgressBar";
 
 interface FunnelsTabProps {
@@ -1347,12 +1348,11 @@ export default function FunnelsTab({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-[10px] uppercase font-bold text-white/50">Дата старту *</label>
-                    <input
-                      type="date"
-                      required
+                    <SingleDatePicker
                       value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white text-xs"
+                      onChange={(d) => setStartDate(d)}
+                      placeholder="Дата старту..."
+                      required
                     />
                   </div>
                   <div className="space-y-1">
@@ -1368,12 +1368,10 @@ export default function FunnelsTab({
                         </button>
                       )}
                     </div>
-                    <input
-                      type="date"
+                    <SingleDatePicker
                       value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      placeholder="Опціонально"
-                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 text-white text-xs"
+                      onChange={(d) => setEndDate(d)}
+                      placeholder="Опціонально (Безстрокова)..."
                     />
                     <p className="text-[9px] text-white/30">
                       Необов'язково. Якщо не вказано, воронка активна постійно (можна завершити кнопкою).
@@ -2907,11 +2905,11 @@ export default function FunnelsTab({
 
                   <div className="flex justify-between items-center pt-2">
                     <div className="space-y-1">
-                      <input
-                        type="date"
+                      <SingleDatePicker
                         value={txDate}
-                        onChange={(e) => setTxDate(e.target.value)}
-                        className="bg-transparent border-none text-[10px] text-white/50 focus:outline-none p-0 cursor-pointer"
+                        onChange={(d) => setTxDate(d)}
+                        placeholder="Дата..."
+                        className="w-36"
                       />
                     </div>
                     <button
