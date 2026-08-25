@@ -267,7 +267,9 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
   const fetchFinanceData = useCallback(async () => {
     if (!activeProject || activeTab !== "finance") return;
-    setIsFinanceLoading(true);
+    if (!financeData) {
+      setIsFinanceLoading(true);
+    }
     try {
       const data = await getFinanceSummaryAction(activeProject.id, startDate, endDate, financeLimit);
       if (data) {
@@ -279,7 +281,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     } finally {
       setIsFinanceLoading(false);
     }
-  }, [activeProject, activeTab, startDate, endDate, financeLimit]);
+  }, [activeProject, activeTab, startDate, endDate, financeLimit, financeData]);
 
   useEffect(() => {
     fetchFinanceData();

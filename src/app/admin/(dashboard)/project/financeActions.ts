@@ -518,7 +518,6 @@ export async function createTransactionAction(payload: {
 
     if (error) throw new Error(error.message);
 
-    revalidatePath(`/admin/project/${payload.projectId}`);
     return { success: true };
   } catch (error: any) {
     console.error("Error creating financial transaction:", error);
@@ -540,7 +539,6 @@ export async function deleteTransactionAction(projectId: string, transactionId: 
 
     if (error) throw new Error(error.message);
 
-    revalidatePath(`/admin/project/${projectId}`);
     return { success: true };
   } catch (error: any) {
     console.error("Error deleting transaction:", error);
