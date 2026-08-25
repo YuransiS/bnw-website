@@ -1296,6 +1296,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         <LeadJourneyModal
           lead={selectedLeadInfo}
           history={selectedLeadHistory}
+          funnels={funnelsList}
           onClose={() => {
             setSelectedLeadHistory(null);
             setSelectedLeadInfo(null);
