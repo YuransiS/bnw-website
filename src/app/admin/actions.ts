@@ -1296,7 +1296,11 @@ export async function getFounderDashboardDataAction(startDate?: string, endDate?
 
     let totalRevenueUah = 0;
     let totalSpendUah = 0;
-    summaryDataWithCell.forEach((p: any) => {
+    // Strictly sum commercial holding projects only (excluding sandbox and bw_main)
+    const commercialProjects = summaryDataWithCell.filter(
+      (p: any) => p.project_slug !== "sandbox" && p.project_slug !== "bw_main"
+    );
+    commercialProjects.forEach((p: any) => {
       totalRevenueUah += Number(p.revenue_uah || 0);
       totalSpendUah += Number(p.expenses_uah || 0);
     });
