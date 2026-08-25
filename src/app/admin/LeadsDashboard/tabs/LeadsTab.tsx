@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Grid, Plus, Search, ChevronDown, Calendar, X, XCircle, Copy, Check, AlertCircle, Users } from "lucide-react";
+import { Grid, Plus, Search, ChevronDown, Calendar, X, XCircle, Copy, Check, AlertCircle, Users, Globe, ExternalLink, Sparkles } from "lucide-react";
 import { useTheme } from "../../ThemeProvider";
 import { formatDualCurrency, formatLocaleNumber } from "@/app/admin/utils";
 import { LeadItem } from "../types";
@@ -21,6 +21,18 @@ const PIPELINE_COLUMNS = [
   { key: "Відмова", label: "Відмова", dotColor: "bg-red-500" }
 ];
 
+function formatLandingDisplay(url: string): string {
+  if (!url) return "Головна (/)";
+  try {
+    const parsed = new URL(url.startsWith("http") ? url : `https://${url}`);
+    const path = parsed.pathname;
+    if (path === "/" || path === "") return "Головна (/)";
+    return path;
+  } catch {
+    return url;
+  }
+}
+
 interface LeadsTabProps {
   processedLeads: LeadItem[];
   paginatedLeads: LeadItem[];
@@ -33,6 +45,15 @@ interface LeadsTabProps {
   setTouchCountFilter: (val: string) => void;
   sourceFilter: string;
   setSourceFilter: (val: string) => void;
+  selectedLanding?: string;
+  setSelectedLanding?: (val: string) => void;
+  filtersSummary?: {
+    totalLeads?: number;
+    statusCounts?: Array<{ status: string; count: number }>;
+    landingCounts?: Array<{ landing: string; count: number }>;
+    multiLandingCount?: number;
+    noLandingCount?: number;
+  };
   unpaidIntentOnly: boolean;
   setUnpaidIntentOnly: (val: boolean) => void;
   dateRangePreset: string;
@@ -49,8 +70,8 @@ interface LeadsTabProps {
   currentPage: number;
   setCurrentPage: React.Dispatch<React.SetStateAction<number>>;
   openLeadModal: (lead: any) => void;
-  setShowAddLead: (val: boolean) => void;
-  isDevMode: boolean;
+  setShowAddLead?: (val: boolean) => void;
+  isDevMode?: boolean;
   funnels?: any[];
   isLoading?: boolean;
 }
@@ -67,6 +88,9 @@ export const LeadsTab = React.memo(function LeadsTab({
   setTouchCountFilter,
   sourceFilter,
   setSourceFilter,
+  selectedLanding = "all",
+  setSelectedLanding,
+  filtersSummary,
   unpaidIntentOnly,
   setUnpaidIntentOnly,
   dateRangePreset,
@@ -84,7 +108,7 @@ export const LeadsTab = React.memo(function LeadsTab({
   setCurrentPage,
   openLeadModal,
   setShowAddLead,
-  isDevMode,
+  isDevMode = false,
   funnels,
   isLoading = false,
 }: LeadsTabProps) {
@@ -157,17 +181,64 @@ export const LeadsTab = React.memo(function LeadsTab({
             Консолідована база клієнтів із автоматичним дедуплікуванням (DSU) та фільтрами за воронками
           </p>
         </div>
+        {setShowAddLead && (
+          <button
+            onClick={() => setShowAddLead(true)}
+            className="px-4 py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-black transition-all hover:scale-[1.02] active:scale-95 duration-200 cursor-pointer flex items-center gap-1.5"
+          >
+            <Plus className="w-4 h-4" /> Додати ліда вручную
+          </button>
+        )}
+      </div>
+
+      {/* Dynamic Status Badges Strip */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-white/10">
         <button
-          onClick={() => setShowAddLead(true)}
-          className="px-4 py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-black transition-all hover:scale-[1.02] active:scale-95 duration-200 cursor-pointer flex items-center gap-1.5"
+          type="button"
+          onClick={() => setStatusFilter("all")}
+          className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+            statusFilter === "all"
+              ? "bg-emerald-500 text-black font-black shadow-md shadow-emerald-500/20"
+              : "bg-white/5 hover:bg-white/10 text-neutral-300 border border-white/5"
+          }`}
         >
-          <Plus className="w-4 h-4" /> Додати ліда вручную
+          <span>🎯 Всі статуси</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+            statusFilter === "all" ? "bg-black/20 text-black" : "bg-white/10 text-white"
+          }`}>
+            {totalCount}
+          </span>
         </button>
+
+        {PIPELINE_COLUMNS.map((col) => {
+          const matchCount = (filtersSummary?.statusCounts || []).find((s) => s.status === col.key)?.count || 0;
+          const isActive = statusFilter === col.key;
+          return (
+            <button
+              key={col.key}
+              type="button"
+              onClick={() => setStatusFilter(isActive ? "all" : col.key)}
+              className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+                isActive
+                  ? "bg-white text-black font-black shadow-lg"
+                  : "bg-white/5 hover:bg-white/10 text-neutral-300 border border-white/5"
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${col.dotColor.split(" ")[0]}`} />
+              <span>{col.label}</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                isActive ? "bg-black/20 text-black" : "bg-white/10 text-white"
+              }`}>
+                {matchCount}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Filtering control panel */}
       <div className="bg-[#0C0C0F] border border-white/5 p-6 rounded-2xl shadow-2xl backdrop-blur-md space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
           {/* Live search */}
           <div className="relative">
             <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-white/30">
@@ -190,13 +261,16 @@ export const LeadsTab = React.memo(function LeadsTab({
               className={`w-full appearance-none pl-4 pr-10 py-3.5 rounded-xl focus:outline-none text-xs font-extrabold cursor-pointer ${selectClass}`}
             >
               <option value="all" className={optionClass}>
-                🎯 Фільтр: Всі статуси
+                🎯 Фільтр: Всі статуси ({totalCount})
               </option>
-              {PIPELINE_COLUMNS.map((col) => (
-                <option key={col.key} value={col.key} className={optionClass}>
-                  {col.label}
-                </option>
-              ))}
+              {PIPELINE_COLUMNS.map((col) => {
+                const count = (filtersSummary?.statusCounts || []).find((s) => s.status === col.key)?.count;
+                return (
+                  <option key={col.key} value={col.key} className={optionClass}>
+                    {col.label} {count !== undefined ? `(${count})` : ""}
+                  </option>
+                );
+              })}
             </select>
             <ChevronDown
               className={`absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${
@@ -213,13 +287,13 @@ export const LeadsTab = React.memo(function LeadsTab({
               className={`w-full appearance-none pl-4 pr-10 py-3.5 rounded-xl focus:outline-none text-xs font-extrabold cursor-pointer ${selectClass}`}
             >
               <option value="all" className={optionClass}>
-                🔥 Кількість торкань: Всі
+                🔥 Торкання: Всі
               </option>
               <option value="multi" className={optionClass}>
-                ⚡ Повторні звернення (2+ торкань)
+                ⚡ Повторні (2+ торкань)
               </option>
               <option value="single" className={optionClass}>
-                👤 Первинний контакт (1 торкання)
+                👤 Первинні (1 торкання)
               </option>
             </select>
             <ChevronDown
@@ -254,6 +328,75 @@ export const LeadsTab = React.memo(function LeadsTab({
               }`}
             />
           </div>
+
+          {/* Landing Filter Select */}
+          <div className="relative">
+            <select
+              value={selectedLanding || "all"}
+              onChange={(e) => setSelectedLanding?.(e.target.value)}
+              className={`w-full appearance-none pl-4 pr-10 py-3.5 rounded-xl focus:outline-none text-xs font-extrabold cursor-pointer ${selectClass} ${
+                selectedLanding !== "all" ? "border-emerald-500 text-emerald-400 bg-emerald-500/10" : ""
+              }`}
+            >
+              <option value="all" className={optionClass}>
+                🌐 Лендинг: Всі ({totalCount})
+              </option>
+              {(filtersSummary?.multiLandingCount || 0) > 0 && (
+                <option value="multi" className={`${optionClass} text-amber-400 font-bold`}>
+                  ⚡ Мульти-лендинг (2+ лендинги) ({filtersSummary?.multiLandingCount})
+                </option>
+              )}
+              {(filtersSummary?.noLandingCount || 0) > 0 && (
+                <option value="unassigned" className={`${optionClass} text-neutral-400`}>
+                  👤 Прямий / Без лендингу ({filtersSummary?.noLandingCount})
+                </option>
+              )}
+              {(filtersSummary?.landingCounts || []).map((l: any) => {
+                const formattedName = formatLandingDisplay(l.landing);
+                return (
+                  <option key={l.landing} value={l.landing} className={optionClass}>
+                    🎯 {formattedName} ({l.count})
+                  </option>
+                );
+              })}
+            </select>
+            <ChevronDown
+              className={`absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${
+                isLight ? "text-neutral-500" : "text-white/40"
+              }`}
+            />
+          </div>
+        </div>
+
+        {/* Quick summary stats strip */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 text-xs">
+          <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold text-neutral-400">
+            <span className="text-white">
+              Показано: <strong className="text-emerald-400">{paginatedLeads.length}</strong> з <strong className="text-white">{totalCount}</strong> лідів
+            </span>
+            <span className="text-white/20">•</span>
+            <span>
+              🌐 З лендингів: <strong className="text-teal-400">{totalCount - (filtersSummary?.noLandingCount || 0)}</strong>
+            </span>
+            <span className="text-white/20">•</span>
+            <span>
+              ⚡ Мульти-лендинг (крос-трафік): <strong className="text-amber-400">{filtersSummary?.multiLandingCount || 0}</strong>
+            </span>
+            <span className="text-white/20">•</span>
+            <span>
+              👤 Прямі контакти: <strong className="text-neutral-300">{filtersSummary?.noLandingCount || 0}</strong>
+            </span>
+          </div>
+
+          {selectedLanding !== "all" && (
+            <button
+              type="button"
+              onClick={() => setSelectedLanding?.("all")}
+              className="text-[10px] text-rose-400 hover:text-rose-300 font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+            >
+              <X className="w-3 h-3" /> Скинути фільтр лендингу
+            </button>
+          )}
         </div>
 
         {/* Advanced Filters Row */}
@@ -574,6 +717,35 @@ export const LeadsTab = React.memo(function LeadsTab({
                             >
                               📢 {lead.utmCampaign || lead.utm_campaign}
                             </span>
+                          )}
+
+                          {/* Visited Landings Tags */}
+                          {((lead.visitedLandings && lead.visitedLandings.length > 0) || (lead.visited_landings && lead.visited_landings.length > 0)) && (
+                            <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                              {(() => {
+                                const vLandings: string[] = (lead.visitedLandings || lead.visited_landings || []) as string[];
+                                const primaryLanding = vLandings[0] || "";
+                                const displayName = formatLandingDisplay(primaryLanding);
+                                return (
+                                  <>
+                                    <span
+                                      className="px-1.5 py-0.5 rounded text-[8px] font-extrabold bg-teal-500/10 text-teal-300 border border-teal-500/20 truncate max-w-[150px]"
+                                      title={`Лендинг: ${primaryLanding}`}
+                                    >
+                                      🎯 {displayName}
+                                    </span>
+                                    {vLandings.length > 1 && (
+                                      <span
+                                        className="px-1.5 py-0.5 rounded text-[8px] font-black bg-amber-500/10 text-amber-300 border border-amber-500/20"
+                                        title={`Всі відвідані лендинги:\n${vLandings.map(formatLandingDisplay).join('\n')}`}
+                                      >
+                                        ⚡ +{vLandings.length - 1}
+                                      </span>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                            </div>
                           )}
                         </div>
                       </td>

@@ -330,7 +330,7 @@ async function handleQueryLeads(request: Request) {
     const toRange = fromRange + pageSize - 1;
 
     const dbQueryStart = performance.now();
-    const [leadsRes, metricsRes, trafficSummaryRes, costsRes, allProfilesRes, utmLeadsSummaryRes] = await Promise.all([
+    const [leadsRes, metricsRes, trafficSummaryRes, costsRes, allProfilesRes, utmLeadsSummaryRes, filtersSummaryRes] = await Promise.all([
       query.order("created_at", { ascending: false }).range(fromRange, toRange),
       adminSupabase.rpc("get_crm_metrics", {
         p_project_id: activeProject.id,
@@ -377,6 +377,11 @@ async function handleQueryLeads(request: Request) {
         p_end_date: endDate ? parseClientDateRange(endDate, true).toISOString() : null,
         p_selected_landing: selectedLanding,
         p_assigned_manager_id: isSalesFiltered ? user.id : null
+      }),
+      adminSupabase.rpc("get_crm_filters_summary", {
+        p_project_id: activeProject.id,
+        p_start_date: startDate ? parseClientDateRange(startDate, false).toISOString() : null,
+        p_end_date: endDate ? parseClientDateRange(endDate, true).toISOString() : null
       })
     ]);
     const dbQueryEnd = performance.now();
@@ -827,6 +832,13 @@ async function handleQueryLeads(request: Request) {
         startDate,
         endDate,
         selectedLanding
+      },
+      filtersSummary: filtersSummaryRes?.data || {
+        totalLeads: totalCount,
+        statusCounts: [],
+        landingCounts: [],
+        multiLandingCount: 0,
+        noLandingCount: 0
       },
       dataHealth
     };

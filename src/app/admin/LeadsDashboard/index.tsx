@@ -397,11 +397,15 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     selectedLanding
   ]);
 
-  // Reset selected quiz lead and landing filter when project or tab changes
+  // Reset selected quiz lead when project or tab changes
   useEffect(() => {
     setActiveQuizLeadId(null);
-    setSelectedLanding("all");
   }, [activeSlug, activeTab]);
+
+  // Reset selected landing when project changes
+  useEffect(() => {
+    setSelectedLanding("all");
+  }, [activeSlug]);
 
   // Debounce search query to prevent excessive server requests
   useEffect(() => {
@@ -1229,7 +1233,9 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             setCurrentPage={setCurrentPage}
             openLeadModal={openLeadModal}
             setShowAddLead={setShowAddLead}
-            isDevMode={isDevMode}
+            selectedLanding={selectedLanding}
+            setSelectedLanding={setSelectedLanding}
+            filtersSummary={dashboardData?.filtersSummary}
             isLoading={isLoading}
           />
         )}
