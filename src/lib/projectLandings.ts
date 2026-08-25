@@ -91,6 +91,7 @@ export const DEFAULT_PROJECT_LANDINGS: Record<string, ProjectLandingItem[]> = {
   ],
   nesoniaa: [
     { label: "Головна", url: "https://nesoniaa.vercel.app/", path: "/", badgeColor: "bg-pink-500/10 text-pink-400 border border-pink-500/20", type: "free", parameters: [] },
+    { label: "Міні-курс", url: "https://nesoniaa.vercel.app/mini-course", path: "/mini-course", badgeColor: "bg-teal-500/10 text-teal-400 border border-teal-500/20", type: "paid", parameters: [] },
     { label: "Міні-курс AI", url: "https://nesoniaa.vercel.app/mini-course/ai", path: "/mini-course/ai", badgeColor: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20", type: "paid", parameters: [] },
     { label: "Міні-курс Figma", url: "https://nesoniaa.vercel.app/mini-course/figma", path: "/mini-course/figma", badgeColor: "bg-purple-500/10 text-purple-400 border border-purple-500/20", type: "paid", parameters: [] },
     { label: "Безкоштовний AI", url: "https://nesoniaa.vercel.app/mini-course/free/ai", path: "/mini-course/free/ai", badgeColor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", type: "free", parameters: [] }

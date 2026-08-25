@@ -165,8 +165,26 @@ const isLeadMatchingLanding = (lead: any, landingUrl: string, activeSlug: string
   const targetNorm = normalizeUrlForMatching(landingUrl);
   const targetHasPath = targetNorm.includes("/");
 
+  let targetPath = "";
+  try {
+    const parsed = new URL(landingUrl.startsWith("http") ? landingUrl : `https://${landingUrl}`);
+    targetPath = parsed.pathname.replace(/\/$/, "") || "/";
+  } catch {
+    targetPath = landingUrl.replace(/^https?:\/\/[^\/]+/, "").replace(/\/$/, "") || "/";
+  }
+
   return lead.history?.some((touch: any) => {
     const touchUrl = normalizeUrlForMatching(getTouchPageUrl(touch));
+    const touchPath = (getTouchPagePath(touch) || "").trim().replace(/\/$/, "") || "/";
+
+    if (touchPath && targetPath) {
+      if (targetPath === "/" && (touchPath === "/" || touchPath === "")) {
+        return true;
+      }
+      if (targetPath !== "/" && (touchPath === targetPath || touchPath.includes(targetPath) || targetPath.includes(touchPath))) {
+        return true;
+      }
+    }
 
     const originalSheet = (
       touch.metadata?.original_sheet ||
@@ -853,6 +871,20 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
         visitedLandings.push(land.url);
       }
     });
+
+    // Fallback: If visitedLandings is still empty, but page_url or page_path exists
+    if (visitedLandings.length === 0) {
+      if (page_url && page_url.startsWith("http")) {
+        visitedLandings.push(page_url);
+      } else if (page_path && page_path !== "/") {
+        const defaultBase = landings[0]?.url ? new URL(landings[0].url).origin : "";
+        if (defaultBase) {
+          visitedLandings.push(`${defaultBase}${page_path.startsWith("/") ? "" : "/"}${page_path}`);
+        } else {
+          visitedLandings.push(page_path);
+        }
+      }
+    }
 
     // 1. Precise Payment & Checkout Intent Detection
     const totalPaidAmount = usdCoursePaid + uahCoursePaid + eurCoursePaid + usdTripwirePaid + uahTripwirePaid + eurTripwirePaid;

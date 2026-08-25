@@ -320,8 +320,22 @@ async function handleQueryLeads(request: Request) {
       const endStr = parseClientDateRange(endDate, true).toISOString();
       query = query.lte("created_at", endStr);
     }
-    if (selectedLanding !== "all") {
-      query = query.contains("visited_landings", [selectedLanding]);
+    if (selectedLanding && selectedLanding !== "all") {
+      if (selectedLanding === "multi") {
+        query = query.filter("visited_landings", "neq", "{}");
+      } else if (selectedLanding === "unassigned" || selectedLanding === "none") {
+        query = query
+          .or("visited_landings.is.null,visited_landings.eq.{}")
+          .or("page_path.is.null,page_path.eq.,page_path.eq./")
+          .or("page_url.is.null,page_url.eq.");
+      } else {
+        const cleanPath = selectedLanding.replace(/^https?:\/\/[^\/]+/, "").trim() || "/";
+        if (cleanPath === "/") {
+          query = query.or(`visited_landings.cs.{"${selectedLanding}"},page_path.eq./,page_url.eq.${selectedLanding}`);
+        } else {
+          query = query.or(`visited_landings.cs.{"${selectedLanding}"},page_path.eq.${cleanPath},page_path.ilike.%${cleanPath}%,page_url.ilike.%${cleanPath}%`);
+        }
+      }
     }
 
     const page = filters?.page || 1;
