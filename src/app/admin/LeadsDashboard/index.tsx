@@ -419,7 +419,10 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
   useEffect(() => {
     let isMounted = true;
-    if (viewType !== "single" || !activeSlug) return;
+    if (viewType !== "single" || !activeSlug) {
+      setIsLoading(false);
+      return;
+    }
 
     const skipTraffic = activeTab !== "analytics" && activeTab !== "traffic";
     const currentParamsKey = JSON.stringify({
@@ -440,23 +443,26 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     // Skip redundant fetching if parameters haven't changed or if we are resetting states due to a project switch
     if (isResettingRef.current) {
       isResettingRef.current = false;
+      setIsLoading(false);
       return;
     }
 
     if (currentParamsKey === lastFetchedParamsRef.current) {
+      setIsLoading(false);
       return;
     }
-
-    lastFetchedParamsRef.current = currentParamsKey;
 
     // Check if we have cached data for these parameters
     const cachedData = clientCacheRef.current[currentParamsKey];
     if (cachedData) {
       setDashboardData(cachedData);
       setIsLoading(false);
-    } else {
-      setIsLoading(true);
+      lastFetchedParamsRef.current = currentParamsKey;
+      return;
     }
+
+    setIsLoading(true);
+    lastFetchedParamsRef.current = currentParamsKey;
 
     const paramsPayload = {
       page: currentPage,
@@ -475,8 +481,16 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     devLogger.info("CRM Client", `Requesting getUnifiedCRMData for project: ${activeSlug}`, paramsPayload);
     const requestStart = performance.now();
 
+    // Safety timeout to prevent permanent loading hang
+    const safetyTimeout = setTimeout(() => {
+      if (isMounted) {
+        setIsLoading(false);
+      }
+    }, 8000);
+
     fetchCRMLeads(activeSlug, paramsPayload)
       .then((res: any) => {
+        clearTimeout(safetyTimeout);
         const requestDuration = performance.now() - requestStart;
         if (isMounted) {
           devLogger.info("CRM Client", "Successfully received CRM data", {
@@ -494,6 +508,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
         }
       })
       .catch((err: any) => {
+        clearTimeout(safetyTimeout);
         devLogger.error("CRM Client", `Failed to retrieve CRM data: ${err.message}`, { error: err });
         console.error("Failed to fetch dashboard data:", err);
         if (isMounted) {
@@ -504,6 +519,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
     return () => {
       isMounted = false;
+      clearTimeout(safetyTimeout);
     };
   }, [
     activeSlug,
