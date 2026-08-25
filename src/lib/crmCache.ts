@@ -322,10 +322,19 @@ const isBlacklistedEmail = (email: string): boolean => {
   const patterns = [
     "test@test.com", "test@gmail.com", "no@email.com", "none@gmail.com",
     "unknown@gmail.com", "null@gmail.com", "test@mail.ru", "user@gmail.com",
-    "admin@gmail.com", "111@gmail.com", "a@a.com"
+    "admin@gmail.com", "111@gmail.com", "a@a.com", "trial@izsvidomo.club",
+    "phone-client@telegram.com"
   ];
   if (patterns.includes(clean)) return true;
-  if (clean.startsWith("test@") || clean.startsWith("no-reply@") || clean.startsWith("noreply@")) {
+  if (
+    clean.startsWith("test@") || 
+    clean.startsWith("no-reply@") || 
+    clean.startsWith("noreply@") ||
+    clean.startsWith("trial@") ||
+    clean.endsWith("@telegram.com") ||
+    clean.endsWith("@izsvidomo.club") ||
+    clean.endsWith("@example.com")
+  ) {
     return true;
   }
   return false;
