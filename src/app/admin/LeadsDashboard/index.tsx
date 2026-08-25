@@ -17,7 +17,9 @@ import {
   Wallet,
   Globe,
   Plus,
-  Settings
+  Settings,
+  AlertTriangle,
+  Lightbulb
 } from "lucide-react";
 
 import { useTheme } from "../ThemeProvider";
@@ -51,6 +53,7 @@ import FunnelsTab from "./tabs/FunnelsTab";
 import LandingsRegistryTab from "./tabs/LandingsRegistryTab";
 import FinanceDashboardTab from "./tabs/FinanceDashboardTab";
 import FinanceExpertTab from "./tabs/FinanceExpertTab";
+import FeedbackTab from "./tabs/FeedbackTab";
 import CashflowFeed from "./components/CashflowFeed";
 import AddTransactionModal from "./components/AddTransactionModal";
 import { getFinanceSummaryAction } from "../(dashboard)/project/financeActions";
@@ -1034,6 +1037,32 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             🐞 Діагностика
           </button>
         )}
+
+        {/* Report Bug Tab */}
+        <button
+          onClick={() => setActiveTab("report_bug")}
+          className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 border ${
+            activeTab === "report_bug"
+              ? "bg-red-500 text-white font-black shadow-lg shadow-red-500/20 border-red-500/40"
+              : "text-red-400 hover:text-red-300 hover:bg-red-500/10 bg-red-500/5 border-red-500/20"
+          }`}
+        >
+          <AlertTriangle className="w-4 h-4" />
+          Повідомити про помилку
+        </button>
+
+        {/* Suggest Improvement Tab */}
+        <button
+          onClick={() => setActiveTab("suggest_feature")}
+          className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 border ${
+            activeTab === "suggest_feature"
+              ? "bg-amber-500 text-black font-black shadow-lg shadow-amber-500/20 border-amber-500/40"
+              : "text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 bg-amber-500/5 border-amber-500/20"
+          }`}
+        >
+          <Lightbulb className="w-4 h-4" />
+          Запропонувати покращення
+        </button>
       </div>
 
       {/* --- TAB VIEWPORTS --- */}
@@ -1275,6 +1304,16 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             allowedProjects={dashboardData.allowedProjects || []}
             userRole={role}
             viewType={viewType}
+          />
+        )}
+
+        {(activeTab === "report_bug" || activeTab === "suggest_feature") && (
+          <FeedbackTab
+            initialType={activeTab === "report_bug" ? "error" : "improvement"}
+            activeProject={activeProject}
+            role={role}
+            userEmail={dashboardData.userEmail || ""}
+            theme={theme}
           />
         )}
       </div>

@@ -1072,6 +1072,7 @@ export async function getUnifiedCRMData(
     const finalResult = {
       viewType: "single",
       role: profile.role,
+      userEmail: user?.email || profile?.email || "",
       allowedProjects,
       activeSlug,
       activeProject,
@@ -1623,43 +1624,100 @@ export async function assignLeadToManagerAction(customerId: string, managerId: s
   }
 }
 
-// Submit error report or improvement suggestion
-export async function submitCrmFeedbackAction(type: "error" | "improvement", message: string) {
+// Submit error report or improvement suggestion with rich metadata
+export async function submitCrmFeedbackAction(
+  typeOrPayload: "error" | "improvement" | {
+    type: "error" | "improvement";
+    message: string;
+    title?: string;
+    category?: string;
+    priority?: string;
+    metadata?: any;
+  },
+  maybeMessage?: string
+) {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Неавторизовано.");
 
-    const { error } = await supabase
+    let type: "error" | "improvement" = "error";
+    let message = "";
+    let title: string | null = null;
+    let category: string | null = null;
+    let priority = "medium";
+    let metadata: any = {};
+
+    if (typeof typeOrPayload === "object") {
+      type = typeOrPayload.type;
+      message = typeOrPayload.message;
+      title = typeOrPayload.title || null;
+      category = typeOrPayload.category || null;
+      priority = typeOrPayload.priority || "medium";
+      metadata = typeOrPayload.metadata || {};
+    } else {
+      type = typeOrPayload;
+      message = maybeMessage || "";
+    }
+
+    if (!message.trim()) {
+      throw new Error("Текст повідомлення обов'язковий.");
+    }
+
+    const { data, error } = await supabase
       .from("crm_feedback")
       .insert({
         user_id: user.id,
         user_email: user.email,
         type,
-        message,
-      });
+        title,
+        message: message.trim(),
+        category,
+        priority,
+        metadata,
+        status: "pending"
+      })
+      .select()
+      .single();
 
     if (error) throw error;
-    return { success: true, message: "Дякуємо! Ваш запит успішно надіслано." };
+    revalidatePath("/admin");
+    return { success: true, message: "Дякуємо! Ваш запит успішно зареєстровано в системі.", item: data };
   } catch (err: any) {
     return { error: err.message || "Не вдалося надіслати запит." };
   }
 }
 
-// Retrieve feedback items (Only for yura3zaxar@gmail.com and yura3zaxar@outlook.com)
+// Retrieve feedback items (Full list for admins/devs/founders, personal history for others)
 export async function getCrmFeedbackList() {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user || (user.email !== "yura3zaxar@gmail.com" && user.email !== "yura3zaxar@outlook.com")) {
-      throw new Error("403 Доступ заборонено.");
+    if (!user) {
+      throw new Error("Неавторизовано.");
     }
 
-    const { data, error } = await supabase
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const isPrivileged =
+      ["admin", "superman", "developer", "founder"].includes(profile?.role || "") ||
+      user.email === "yura3zaxar@gmail.com" ||
+      user.email === "yura3zaxar@outlook.com";
+
+    let query = supabase
       .from("crm_feedback")
       .select("*")
       .order("created_at", { ascending: false });
 
+    if (!isPrivileged) {
+      query = query.eq("user_id", user.id);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
     return data || [];
   } catch (err: any) {
@@ -1668,22 +1726,50 @@ export async function getCrmFeedbackList() {
   }
 }
 
-// Update feedback item status (Only for yura3zaxar@gmail.com and yura3zaxar@outlook.com)
-export async function updateFeedbackStatusAction(feedbackId: string, status: string) {
+// Update feedback item status (Privileged users: admin, superman, developer, founder)
+export async function updateFeedbackStatusAction(feedbackId: string, status: string, adminNote?: string) {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user || (user.email !== "yura3zaxar@gmail.com" && user.email !== "yura3zaxar@outlook.com")) {
-      throw new Error("403 Доступ заборонено.");
+    if (!user) throw new Error("403 Доступ заборонено.");
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const isPrivileged =
+      ["admin", "superman", "developer", "founder"].includes(profile?.role || "") ||
+      user.email === "yura3zaxar@gmail.com" ||
+      user.email === "yura3zaxar@outlook.com";
+
+    if (!isPrivileged) {
+      throw new Error("403 Недостатньо прав для оновлення статусу.");
+    }
+
+    const updatePayload: any = { status };
+    if (adminNote !== undefined) {
+      const { data: current } = await supabase
+        .from("crm_feedback")
+        .select("metadata")
+        .eq("id", feedbackId)
+        .single();
+      updatePayload.metadata = {
+        ...(current?.metadata || {}),
+        admin_note: adminNote,
+        resolved_by: user.email,
+        resolved_at: new Date().toISOString()
+      };
     }
 
     const { error } = await supabase
       .from("crm_feedback")
-      .update({ status })
+      .update(updatePayload)
       .eq("id", feedbackId);
 
     if (error) throw error;
-    revalidatePath("/admin/settings");
+    revalidatePath("/admin");
     return { success: true };
   } catch (err: any) {
     return { error: err.message || "Failed to update status." };

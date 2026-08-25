@@ -729,6 +729,54 @@ export default function Sidebar({
             </div>
           )}
 
+          {/* Feedback & Bug Reporting Buttons */}
+          <div className="space-y-1.5 pt-1 border-t border-white/5">
+            {/* Report Bug */}
+            <div className="relative group">
+              <button
+                type="button"
+                onClick={() => handleOpenFeedback("error")}
+                className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                  isLight
+                    ? "bg-red-50 hover:bg-red-100 border-red-200 text-red-700"
+                    : "bg-red-500/5 hover:bg-red-500/10 border-red-500/15 hover:border-red-500/30 text-red-400"
+                } ${isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : ""}`}
+              >
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                {!isCollapsed && <span>Повідомити про помилку</span>}
+              </button>
+              {isCollapsed && (
+                <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl ${
+                  isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
+                }`}>
+                  Повідомити про помилку
+                </div>
+              )}
+            </div>
+
+            {/* Suggest Improvement */}
+            <div className="relative group">
+              <button
+                type="button"
+                onClick={() => handleOpenFeedback("improvement")}
+                className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                  isLight
+                    ? "bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-700"
+                    : "bg-amber-500/5 hover:bg-amber-500/10 border-amber-500/15 hover:border-amber-500/30 text-amber-400"
+                } ${isCollapsed ? "justify-center px-0 w-10 h-10 mx-auto" : ""}`}
+              >
+                <Lightbulb className="w-4 h-4 text-amber-400 shrink-0" />
+                {!isCollapsed && <span>Запропонувати покращення</span>}
+              </button>
+              {isCollapsed && (
+                <div className={`absolute left-16 top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 border text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-2xl ${
+                  isLight ? "bg-white border-neutral-200 text-neutral-800" : "bg-neutral-900 border border-white/10 text-white"
+                }`}>
+                  Запропонувати покращення
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* User profile card details */}
           <div className={`px-1.5 ${isCollapsed ? "flex flex-col items-center text-center space-y-2" : ""}`}>
