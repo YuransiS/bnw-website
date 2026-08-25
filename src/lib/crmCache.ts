@@ -315,30 +315,6 @@ const isBlacklistedTelegram = (tg: string): boolean => {
   return false;
 };
 
-const isBlacklistedEmail = (email: string): boolean => {
-  if (!email) return true;
-  const clean = email.toLowerCase().trim();
-  if (clean.length < 5) return true;
-  const patterns = [
-    "test@test.com", "test@gmail.com", "no@email.com", "none@gmail.com",
-    "unknown@gmail.com", "null@gmail.com", "test@mail.ru", "user@gmail.com",
-    "admin@gmail.com", "111@gmail.com", "a@a.com", "trial@izsvidomo.club",
-    "phone-client@telegram.com"
-  ];
-  if (patterns.includes(clean)) return true;
-  if (
-    clean.startsWith("test@") || 
-    clean.startsWith("no-reply@") || 
-    clean.startsWith("noreply@") ||
-    clean.startsWith("trial@") ||
-    clean.endsWith("@telegram.com") ||
-    clean.endsWith("@izsvidomo.club") ||
-    clean.endsWith("@example.com")
-  ) {
-    return true;
-  }
-  return false;
-};
 
 // Rebuild project CRM DSU cache inside Supabase
 export async function rebuildProjectCache(projectId: string, activeSlug: string) {
@@ -430,13 +406,11 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
 
   const phoneMap = new Map<string, number>();
   const tgMap = new Map<string, number>();
-  const emailMap = new Map<string, number>();
   const uuidMap = new Map<string, number>();
 
   formattedLeads.forEach((lead: any, i: number) => {
     const phone = lead.phone?.replace(/\D/g, "") || "";
     const tg = lead.telegram?.toLowerCase().replace("@", "").trim() || "";
-    const email = lead.email?.toLowerCase().trim() || "";
     const uuid = lead.visitor_uuid || "";
 
     if (phone.length >= 7 && !isBlacklistedPhone(phone)) {
@@ -446,10 +420,6 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
     if (tg && !isBlacklistedTelegram(tg)) {
       if (tgMap.has(tg)) dsu.union(i, tgMap.get(tg)!);
       else tgMap.set(tg, i);
-    }
-    if (email && !isBlacklistedEmail(email)) {
-      if (emailMap.has(email)) dsu.union(i, emailMap.get(email)!);
-      else emailMap.set(email, i);
     }
     if (uuid) {
       if (uuidMap.has(uuid)) dsu.union(i, uuidMap.get(uuid)!);
