@@ -457,6 +457,44 @@ export async function createTransactionAction(payload: {
     const userId = await verifyProjectAccess(payload.projectId, true);
     const adminSupabase = createAdminClient();
 
+    let resolvedAccountId = payload.accountId;
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resolvedAccountId);
+
+    if (!isUuid) {
+      // Extract clean account name e.g. "std_0_Рахунок ФОП" -> "Рахунок ФОП"
+      const cleanName = resolvedAccountId.replace(/^std_\d+_/, "").trim() || "Рахунок ФОП";
+      
+      // Try to find an account with this name for the project
+      const { data: existingAcc } = await adminSupabase
+        .from("project_accounts")
+        .select("id")
+        .eq("project_id", payload.projectId)
+        .ilike("name", `%${cleanName}%`)
+        .limit(1)
+        .maybeSingle();
+
+      if (existingAcc) {
+        resolvedAccountId = existingAcc.id;
+      } else {
+        // Create the account and get its UUID
+        const { data: newAcc, error: accErr } = await adminSupabase
+          .from("project_accounts")
+          .insert({
+            project_id: payload.projectId,
+            name: cleanName,
+            currency: payload.currency || "UAH",
+            starting_balance: 0
+          })
+          .select("id")
+          .single();
+
+        if (accErr || !newAcc) {
+          throw new Error("Не вдалося знайти або створити фінансовий рахунок");
+        }
+        resolvedAccountId = newAcc.id;
+      }
+    }
+
     const amountUSD = Number(payload.amount) * Number(payload.exchangeRate);
 
     const { error } = await adminSupabase
@@ -469,7 +507,7 @@ export async function createTransactionAction(payload: {
         category: payload.category,
         parent_section: payload.parentSection || null,
         description: payload.description || "",
-        account_id: payload.accountId,
+        account_id: resolvedAccountId,
         currency: payload.currency,
         amount: payload.amount,
         exchange_rate: payload.exchangeRate,
