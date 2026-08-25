@@ -21,6 +21,7 @@ import {
   Sparkles
 } from "lucide-react";
 import { getCellAnalyticsAction, updateProjectPlanAction } from "./cellActions";
+import { ParabolicProgressBar } from "@/components/ui/ParabolicProgressBar";
 
 interface CellDashboardClientProps {
   cell: any;
@@ -246,6 +247,8 @@ export default function CellDashboardClient({
           </button>
         </div>
       </div>
+
+      <ParabolicProgressBar isLoading={isPending} className="rounded-full" />
 
       {/* Date Period Filter Bar */}
       <div className="bg-neutral-900 border border-white/5 p-4 rounded-2xl space-y-3 shadow-lg">

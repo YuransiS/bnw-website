@@ -4,6 +4,7 @@ import React, { useState, useTransition } from "react";
 import Link from "next/link";
 import { Layers, Users, BarChart4, ClipboardCheck, ArrowRight, ShieldAlert, Award, Calendar, Eye, EyeOff, Globe, Sparkles, AlertCircle, RefreshCw } from "lucide-react";
 import { getFounderDashboardDataAction } from "../../actions";
+import { ParabolicProgressBar } from "@/components/ui/ParabolicProgressBar";
 
 interface FounderDashboardClientProps {
   cellsWithProjects: any[];
@@ -245,6 +246,8 @@ export default function FounderDashboardClient({
           </div>
         </div>
       </div>
+
+      <ParabolicProgressBar isLoading={isPending} className="rounded-full" />
 
       {/* Interactive Global Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-5">

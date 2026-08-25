@@ -15,6 +15,7 @@ import {
   Check
 } from "lucide-react";
 import { getProducerPerformanceDataAction, ProducerDashboardData, ProducerProjectData } from "./producerActions";
+import { ParabolicProgressBar } from "@/components/ui/ParabolicProgressBar";
 
 interface ProducerDashboardClientProps {
   initialData: ProducerDashboardData;
@@ -174,6 +175,8 @@ export default function ProducerDashboardClient({ initialData }: ProducerDashboa
           </button>
         </div>
       </div>
+
+      <ParabolicProgressBar isLoading={isPending} className="rounded-full" />
 
       {/* Date Range Selector */}
       <div className="bg-neutral-900/80 border border-white/5 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4">

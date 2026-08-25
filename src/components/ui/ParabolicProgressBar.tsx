@@ -4,81 +4,79 @@ import React, { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export interface ParabolicProgressOptions {
-  /** Target percentage to approach before completion (e.g. 94%) */
+  /** Target percentage to approach before completion (e.g. 92%) */
   maxStallPercent?: number;
-  /** Estimated duration in ms to reach 75-80% */
+  /** Estimated duration in ms to reach ~80% */
   durationMs?: number;
 }
 
 /**
- * Hook calculating non-linear progress along a decelerating parabolic curve:
- * p(t) = max * (1 - (1 - t/T)^2)
- * When active: climbs fast initially, then decelerates asymptotically.
- * When finished: immediately springs to 100% and resets after a brief delay.
+ * Robust non-linear progress along a decelerating curve.
+ * Climbs smoothly and dynamically, never freezes, and snaps to 100% on finish.
  */
 export function useParabolicProgress(
   isLoading: boolean,
   options: ParabolicProgressOptions = {}
 ) {
-  const { maxStallPercent = 94, durationMs = 3000 } = options;
+  const { maxStallPercent = 92, durationMs = 2400 } = options;
   const [progress, setProgress] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
-  const startTimeRef = useRef<number | null>(null);
   const animFrameRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (isLoading) {
       setIsVisible(true);
+      setProgress(8); // Immediate initial positive feedback
       startTimeRef.current = performance.now();
 
-      const updateProgress = (now: number) => {
+      const update = (now: number) => {
         if (!startTimeRef.current) return;
         const elapsed = now - startTimeRef.current;
 
-        // Normalized time bounded to asymptote
+        // Normalized time bounded to 1
         const t = Math.min(elapsed / durationMs, 1);
         
-        // Decelerating parabolic ease-out: 1 - (1 - t)^2
-        const parabolicFactor = 1 - Math.pow(1 - t, 2);
+        // Decelerating ease-out curve: 1 - (1 - t)^2.5
+        const factor = 1 - Math.pow(1 - t, 2.5);
         
-        // Asymptotic crawl if loading takes longer than durationMs
-        let currentProgress = parabolicFactor * maxStallPercent;
+        let current = 8 + factor * (maxStallPercent - 8);
         if (elapsed > durationMs) {
           const overtimeSec = (elapsed - durationMs) / 1000;
-          // Slowly crawl from maxStallPercent towards 98%
-          const extraCrawl = (98 - maxStallPercent) * (1 - Math.exp(-overtimeSec / 3));
-          currentProgress = maxStallPercent + extraCrawl;
+          // Asymptotic crawl towards 98%
+          const extraCrawl = (98 - maxStallPercent) * (1 - Math.exp(-overtimeSec / 2.5));
+          current = maxStallPercent + extraCrawl;
         }
 
-        setProgress(Math.min(currentProgress, 98.5));
-
-        animFrameRef.current = requestAnimationFrame(updateProgress);
+        setProgress(Math.min(current, 98.5));
+        animFrameRef.current = requestAnimationFrame(update);
       };
 
-      animFrameRef.current = requestAnimationFrame(updateProgress);
+      animFrameRef.current = requestAnimationFrame(update);
 
       return () => {
         if (animFrameRef.current) {
           cancelAnimationFrame(animFrameRef.current);
+          animFrameRef.current = null;
         }
       };
     } else {
       if (animFrameRef.current) {
         cancelAnimationFrame(animFrameRef.current);
+        animFrameRef.current = null;
       }
 
-      // If we were loading, snap to 100% then fade out
-      if (isVisible) {
-        setProgress(100);
-        const timer = setTimeout(() => {
-          setIsVisible(false);
-          setProgress(0);
-          startTimeRef.current = null;
-        }, 350);
-        return () => clearTimeout(timer);
-      }
+      // If active, snap to 100% then cleanly close
+      setProgress(100);
+      const timer = setTimeout(() => {
+        setIsVisible(false);
+        setProgress(0);
+        startTimeRef.current = null;
+      }, 250);
+
+      return () => clearTimeout(timer);
     }
-  }, [isLoading, maxStallPercent, durationMs, isVisible]);
+  }, [isLoading, maxStallPercent, durationMs]);
 
   return { progress, isVisible };
 }
@@ -99,8 +97,6 @@ export function ParabolicProgressBar({
 }) {
   const { progress, isVisible } = useParabolicProgress(isLoading);
 
-  if (!isVisible && progress === 0) return null;
-
   return (
     <AnimatePresence>
       {isVisible && (
@@ -108,17 +104,16 @@ export function ParabolicProgressBar({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
+          transition={{ duration: 0.15 }}
           className={`w-full overflow-hidden bg-white/[0.04] ${height} ${className}`}
         >
           <div
-            className="h-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-300 relative transition-all duration-75 ease-out rounded-r-full"
+            className="h-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-300 relative rounded-r-full"
             style={{
               width: `${progress}%`,
               boxShadow: showGlow ? "0 0 12px rgba(16, 185, 129, 0.6)" : "none",
             }}
           >
-            {/* Shimmer pulse effect at the leading edge */}
             <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-r from-transparent to-white/40 blur-[1px]" />
           </div>
         </motion.div>
@@ -128,7 +123,7 @@ export function ParabolicProgressBar({
 }
 
 /**
- * Card / Viewport Loading Overlay with non-linear Parabolic Progress Bar & Percentage
+ * Card / Viewport Loading Overlay with non-linear Progress Bar & Percentage
  */
 export function ParabolicLoadingOverlay({
   isLoading,
@@ -143,8 +138,6 @@ export function ParabolicLoadingOverlay({
 }) {
   const { progress, isVisible } = useParabolicProgress(isLoading);
 
-  if (!isVisible && !isLoading) return null;
-
   return (
     <AnimatePresence>
       {isVisible && (
@@ -153,7 +146,7 @@ export function ParabolicLoadingOverlay({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="absolute inset-0 bg-black/50 backdrop-blur-[4px] z-50 flex items-center justify-center p-4 rounded-2xl"
+          className="absolute inset-0 bg-black/60 backdrop-blur-[4px] z-50 flex items-center justify-center p-4 rounded-2xl"
         >
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
@@ -178,13 +171,13 @@ export function ParabolicLoadingOverlay({
               </span>
             </div>
 
-            {/* Parabolic Progress Track */}
-            <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden p-[1px] border border-white/5">
+            {/* Progress Track */}
+            <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden p-[1px] border border-white/10">
               <div
-                className="h-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-300 rounded-full transition-all duration-75 ease-out relative"
+                className="h-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-300 rounded-full relative"
                 style={{
                   width: `${progress}%`,
-                  boxShadow: "0 0 10px rgba(16, 185, 129, 0.4)",
+                  boxShadow: "0 0 10px rgba(16, 185, 129, 0.5)",
                 }}
               >
                 <div className="absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-r from-transparent to-white/50 blur-[0.5px]" />
