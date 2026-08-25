@@ -24,9 +24,24 @@ const PIPELINE_COLUMNS = [
 function formatLandingDisplay(url: string): string {
   if (!url) return "Головна (/)";
   try {
-    const parsed = new URL(url.startsWith("http") ? url : `https://${url}`);
-    const path = parsed.pathname;
-    if (path === "/" || path === "") return "Головна (/)";
+    let path = url;
+    if (url.startsWith("http://") || url.startsWith("https://")) {
+      const parsed = new URL(url);
+      path = parsed.pathname;
+    } else {
+      path = url.split("?")[0].split("#")[0];
+    }
+    path = path.trim().replace(/\/$/, "");
+    if (!path || path === "/") return "Головна (/)";
+    if (path.includes("5-likes")) return "5 Лайків (/intensive/5-likes)";
+    if (path === "/anketa") return "Анкета (/anketa)";
+    if (path.includes("free/ai") || path.includes("free-ai")) return "Безкоштовний AI (/mini-course/free/ai)";
+    if (path.includes("mini-course/ai")) return "Міні-курс AI (/mini-course/ai)";
+    if (path.includes("mini-course/figma")) return "Міні-курс Figma (/mini-course/figma)";
+    if (path.includes("minicourse") || path.includes("mini-course")) return "Міні-курс";
+    if (path.includes("rozbir") || path.includes("diagnostic")) return "Діагностика / Розбір";
+    if (path.includes("price") || path.includes("tariffs")) return "Тарифи / Ціни";
+    if (path.includes("system")) return "Система (/intensive/system)";
     return path;
   } catch {
     return url;
@@ -126,6 +141,40 @@ export const LeadsTab = React.memo(function LeadsTab({
     }, 300);
     return () => clearTimeout(timer);
   }, [localSearch, searchQuery, setSearchQuery]);
+
+  const landingOptions = React.useMemo(() => {
+    const countsMap = new Map<string, number>();
+
+    // 1. From filtersSummary if available
+    if (filtersSummary?.landingCounts && filtersSummary.landingCounts.length > 0) {
+      filtersSummary.landingCounts.forEach((item) => {
+        if (item.landing) {
+          countsMap.set(item.landing, item.count);
+        }
+      });
+    }
+
+    // 2. Also populate / merge from processedLeads / paginatedLeads
+    (processedLeads || []).forEach((lead: any) => {
+      const vLandings: string[] = (lead.visitedLandings || lead.visited_landings || []) as string[];
+      if (vLandings.length > 0) {
+        vLandings.forEach((land) => {
+          if (land && !countsMap.has(land)) {
+            countsMap.set(land, (countsMap.get(land) || 0) + 1);
+          }
+        });
+      } else if (lead.page_path && lead.page_path !== "/" && !countsMap.has(lead.page_path)) {
+        countsMap.set(lead.page_path, (countsMap.get(lead.page_path) || 0) + 1);
+      } else if (lead.page_url && lead.page_url !== "" && !countsMap.has(lead.page_url)) {
+        countsMap.set(lead.page_url, (countsMap.get(lead.page_url) || 0) + 1);
+      }
+    });
+
+    return Array.from(countsMap.entries()).map(([landing, count]) => ({
+      landing,
+      count
+    })).sort((a, b) => b.count - a.count);
+  }, [filtersSummary?.landingCounts, processedLeads]);
 
   const { theme } = useTheme();
   const isLight = theme === "light";
@@ -351,7 +400,7 @@ export const LeadsTab = React.memo(function LeadsTab({
                   👤 Прямий / Без лендингу ({filtersSummary?.noLandingCount})
                 </option>
               )}
-              {(filtersSummary?.landingCounts || []).map((l: any) => {
+              {landingOptions.map((l: any) => {
                 const formattedName = formatLandingDisplay(l.landing);
                 return (
                   <option key={l.landing} value={l.landing} className={optionClass}>

@@ -706,7 +706,7 @@ export async function getUnifiedCRMData(
     const startIso = startDate ? parseClientDateRange(startDate, false).toISOString() : null;
     const endIso = endDate ? parseClientDateRange(endDate, true).toISOString() : null;
 
-    const [leadsRes, projectKpiRes, trafficSummaryRes, costsRes, allProfilesRes, utmLeadsSummaryRes, funnelsRes, campaignsRes] = await Promise.all([
+    const [leadsRes, projectKpiRes, trafficSummaryRes, costsRes, allProfilesRes, utmLeadsSummaryRes, funnelsRes, campaignsRes, filtersSummaryRes] = await Promise.all([
       query.order("created_at", { ascending: false }).range(from, to),
       adminSupabase.rpc("get_project_aggregated_kpi", {
         p_project_id: activeProject.id,
@@ -748,7 +748,12 @@ export async function getUnifiedCRMData(
         p_assigned_manager_id: isSalesFiltered ? user.id : null
       }),
       adminSupabase.from("funnels").select("*").eq("project_id", activeProject.id),
-      adminSupabase.rpc("get_campaigns_summary")
+      adminSupabase.rpc("get_campaigns_summary"),
+      adminSupabase.rpc("get_crm_filters_summary", {
+        p_project_id: activeProject.id,
+        p_start_date: startIso,
+        p_end_date: endIso
+      })
     ]);
     const dbQueryEnd = performance.now();
     const dbQueryMs = dbQueryEnd - dbQueryStart;
@@ -1095,6 +1100,7 @@ export async function getUnifiedCRMData(
         endDate,
         selectedLanding
       },
+      filtersSummary: filtersSummaryRes?.data || null,
       dataHealth
     };
 
