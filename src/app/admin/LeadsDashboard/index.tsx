@@ -60,6 +60,7 @@ import AddLeadModal from "./components/AddLeadModal";
 import UnresolvedOrdersModal from "./components/UnresolvedOrdersModal";
 import ProjectSettingsModal from "./components/ProjectSettingsModal";
 import { ParabolicLoadingOverlay, ParabolicProgressBar } from "@/components/ui/ParabolicProgressBar";
+import { createClient } from "@/utils/supabase/client";
 
 interface LeadsDashboardProps {
   initialData: any;
@@ -286,6 +287,44 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   useEffect(() => {
     fetchFinanceData();
   }, [fetchFinanceData]);
+
+  // Live Realtime listener for incoming financial transactions & payments
+  useEffect(() => {
+    if (!activeProject) return;
+    const supabase = createClient();
+
+    const channel = supabase
+      .channel(`realtime_finance_${activeProject.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "financial_transactions",
+          filter: `project_id=eq.${activeProject.id}`
+        },
+        () => {
+          fetchFinanceData();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "unified_orders",
+          filter: `project_id=eq.${activeProject.id}`
+        },
+        () => {
+          fetchFinanceData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeProject, fetchFinanceData]);
 
   useEffect(() => {
     if (activeProject) {

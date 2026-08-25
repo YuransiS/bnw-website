@@ -4,6 +4,7 @@ import React, { useState, useTransition } from "react";
 import { TrendingUp, TrendingDown, Wallet, DollarSign, Activity, Percent, ArrowUpRight, ArrowDownRight, Settings, Plus, Loader2, Save, FileText, Target, CheckCircle2 } from "lucide-react";
 import { saveFinanceSettingsAction, createAccountAction, createCustomCategoryAction, generatePnlReportAction } from "../../(dashboard)/project/financeActions";
 import PnlReportModal from "../components/PnlReportModal";
+import { RollingCounter } from "@/components/ui/RollingCounter";
 
 interface FinanceDashboardTabProps {
   summary: {
@@ -382,7 +383,11 @@ export default function FinanceDashboardTab({
               </div>
               <div className="mt-2">
                 <h4 className="text-2xl font-bold tracking-tight text-emerald-400">
-                  {displayMoney(summary.totalIncomeUSD, summary.totalIncomeUAH)}
+                  <RollingCounter
+                    value={globalCurrency === "UAH" ? summary.totalIncomeUAH : summary.totalIncomeUSD}
+                    prefix={globalCurrency === "UAH" ? "" : "$"}
+                    suffix={globalCurrency === "UAH" ? " ₴" : ""}
+                  />
                 </h4>
                 <p className={`text-[10px] font-medium mt-0.5 ${textMutedClass}`}>
                   {globalCurrency === "UAH" ? formatMoney(summary.totalIncomeUSD, false) : formatMoney(summary.totalIncomeUAH, true)}
@@ -405,7 +410,11 @@ export default function FinanceDashboardTab({
               </div>
               <div className="mt-2">
                 <h4 className="text-2xl font-bold tracking-tight text-rose-400">
-                  {displayMoney(summary.totalExpenseUSD, summary.totalExpenseUAH)}
+                  <RollingCounter
+                    value={globalCurrency === "UAH" ? summary.totalExpenseUAH : summary.totalExpenseUSD}
+                    prefix={globalCurrency === "UAH" ? "" : "$"}
+                    suffix={globalCurrency === "UAH" ? " ₴" : ""}
+                  />
                 </h4>
                 <p className={`text-[10px] font-medium mt-0.5 ${textMutedClass}`}>
                   {globalCurrency === "UAH" ? formatMoney(summary.totalExpenseUSD, false) : formatMoney(summary.totalExpenseUAH, true)}
@@ -428,7 +437,11 @@ export default function FinanceDashboardTab({
               </div>
               <div className="mt-2">
                 <h4 className="text-2xl font-bold tracking-tight text-emerald-450">
-                  {displayMoney(summary.operatingProfitUSD, summary.operatingProfitUAH)}
+                  <RollingCounter
+                    value={globalCurrency === "UAH" ? summary.operatingProfitUAH : summary.operatingProfitUSD}
+                    prefix={globalCurrency === "UAH" ? "" : "$"}
+                    suffix={globalCurrency === "UAH" ? " ₴" : ""}
+                  />
                 </h4>
                 <p className={`text-[10px] font-medium mt-0.5 ${textMutedClass}`}>
                   {globalCurrency === "UAH" ? formatMoney(summary.operatingProfitUSD, false) : formatMoney(summary.operatingProfitUAH, true)} ({summary.marginPercent}% маржа)
@@ -451,7 +464,11 @@ export default function FinanceDashboardTab({
               </div>
               <div className="mt-2">
                 <h4 className="text-2xl font-bold tracking-tight text-indigo-400">
-                  {displayMoney(summary.receivablesUSD, summary.receivablesUAH)}
+                  <RollingCounter
+                    value={globalCurrency === "UAH" ? summary.receivablesUAH : summary.receivablesUSD}
+                    prefix={globalCurrency === "UAH" ? "" : "$"}
+                    suffix={globalCurrency === "UAH" ? " ₴" : ""}
+                  />
                 </h4>
                 <p className={`text-[10px] font-medium mt-0.5 ${textMutedClass}`}>
                   {globalCurrency === "UAH" ? formatMoney(summary.receivablesUSD, false) : formatMoney(summary.receivablesUAH, true)}
@@ -680,7 +697,11 @@ export default function FinanceDashboardTab({
                     </div>
                     <div className="text-right">
                       <span className="text-sm font-extrabold text-emerald-400">
-                        {formatMoney(acc.current_balance, acc.currency === "UAH")}
+                        <RollingCounter
+                          value={acc.current_balance || 0}
+                          prefix={acc.currency === "USD" ? "$" : acc.currency === "EUR" ? "€" : ""}
+                          suffix={acc.currency === "UAH" ? " ₴" : ""}
+                        />
                       </span>
                     </div>
                   </div>
