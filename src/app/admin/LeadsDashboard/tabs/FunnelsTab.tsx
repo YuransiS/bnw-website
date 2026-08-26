@@ -2465,7 +2465,7 @@ export default function FunnelsTab({
                         const cleanSlug = item.slug || transliterateToSlug(item.label || item.name || 'step');
                         const count = botStepCounts[cleanSlug] || 0;
                         const boundBot = selectedFunnel.bot_username?.replace('@', '') || '';
-                        const webhookUrl = `https://bnw-prod.vercel.app/api/v1/integrations/sendpulse/webhook?project=${activeProject?.slug || 'sergiy'}&bot=${boundBot}&step=${cleanSlug}`;
+                        const webhookUrl = `https://bnw-prod.vercel.app/api/v1/integrations/sendpulse/webhook?project=${activeProject?.slug || 'sergiy'}&bot=${boundBot}&funnel_id=${selectedFunnel.id}&step=${cleanSlug}`;
                         const isCopied = copiedStep === cleanSlug;
 
                         return (

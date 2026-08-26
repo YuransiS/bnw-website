@@ -17,6 +17,8 @@ export async function POST(req: Request) {
     // 1. Extract query params
     const projectSlug = url.searchParams.get('project') || url.searchParams.get('project_slug') || 'sergiy';
     const queryStep = url.searchParams.get('step') || url.searchParams.get('event') || null;
+    const rawFunnelId = url.searchParams.get('funnel_id') || url.searchParams.get('funnel') || null;
+    let funnelId: string | null = rawFunnelId ? String(rawFunnelId).trim() : null;
 
     let body: any = {};
     try {
@@ -26,6 +28,9 @@ export async function POST(req: Request) {
     }
 
     const payload = typeof body === 'object' && body !== null ? body : {};
+    if (!funnelId && (payload.funnel_id || payload.funnel)) {
+      funnelId = String(payload.funnel_id || payload.funnel).trim();
+    }
 
     // 2. Extract step / milestone
     const step = (queryStep || payload.step || payload.event || payload.action || payload.trigger || 'bot_activity').toString().trim().toLowerCase();
@@ -72,7 +77,7 @@ export async function POST(req: Request) {
       // Check if bw_cid is in unified_orders
       const { data: matchedOrder } = await supabaseAdmin
         .from('unified_orders')
-        .select('id, customer_id')
+        .select('id, customer_id, funnel_id')
         .eq('project_id', projectId)
         .or(`bw_cid.eq.${bwCid},order_id.eq.${bwCid}`)
         .limit(1)
@@ -81,6 +86,9 @@ export async function POST(req: Request) {
       if (matchedOrder) {
         orderId = matchedOrder.id;
         customerId = matchedOrder.customer_id;
+        if (!funnelId && matchedOrder.funnel_id) {
+          funnelId = matchedOrder.funnel_id;
+        }
       }
     }
 
@@ -137,6 +145,7 @@ export async function POST(req: Request) {
       .from('bot_funnel_events')
       .insert({
         project_id: projectId,
+        funnel_id: funnelId,
         customer_id: customerId,
         order_id: orderId,
         bw_cid: bwCid,
@@ -161,6 +170,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       event_id: eventRecord.id,
+      funnel_id: funnelId,
       step,
       bw_cid: bwCid,
       telegram_id: telegramId,
