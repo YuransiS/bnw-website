@@ -4357,22 +4357,7 @@ export async function getFunnelBotEventsAction(projectId: string, funnelId?: str
       .eq("project_id", projectId);
 
     if (funnelId && funnelId !== "all" && funnelId !== "unassigned") {
-      const { data: funnel } = await adminSupabase
-        .from("funnels")
-        .select("bot_username, id")
-        .eq("id", funnelId)
-        .maybeSingle();
-
-      const cleanBot = (botUsername && botUsername !== "all")
-        ? botUsername.replace("@", "").trim()
-        : (funnel?.bot_username ? funnel.bot_username.replace("@", "").trim() : "");
-
-      if (cleanBot) {
-        // Priority: events explicitly tagged with this funnel_id, or untagged legacy bot events for this bot
-        query = query.or(`funnel_id.eq.${funnelId},and(funnel_id.is.null,bot_id.eq.${cleanBot}),and(funnel_id.is.null,bot_id.eq.@${cleanBot})`);
-      } else {
-        query = query.eq("funnel_id", funnelId);
-      }
+      query = query.eq("funnel_id", funnelId);
     } else if (botUsername && botUsername !== "all") {
       const cleanBot = botUsername.replace("@", "").trim();
       query = query.or(`bot_id.eq.${cleanBot},bot_id.eq.@${cleanBot}`);
