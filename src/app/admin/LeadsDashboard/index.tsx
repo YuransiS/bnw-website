@@ -976,19 +976,34 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           </button>
         )}
 
-        {/* Project Questionnaires / Surveys Tab - All approved users */}
+        {/* Project Questionnaires / Surveys Tab */}
         {viewType === "single" && role !== "expert" && (
-          <button
-            onClick={() => setActiveTab("quizzes")}
-            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === "quizzes"
-                ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
-                : "text-white/40 hover:text-white hover:bg-white/5"
-            }`}
-          >
-            <ClipboardCheck className="w-4 h-4 text-emerald-400" />
-            📋 Анкети
-          </button>
+          Boolean(activeProject?.survey_landing_paths && Array.isArray(activeProject.survey_landing_paths) && activeProject.survey_landing_paths.length > 0) ? (
+            <button
+              onClick={() => setActiveTab("quizzes")}
+              className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
+                activeTab === "quizzes"
+                  ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
+                  : "text-white/40 hover:text-white hover:bg-white/5"
+              }`}
+            >
+              <ClipboardCheck className="w-4 h-4 text-emerald-400" />
+              📋 Анкети
+            </button>
+          ) : (
+            <button
+              onClick={() => setActiveTab("quizzes")}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shrink-0 border border-dashed ${
+                activeTab === "quizzes"
+                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500 shadow-md"
+                  : "text-white/40 hover:text-white hover:bg-white/5 border-white/15"
+              }`}
+              title="Додати та налаштувати анкетні лендінги"
+            >
+              <Plus className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Анкети</span>
+            </button>
+          )
         )}
 
         {/* Project Funnels Tab - Superman, Admin, Founder, Cell Leader, Producer, Developer, Marketer */}
@@ -1403,7 +1418,24 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           project={activeProject}
           userRole={role}
           initialSubTab={projectSettingsInitialSubTab}
-          onProjectUpdated={() => handleRefresh()}
+          onProjectUpdated={(updatedProject) => {
+            if (updatedProject) {
+              setDashboardData((prev: any) => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  activeProject: {
+                    ...prev.activeProject,
+                    ...updatedProject
+                  },
+                  allowedProjects: (prev.allowedProjects || []).map((p: any) =>
+                    p.id === updatedProject.id ? { ...p, ...updatedProject } : p
+                  )
+                };
+              });
+            }
+            handleRefresh();
+          }}
         />
       )}
 

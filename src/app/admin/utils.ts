@@ -486,12 +486,18 @@ export const SURVEY_QUESTION_LABELS: Record<string, string> = {
 };
 
 const EXCLUDED_SURVEY_PAYLOAD_KEYS = new Set([
-  "visitor_id", "visitorid", "page_path", "full_url", "target_sheet",
-  "sheet_id", "entry_month", "vsl_sendpulse_stage", "api_key",
+  "visitor_id", "visitorid", "visitor_uuid", "bw_cid", "client_id", "session_id",
+  "cookie", "page_path", "full_url", "target_sheet", "sheet_id", "entry_month",
+  "vsl_sendpulse_stage", "api_key", "api_secret", "token", "quiz_result",
+  "raw_payload", "raw_row", "diagnostics_comment", "diagnosticscomment",
   "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
   "consent", "amount", "currency", "status", "action", "sp_contact_id",
   "tg_msg_id", "customer_name", "customer_phone", "uavslab", "id", "created_at",
-  "name", "phone", "email", "telegram", "instagram", "ig", "insta", "phone_number"
+  "name", "phone", "email", "telegram", "instagram", "ig", "insta", "phone_number",
+  "contact", "phone_full", "country_code", "ip", "user_agent", "referrer", "ref",
+  "fbp", "fbc", "fbclid", "gclid", "ttclid", "form_id", "lead_id", "touch_id",
+  "source", "type", "event", "event_name", "timestamp", "project_id", "slug",
+  "updated_at", "inserted_at", "device", "browser", "os", "screen_resolution"
 ]);
 
 /**
@@ -503,15 +509,73 @@ export const parseSurveyQuestions = (lead: any): Array<{ key: string; label: str
   const results: Array<{ key: string; label: string; value: string }> = [];
   const addedKeys = new Set<string>();
 
+  const formatKeyToLabel = (rawKey: string): string => {
+    const norm = rawKey.toLowerCase().trim();
+    if (SURVEY_QUESTION_LABELS[norm]) return SURVEY_QUESTION_LABELS[norm];
+    if (SURVEY_QUESTION_LABELS[rawKey]) return SURVEY_QUESTION_LABELS[rawKey];
+    
+    // Clean snake_case / kebab-case
+    const cleaned = rawKey
+      .replace(/^crm_lead_field_/, "")
+      .replace(/^field_/, "")
+      .replace(/^quiz_/, "")
+      .replace(/^q_/, "Питання ")
+      .replace(/[_-]+/g, " ")
+      .trim();
+
+    return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  };
+
   const addQA = (rawKey: string, val: any, overrideLabel?: string) => {
     if (val === undefined || val === null) return;
-    const cleanVal = typeof val === "string" ? val.trim() : JSON.stringify(val);
-    if (!cleanVal || cleanVal === "{}" || cleanVal === "[]" || cleanVal === "null") return;
     
     const normKey = rawKey.toLowerCase().trim();
+
+    // If key is quiz_result or raw_payload, unpack its nested values
+    if (normKey === "quiz_result" || normKey === "raw_payload" || normKey === "answers" || normKey === "questions" || normKey === "survey_data") {
+      let parsed = val;
+      if (typeof parsed === "string") {
+        try { parsed = JSON.parse(parsed); } catch {}
+      }
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        Object.entries(parsed).forEach(([subK, subVal]) => {
+          addQA(subK, subVal);
+        });
+        return;
+      }
+    }
+
     if (EXCLUDED_SURVEY_PAYLOAD_KEYS.has(normKey)) return;
 
-    const label = overrideLabel || SURVEY_QUESTION_LABELS[normKey] || SURVEY_QUESTION_LABELS[rawKey] || rawKey;
+    let cleanVal = "";
+    if (typeof val === "string") {
+      cleanVal = val.trim();
+      // Check if string is a nested JSON object
+      if ((cleanVal.startsWith("{") && cleanVal.endsWith("}")) || (cleanVal.startsWith("[") && cleanVal.endsWith("]"))) {
+        try {
+          const parsed = JSON.parse(cleanVal);
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            Object.entries(parsed).forEach(([subK, subVal]) => {
+              addQA(subK, subVal);
+            });
+            return;
+          }
+        } catch {}
+      }
+    } else if (typeof val === "number" || typeof val === "boolean") {
+      cleanVal = String(val);
+    } else if (Array.isArray(val)) {
+      cleanVal = val.map((item) => (typeof item === "string" ? item : JSON.stringify(item))).join(", ");
+    } else if (typeof val === "object") {
+      Object.entries(val).forEach(([subK, subVal]) => {
+        addQA(subK, subVal);
+      });
+      return;
+    }
+
+    if (!cleanVal || cleanVal === "{}" || cleanVal === "[]" || cleanVal === "null" || cleanVal === "[object Object]") return;
+
+    const label = overrideLabel || formatKeyToLabel(rawKey);
     const dedupeKey = `${label.toLowerCase()}:::${cleanVal.toLowerCase()}`;
     if (!addedKeys.has(dedupeKey)) {
       addedKeys.add(dedupeKey);
@@ -527,7 +591,7 @@ export const parseSurveyQuestions = (lead: any): Array<{ key: string; label: str
       if (idx > 0) {
         const label = line.substring(0, idx).trim();
         const value = line.substring(idx + 1).trim();
-        if (label && value) {
+        if (label && value && !EXCLUDED_SURVEY_PAYLOAD_KEYS.has(label.toLowerCase())) {
           addQA(label, value, label);
         }
       }

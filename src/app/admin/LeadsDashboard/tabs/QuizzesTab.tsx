@@ -97,16 +97,13 @@ export const QuizzesTab = React.memo(function QuizzesTab({
     setTimeout(() => setCopiedKey(null), 2000);
   }, []);
 
-  // 1. Resolve project survey landing paths (DB configured or defaults)
+  // 1. Resolve project survey landing paths (strictly from DB configured settings)
   const configuredSurveyPaths = useMemo<string[]>(() => {
-    if (activeProject?.survey_landing_paths && Array.isArray(activeProject.survey_landing_paths) && activeProject.survey_landing_paths.length > 0) {
+    if (activeProject?.survey_landing_paths && Array.isArray(activeProject.survey_landing_paths)) {
       return activeProject.survey_landing_paths;
     }
-    const defaultLandings = DEFAULT_PROJECT_LANDINGS[activeSlug] || [];
-    return defaultLandings
-      .filter((l) => l.type === "quiz" || l.path.includes("rozbir") || l.path.includes("diagnostic") || l.path.includes("anketa") || l.path.includes("consultation") || l.path.includes("vsl-form"))
-      .map((l) => l.path);
-  }, [activeProject?.survey_landing_paths, activeSlug]);
+    return [];
+  }, [activeProject?.survey_landing_paths]);
 
   // 2. Build landing options list for dropdown
   const surveyLandingOptions = useMemo(() => {
@@ -126,21 +123,13 @@ export const QuizzesTab = React.memo(function QuizzesTab({
     return Array.from(map.values());
   }, [configuredSurveyPaths, activeSlug]);
 
-  // 3. Filter leads that have survey data or match survey landings
+  // 3. Filter leads that match the configured survey landings
   const leadsWithSurveys = useMemo(() => {
+    if (configuredSurveyPaths.length === 0) return [];
     return processedLeads.filter((lead: any) => {
-      // Check if lead has diagnosticsComment or question answers
-      const hasComment = Boolean(lead.diagnosticsComment && lead.diagnosticsComment.trim().length > 0);
-      const meta = lead.metadata || {};
-      const raw = meta.raw_row || {};
-      const hasPayload = Boolean(raw.raw_payload || meta.raw_payload || (lead as any).raw_payload || raw.request || meta.request || raw.purpose || raw.niche);
-      
-      // Check if lead visited configured survey landings
-      const matchesConfiguredLanding = configuredSurveyPaths.some((path) => {
+      return configuredSurveyPaths.some((path) => {
         return isLeadMatchingLanding(lead, path);
       });
-
-      return hasComment || hasPayload || matchesConfiguredLanding;
     });
   }, [processedLeads, configuredSurveyPaths]);
 
@@ -205,6 +194,39 @@ export const QuizzesTab = React.memo(function QuizzesTab({
   const totalSurveys = leadsWithSurveys.length;
   const withPhoneCount = leadsWithSurveys.filter((l: any) => l.phone && l.phone.trim().length > 5).length;
   const withSocialsCount = leadsWithSurveys.filter((l: any) => l.telegram || getLeadInstagram(l)).length;
+
+  // If no survey landings configured for this project, show friendly first-setup prompt
+  if (configuredSurveyPaths.length === 0) {
+    return (
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className={`${cardClass} p-8 sm:p-12 text-center rounded-3xl shadow-2xl max-w-2xl mx-auto space-y-6 my-8`}>
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shadow-lg">
+            <ClipboardCheck className="w-8 h-8" />
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="text-xl font-black text-crm-text tracking-tight">
+              У вас ще немає налаштованих лендінгів з анкетами
+            </h3>
+            <p className="text-xs sm:text-sm text-crm-muted leading-relaxed max-w-lg mx-auto">
+              Бажаєте додати сторінки з анкетами? Оберіть, які посадкові сторінки проекту містять анкети чи форми опитування, щоб зручно читати відповіді респондентів, контактні дані та бачити повний шлях клієнта.
+            </p>
+          </div>
+
+          {onOpenSettings && (
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className="px-6 py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-black transition-all shadow-lg shadow-emerald-500/20 inline-flex items-center gap-2 cursor-pointer"
+            >
+              <Settings className="w-4 h-4" />
+              <span>⚙️ Налаштувати анкетні лендінги</span>
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -761,7 +783,7 @@ export const QuizzesTab = React.memo(function QuizzesTab({
 
                   <div className="space-y-0.5">
                     <span className="block font-bold uppercase text-[9px] text-crm-muted">
-                      Джерело трафіку
+                      Джерело (UTM Source)
                     </span>
                     <span className="text-crm-text font-bold block">
                       {selectedLead.utmSource || selectedLead.utm_source || "Прямий / Органіка"}
@@ -770,19 +792,19 @@ export const QuizzesTab = React.memo(function QuizzesTab({
 
                   <div className="space-y-0.5">
                     <span className="block font-bold uppercase text-[9px] text-crm-muted">
-                      Маркетингова кампанія
+                      Канал (UTM Medium)
                     </span>
                     <span className="text-crm-text font-bold block truncate">
-                      {selectedLead.utmCampaign || selectedLead.utm_campaign || "-"}
+                      {selectedLead.utmMedium || selectedLead.utm_medium || "-"}
                     </span>
                   </div>
 
                   <div className="space-y-0.5">
                     <span className="block font-bold uppercase text-[9px] text-crm-muted">
-                      Client ID (bw_cid)
+                      Кампанія (UTM Campaign)
                     </span>
-                    <span className="font-mono text-[10px] text-crm-muted truncate block">
-                      {selectedLead.visitor_uuid || selectedLead.id}
+                    <span className="text-crm-text font-bold block truncate">
+                      {selectedLead.utmCampaign || selectedLead.utm_campaign || "-"}
                     </span>
                   </div>
                 </div>

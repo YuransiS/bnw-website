@@ -102,9 +102,16 @@ export default function ProjectSettingsModal({
       setCurrency(project.default_currency || "UAH");
       setExpertShare(project.expert_share_percent ?? 50);
       setIsActive(project.is_active ?? true);
+      setSurveyLandingPaths(Array.isArray(project.survey_landing_paths) ? project.survey_landing_paths : []);
       setFeedback(null);
     }
-  }, [project]);
+  }, [project, isOpen]);
+
+  useEffect(() => {
+    if (initialSubTab) {
+      setActiveSubTab(initialSubTab);
+    }
+  }, [initialSubTab, isOpen]);
 
   // Load Meta Ad Accounts and current mapping
   useEffect(() => {

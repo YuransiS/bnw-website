@@ -67,13 +67,13 @@ export async function getSessionAndAccess(selectedProjectSlug?: string) {
   const isCellLeader = profile.role === "cell_leader";
 
   // Fetch allowed projects mapping
-  let allowedProjects: { id: string; name: string; slug: string; cell_id?: string | null; default_currency?: string; expert_share_percent?: number }[] = [];
+  let allowedProjects: { id: string; name: string; slug: string; cell_id?: string | null; default_currency?: string; expert_share_percent?: number; survey_landing_paths?: string[] }[] = [];
 
   if (isSuperman) {
     // Superman role sees all active projects without checking profile_projects mapping and RLS
     const { data: allProj } = await adminSupabase
       .from("projects")
-      .select("id, name, slug, is_active, cell_id, default_currency, expert_share_percent")
+      .select("id, name, slug, is_active, cell_id, default_currency, expert_share_percent, survey_landing_paths")
       .order("name");
     const projectsList = allProj || [];
 
@@ -89,7 +89,7 @@ export async function getSessionAndAccess(selectedProjectSlug?: string) {
     if (cellIds.length > 0) {
       const { data: cellProj } = await adminSupabase
         .from("projects")
-        .select("id, name, slug, is_active, cell_id, default_currency, expert_share_percent")
+        .select("id, name, slug, is_active, cell_id, default_currency, expert_share_percent, survey_landing_paths")
         .in("cell_id", cellIds)
         .order("name");
       const projectsList = cellProj || [];
@@ -98,7 +98,7 @@ export async function getSessionAndAccess(selectedProjectSlug?: string) {
   } else {
     const { data } = await supabase
       .from("profile_projects")
-      .select("projects(id, name, slug, is_active, cell_id, default_currency, expert_share_percent)")
+      .select("projects(id, name, slug, is_active, cell_id, default_currency, expert_share_percent, survey_landing_paths)")
       .eq("profile_id", user.id);
 
     allowedProjects = (data || [])
@@ -3839,18 +3839,25 @@ export async function updateProjectSettingsAction(
       .eq("id", user.id)
       .single();
 
-    if (!profile || !["admin", "superman", "founder", "developer"].includes(profile.role)) {
-      throw new Error("Only developers and founders can update project settings");
+    if (!profile || !["admin", "superman", "founder", "developer", "producer", "cell_leader", "marketer"].includes(profile.role)) {
+      throw new Error("Немає прав для збереження налаштувань проекту");
     }
 
     const { data: updated, error } = await adminSupabase
       .from("projects")
       .update(payload)
       .eq("id", projectId)
-      .select()
+      .select("id, name, slug, is_active, cell_id, default_currency, expert_share_percent, survey_landing_paths")
       .single();
 
     if (error) throw error;
+
+    try {
+      revalidatePath("/admin");
+      if (updated?.slug) {
+        revalidatePath(`/admin/project/${updated.slug}`, "page");
+      }
+    } catch {}
 
     return { success: true, project: updated };
   } catch (err: any) {
