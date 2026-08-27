@@ -393,3 +393,207 @@ export const fetchCRMLeads = async (slug: string, params: any) => {
   return fetchWithPostTunnel(slug, params);
 };
 
+/**
+ * Extracts and cleans Instagram username from lead fields, metadata, or raw payloads
+ */
+export const getLeadInstagram = (lead: any): string | null => {
+  if (!lead) return null;
+
+  // 1. Direct fields
+  const direct = lead.instagram || (lead as any).ig || (lead as any).insta;
+  if (direct && String(direct).trim()) {
+    return cleanInstagramUsername(String(direct));
+  }
+
+  // 2. Metadata / raw payload
+  const meta = lead.metadata || {};
+  const raw = meta.raw_row || {};
+  const payload = raw.raw_payload || meta.raw_payload || (lead as any).raw_payload || {};
+  
+  const parsedPayload = typeof payload === "string" ? (() => {
+    try { return JSON.parse(payload); } catch { return {}; }
+  })() : payload;
+
+  const candidate =
+    meta.instagram || meta.ig || meta.insta ||
+    raw.instagram || raw.ig || raw.insta || raw["Інстаграм"] || raw["інстаграм"] || raw["Instagram"] ||
+    parsedPayload?.instagram || parsedPayload?.ig || parsedPayload?.insta || parsedPayload?.["Інстаграм"] || parsedPayload?.["Instagram"];
+
+  if (candidate && String(candidate).trim()) {
+    return cleanInstagramUsername(String(candidate));
+  }
+
+  // 3. History inspection
+  if (Array.isArray(lead.history)) {
+    for (const touch of lead.history) {
+      const touchDirect = touch.instagram || touch.ig;
+      if (touchDirect && String(touchDirect).trim()) {
+        return cleanInstagramUsername(String(touchDirect));
+      }
+      const touchMeta = touch.metadata || {};
+      const touchRaw = touchMeta.raw_row || {};
+      const touchPayload = touchRaw.raw_payload || touchMeta.raw_payload || {};
+      const touchCandidate =
+        touchMeta.instagram || touchMeta.ig ||
+        touchRaw.instagram || touchRaw.ig || touchRaw["Інстаграм"] || touchRaw["Instagram"] ||
+        touchPayload?.instagram || touchPayload?.ig;
+      if (touchCandidate && String(touchCandidate).trim()) {
+        return cleanInstagramUsername(String(touchCandidate));
+      }
+    }
+  }
+
+  return null;
+};
+
+export const cleanInstagramUsername = (raw: string): string => {
+  return raw
+    .trim()
+    .replace(/^@+/, "")
+    .replace(/^https?:\/\/(www\.)?instagram\.com\//i, "")
+    .replace(/\/.*$/, "")
+    .replace(/\?.*$/, "");
+};
+
+/**
+ * Standard question labels dictionary for mapping raw JSON keys to friendly Ukrainian titles
+ */
+export const SURVEY_QUESTION_LABELS: Record<string, string> = {
+  purpose: "🎯 Мета / Ціль",
+  goal: "🎯 Ціль",
+  target_goal: "🎯 Фінансова ціль",
+  financial_goal: "💰 Фінансова ціль",
+  income: "💵 Поточний дохід",
+  revenue: "💵 Поточний дохід",
+  current_income: "💵 Поточний дохід",
+  niche: "💼 Ніша / Сфера діяльності",
+  sphere: "💼 Сфера діяльності",
+  difficulties: "⚠️ Труднощі / Що заважає",
+  problems: "⚠️ Головна проблема",
+  request: "📝 Запит на розбір",
+  readiness: "🚀 Готовність стартувати",
+  readiness_to_start: "🚀 Готовність стартувати",
+  budget: "💳 Бюджет / Інвестиції",
+  term: "⏳ Бажаний термін",
+  timeframe: "⏳ Термін реалізації",
+  experience: "🎓 Досвід / Кваліфікація",
+  debts: "💳 Наявність боргів / кредитів",
+  has_debts: "💳 Чи є борги зараз",
+  team: "👥 Команда / Співробітники",
+  tariff: "🏷️ Обраний тариф",
+  comment: "💬 Додатковий коментар",
+  notes: "💬 Примітки"
+};
+
+const EXCLUDED_SURVEY_PAYLOAD_KEYS = new Set([
+  "visitor_id", "visitorid", "page_path", "full_url", "target_sheet",
+  "sheet_id", "entry_month", "vsl_sendpulse_stage", "api_key",
+  "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
+  "consent", "amount", "currency", "status", "action", "sp_contact_id",
+  "tg_msg_id", "customer_name", "customer_phone", "uavslab", "id", "created_at",
+  "name", "phone", "email", "telegram", "instagram", "ig", "insta", "phone_number"
+]);
+
+/**
+ * Comprehensive parser for survey questions and answers from lead records
+ */
+export const parseSurveyQuestions = (lead: any): Array<{ key: string; label: string; value: string }> => {
+  if (!lead) return [];
+
+  const results: Array<{ key: string; label: string; value: string }> = [];
+  const addedKeys = new Set<string>();
+
+  const addQA = (rawKey: string, val: any, overrideLabel?: string) => {
+    if (val === undefined || val === null) return;
+    const cleanVal = typeof val === "string" ? val.trim() : JSON.stringify(val);
+    if (!cleanVal || cleanVal === "{}" || cleanVal === "[]" || cleanVal === "null") return;
+    
+    const normKey = rawKey.toLowerCase().trim();
+    if (EXCLUDED_SURVEY_PAYLOAD_KEYS.has(normKey)) return;
+
+    const label = overrideLabel || SURVEY_QUESTION_LABELS[normKey] || SURVEY_QUESTION_LABELS[rawKey] || rawKey;
+    const dedupeKey = `${label.toLowerCase()}:::${cleanVal.toLowerCase()}`;
+    if (!addedKeys.has(dedupeKey)) {
+      addedKeys.add(dedupeKey);
+      results.push({ key: rawKey, label, value: cleanVal });
+    }
+  };
+
+  // 1. Parse from diagnosticsComment if present
+  if (lead.diagnosticsComment && typeof lead.diagnosticsComment === "string") {
+    const lines = lead.diagnosticsComment.split("\n");
+    for (const line of lines) {
+      const idx = line.indexOf(":");
+      if (idx > 0) {
+        const label = line.substring(0, idx).trim();
+        const value = line.substring(idx + 1).trim();
+        if (label && value) {
+          addQA(label, value, label);
+        }
+      }
+    }
+  }
+
+  // 2. Parse from lead raw_payload & metadata
+  const meta = lead.metadata || {};
+  const raw = meta.raw_row || {};
+  let payload = raw.raw_payload || meta.raw_payload || lead.raw_payload || {};
+  if (typeof payload === "string") {
+    try { payload = JSON.parse(payload); } catch {}
+  }
+
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    Object.entries(payload).forEach(([k, val]) => {
+      addQA(k, val);
+    });
+  }
+
+  // 3. Known raw row questions
+  const knownFields = [
+    { key: "що турбує", label: "⚠️ Що турбує" },
+    { key: "Чи колола ботокс, або подібне", label: "💉 Процедури / Ботокс" },
+    { key: "Тип старіння", label: "🧬 Тип старіння" },
+    { key: "Рівень доходу", label: "💰 Рівень доходу" },
+    { key: "Дохід", label: "💰 Дохід" },
+    { key: "Фінансова ціль", label: "🎯 Фінансова ціль" },
+    { key: "Ціль", label: "🎯 Ціль" },
+    { key: "Борги", label: "💳 Борги / Кредити" },
+    { key: "Чи є борги зараз", label: "💳 Чи є борги зараз" },
+    { key: "За який термін вийти на 100 000$", label: "⏳ Термін до 100 000$" },
+    { key: "Відповідь 1 (скільки витрачаєш на косметику в міс.)", label: "💄 Витрати на косметику" },
+    { key: "niche", label: "💼 Ніша" },
+    { key: "request", label: "📝 Запит" },
+    { key: "tariff", label: "🏷️ Тариф" },
+    { key: "Коментар", label: "💬 Коментар" }
+  ];
+
+  knownFields.forEach((f) => {
+    const val = raw[f.key] || meta[f.key];
+    if (val) addQA(f.key, val, f.label);
+  });
+
+  // 4. Search in touches
+  if (Array.isArray(lead.history)) {
+    for (const touch of lead.history) {
+      const touchMeta = touch.metadata || {};
+      const touchRaw = touchMeta.raw_row || {};
+      let touchPayload = touchRaw.raw_payload || touchMeta.raw_payload || touch.raw_payload || {};
+      if (typeof touchPayload === "string") {
+        try { touchPayload = JSON.parse(touchPayload); } catch {}
+      }
+      if (touchPayload && typeof touchPayload === "object" && !Array.isArray(touchPayload)) {
+        Object.entries(touchPayload).forEach(([k, val]) => {
+          addQA(k, val);
+        });
+      }
+      knownFields.forEach((f) => {
+        const val = touchRaw[f.key] || touchMeta[f.key];
+        if (val) addQA(f.key, val, f.label);
+      });
+    }
+  }
+
+  return results;
+};
+
+

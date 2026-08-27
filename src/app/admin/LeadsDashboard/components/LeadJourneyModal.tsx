@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { isPaidStatus } from "@/lib/statusMapper";
 import { updateCustomerCommentAction, assignLeadToManagerAction } from "../../actions";
-import { getLeadDate, formatLocaleNumber, parseComments, CommentItem } from "@/app/admin/utils";
+import { getLeadDate, formatLocaleNumber, parseComments, CommentItem, getLeadInstagram } from "@/app/admin/utils";
 import { LeadItem } from "../types";
 
 interface LeadJourneyModalProps {
@@ -232,6 +232,17 @@ export default function LeadJourneyModal({
                   >
                     <Send className="w-3.5 h-3.5 text-cyan-400/80" />
                     <span>@{lead.telegram.replace(/^@/, "").replace(/^https?:\/\/t\.me\//, "")}</span>
+                  </a>
+                )}
+                {getLeadInstagram(lead) && (
+                  <a
+                    href={`https://instagram.com/${getLeadInstagram(lead)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-white/80 hover:text-pink-400 transition-colors font-medium"
+                  >
+                    <span className="text-pink-400 font-bold text-xs">IG:</span>
+                    <span>@{getLeadInstagram(lead)}</span>
                   </a>
                 )}
                 {lead.email && (

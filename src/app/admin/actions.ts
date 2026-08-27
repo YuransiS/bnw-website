@@ -3823,6 +3823,7 @@ export async function updateProjectSettingsAction(
     default_currency?: string;
     target_currency?: string;
     expert_share_percent?: number;
+    survey_landing_paths?: string[];
   }
 ) {
   try {

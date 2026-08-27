@@ -16,7 +16,11 @@ import {
   ShieldAlert,
   Key,
   Copy,
-  Check
+  Check,
+  ClipboardCheck,
+  Plus,
+  Trash2,
+  Globe
 } from "lucide-react";
 import { useTheme } from "../../ThemeProvider";
 import {
@@ -26,12 +30,14 @@ import {
   bindProjectAdAccountAction,
   updateMetaTokenAction
 } from "../../actions";
+import { DEFAULT_PROJECT_LANDINGS } from "@/lib/projectLandings";
 
 interface ProjectSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   project: any;
   userRole: string;
+  initialSubTab?: "general" | "meta" | "surveys";
   onProjectUpdated?: (updatedProject: any) => void;
 }
 
@@ -46,17 +52,30 @@ export default function ProjectSettingsModal({
   onClose,
   project,
   userRole,
+  initialSubTab = "general",
   onProjectUpdated
 }: ProjectSettingsModalProps) {
   const { theme } = useTheme();
   const isLight = theme === "light";
 
-  const [activeSubTab, setActiveSubTab] = useState<"general" | "meta">("general");
+  const [activeSubTab, setActiveSubTab] = useState<"general" | "meta" | "surveys">(initialSubTab);
   const [name, setName] = useState(project?.name || "");
   const [cellId, setCellId] = useState(project?.cell_id || "");
   const [currency, setCurrency] = useState(project?.default_currency || "UAH");
   const [expertShare, setExpertShare] = useState(project?.expert_share_percent ?? 50);
   const [isActive, setIsActive] = useState(project?.is_active ?? true);
+
+  // Survey Landings states
+  const [surveyLandingPaths, setSurveyLandingPaths] = useState<string[]>(() => {
+    if (project?.survey_landing_paths && Array.isArray(project.survey_landing_paths) && project.survey_landing_paths.length > 0) {
+      return project.survey_landing_paths;
+    }
+    const slug = project?.slug || "";
+    return (DEFAULT_PROJECT_LANDINGS[slug] || [])
+      .filter((l) => l.type === "quiz" || l.path.includes("rozbir") || l.path.includes("diagnostic") || l.path.includes("anketa") || l.path.includes("consultation") || l.path.includes("vsl-form"))
+      .map((l) => l.path);
+  });
+  const [customPathInput, setCustomPathInput] = useState("");
 
   // Meta Ads states
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(false);
@@ -178,6 +197,62 @@ export default function ProjectSettingsModal({
     }
   };
 
+  const toggleLandingSurvey = (path: string) => {
+    const clean = path.trim();
+    if (surveyLandingPaths.includes(clean)) {
+      setSurveyLandingPaths(surveyLandingPaths.filter((p) => p !== clean));
+    } else {
+      setSurveyLandingPaths([...surveyLandingPaths, clean]);
+    }
+  };
+
+  const handleAddCustomPath = (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = customPathInput.trim();
+    if (!clean) return;
+    let pathToAdd = clean;
+    if (pathToAdd.startsWith("http://") || pathToAdd.startsWith("https://")) {
+      try {
+        const u = new URL(pathToAdd);
+        pathToAdd = u.pathname || "/";
+      } catch {}
+    }
+    if (!pathToAdd.startsWith("/")) {
+      pathToAdd = `/${pathToAdd}`;
+    }
+    if (!surveyLandingPaths.includes(pathToAdd)) {
+      setSurveyLandingPaths([...surveyLandingPaths, pathToAdd]);
+    }
+    setCustomPathInput("");
+  };
+
+  const handleRemoveCustomPath = (pathToRemove: string) => {
+    setSurveyLandingPaths(surveyLandingPaths.filter((p) => p !== pathToRemove));
+  };
+
+  const handleSaveSurveyLandings = async () => {
+    if (!project?.id) return;
+    setIsSaving(true);
+    setFeedback(null);
+    try {
+      const res = await updateProjectSettingsAction(project.id, {
+        survey_landing_paths: surveyLandingPaths
+      });
+      if (res.error) throw new Error(res.error);
+      setFeedback({
+        type: "success",
+        message: `Анкетні лендінги успішно збережено (${surveyLandingPaths.length} обрано)!`
+      });
+      if (onProjectUpdated && res.project) {
+        onProjectUpdated(res.project);
+      }
+    } catch (err: any) {
+      setFeedback({ type: "error", message: err.message || "Помилка збереження анкетних лендінгів" });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSaveMetaBinding = async () => {
     if (!project?.slug || !selectedAdAccount) return;
 
@@ -260,6 +335,18 @@ export default function ProjectSettingsModal({
           >
             <Settings className="w-3.5 h-3.5" />
             Основні параметри
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab("surveys")}
+            className={`pb-3 text-xs font-extrabold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+              activeSubTab === "surveys"
+                ? "border-emerald-500 text-emerald-400"
+                : "border-transparent text-crm-muted hover:text-crm-text"
+            }`}
+          >
+            <ClipboardCheck className="w-3.5 h-3.5" />
+            📋 Лендінги анкет ({surveyLandingPaths.length})
           </button>
 
           <button
@@ -399,6 +486,164 @@ export default function ProjectSettingsModal({
               </button>
             </div>
           </form>
+        )}
+
+        {/* Tab 3: Survey Landings Settings */}
+        {activeSubTab === "surveys" && (
+          <div className="p-6 overflow-y-auto space-y-6 flex-1">
+            <div className="space-y-1.5">
+              <h3 className="text-sm font-black uppercase text-crm-text flex items-center gap-2">
+                <ClipboardCheck className="w-4 h-4 text-emerald-400" />
+                Вибір сторінок анкет та опитувань
+              </h3>
+              <p className="text-xs text-crm-muted leading-relaxed">
+                Позначте галочками лендінги та форми реєстрації вашого проекту, які є анкетами (наприклад, опитувальники, квізи, діагностики, форми VSL). Відповіді респондентів із цих сторінок автоматично відображатимуться у вкладці <strong>«📋 Анкети»</strong>.
+              </p>
+            </div>
+
+            {/* List of default and discovered landings */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black uppercase text-crm-muted tracking-wider">
+                  Лендінги проекту ({DEFAULT_PROJECT_LANDINGS[project?.slug || ""]?.length || 0})
+                </span>
+                <span className="text-[10px] font-bold text-emerald-400">
+                  Обрано для анкет: {surveyLandingPaths.length}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2.5 max-h-72 overflow-y-auto pr-1">
+                {(DEFAULT_PROJECT_LANDINGS[project?.slug || ""] || []).map((landing) => {
+                  const isChecked = surveyLandingPaths.includes(landing.path.trim());
+                  return (
+                    <div
+                      key={landing.path}
+                      onClick={() => toggleLandingSurvey(landing.path)}
+                      className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                        isChecked
+                          ? "bg-emerald-500/10 border-emerald-500/30 text-white shadow-sm"
+                          : "bg-white/[0.02] border-crm-border hover:border-white/20 text-crm-muted"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {}}
+                          className="rounded text-emerald-500 focus:ring-emerald-500 w-4 h-4 shrink-0 pointer-events-none"
+                        />
+                        <div className="truncate">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-extrabold text-crm-text truncate">
+                              {landing.label}
+                            </span>
+                            <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-white/5 border border-white/10 text-crm-muted shrink-0">
+                              {landing.path}
+                            </span>
+                          </div>
+                          {landing.url && (
+                            <span className="text-[10px] font-mono text-crm-muted/80 truncate block mt-0.5">
+                              {landing.url}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <span
+                        className={`text-[9px] font-black uppercase px-2 py-0.5 rounded shrink-0 border ${
+                          isChecked
+                            ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                            : "bg-white/5 text-crm-muted border-white/5"
+                        }`}
+                      >
+                        {isChecked ? "Анкета" : "Звичайний"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Custom Path Input */}
+            <div className="bg-white/[0.02] border border-crm-border rounded-2xl p-4 space-y-3">
+              <div className="space-y-0.5">
+                <h4 className="text-xs font-black uppercase text-crm-text flex items-center gap-1.5">
+                  <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                  Додати довільний URL / шлях анкетної форми
+                </h4>
+                <p className="text-[10px] text-crm-muted">
+                  Якщо ваша форма розміщена на нестандартному роуті або піддомені (наприклад, <code>/custom-quiz</code> або <code>/free-lection/vsl-form/</code>), введіть його тут:
+                </p>
+              </div>
+
+              <form onSubmit={handleAddCustomPath} className="flex gap-2">
+                <input
+                  type="text"
+                  value={customPathInput}
+                  onChange={(e) => setCustomPathInput(e.target.value)}
+                  placeholder="напр. /anketa або /vsl-diagnostic"
+                  className="flex-1 px-4 py-2 rounded-xl bg-crm-input-bg border border-crm-border text-crm-text text-xs font-bold focus:border-emerald-500 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={!customPathInput.trim()}
+                  className="px-4 py-2 bg-white/10 hover:bg-white/20 disabled:opacity-40 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Додати
+                </button>
+              </form>
+
+              {/* Show custom paths if any */}
+              {surveyLandingPaths.filter((p) => !(DEFAULT_PROJECT_LANDINGS[project?.slug || ""] || []).some((l) => l.path.trim() === p.trim())).length > 0 && (
+                <div className="space-y-2 pt-2 border-t border-crm-border">
+                  <span className="text-[10px] font-black uppercase text-crm-muted tracking-wider block">
+                    Додаткові додані шляхи:
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {surveyLandingPaths
+                      .filter((p) => !(DEFAULT_PROJECT_LANDINGS[project?.slug || ""] || []).some((l) => l.path.trim() === p.trim()))
+                      .map((customPath) => (
+                        <span
+                          key={customPath}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono bg-emerald-500/10 border border-emerald-500/20 text-emerald-300"
+                        >
+                          <span>{customPath}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveCustomPath(customPath)}
+                            className="text-emerald-300/60 hover:text-rose-400 transition-colors"
+                            title="Видалити"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Save Buttons */}
+            <div className="pt-4 border-t border-crm-border flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-xl border border-crm-border text-xs font-bold text-crm-muted hover:text-crm-text transition-all"
+              >
+                Скасувати
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveSurveyLandings}
+                disabled={isSaving}
+                className="flex items-center gap-2 px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-black transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50 cursor-pointer"
+              >
+                <Save className="w-3.5 h-3.5" />
+                {isSaving ? "Збереження..." : "Зберегти анкетні лендінги"}
+              </button>
+            </div>
+          </div>
         )}
 
         {/* Tab 2: Meta Ads Binding & Campaigns */}

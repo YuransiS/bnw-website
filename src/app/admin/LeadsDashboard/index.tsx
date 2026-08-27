@@ -161,6 +161,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
 
   const [activeQuizLeadId, setActiveQuizLeadId] = useState<string | null>(null);
   const [showProjectSettingsModal, setShowProjectSettingsModal] = useState(false);
+  const [projectSettingsInitialSubTab, setProjectSettingsInitialSubTab] = useState<"general" | "meta" | "surveys">("general");
 
   // Reference to track last fetched parameters to prevent duplicate/redundant client-side fetches
   const lastFetchedParamsRef = React.useRef<string>("");
@@ -975,6 +976,21 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           </button>
         )}
 
+        {/* Project Questionnaires / Surveys Tab - All approved users */}
+        {viewType === "single" && role !== "expert" && (
+          <button
+            onClick={() => setActiveTab("quizzes")}
+            className={`px-5 py-3 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
+              activeTab === "quizzes"
+                ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
+                : "text-white/40 hover:text-white hover:bg-white/5"
+            }`}
+          >
+            <ClipboardCheck className="w-4 h-4 text-emerald-400" />
+            📋 Анкети
+          </button>
+        )}
+
         {/* Project Funnels Tab - Superman, Admin, Founder, Cell Leader, Producer, Developer, Marketer */}
         {viewType === "single" && ["admin", "superman", "founder", "cell_leader", "producer", "developer", "marketer"].includes(role) && (
           <button
@@ -1282,6 +1298,11 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             setDateRangePreset={setDateRangePreset}
             openLeadModal={openLeadModal}
             activeSlug={activeSlug}
+            activeProject={activeProject}
+            onOpenSettings={() => {
+              setProjectSettingsInitialSubTab("surveys");
+              setShowProjectSettingsModal(true);
+            }}
             isLoading={isLoading}
           />
         )}
@@ -1381,6 +1402,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           onClose={() => setShowProjectSettingsModal(false)}
           project={activeProject}
           userRole={role}
+          initialSubTab={projectSettingsInitialSubTab}
           onProjectUpdated={() => handleRefresh()}
         />
       )}
