@@ -4741,6 +4741,47 @@ export async function syncSendPulseBotContactsAction(projectId: string, botUsern
         return false;
       });
 
+      // If no customer is matched, auto-create a new profile in unified_customers so they have a persistent bw_cid everywhere!
+      if (!matchedCustomer && !matchedClubSub) {
+        const newName = (c.name && c.name !== "Telegram User" && c.name !== "Пользователь Telegram" ? c.name : (spUsername ? `@${spUsername}` : "Підписник Telegram")).trim();
+        const { data: createdCust } = await adminSupabase
+          .from("unified_customers")
+          .insert({
+            project_id: project.id,
+            name: newName,
+            telegram: spUsername ? `@${spUsername}` : null,
+            telegram_id: spTgId ? Number(spTgId) : null,
+            phone: spPhone ? `+${spPhone}` : null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select("id, name, phone, email, telegram, telegram_id")
+          .single();
+
+        if (createdCust) {
+          matchedCustomer = createdCust;
+          customers.push(createdCust);
+
+          const newBwCid = `bw_${createdCust.id.replace(/-/g, "").substring(0, 16)}`;
+          // Also create initial lead order in unified_orders for CRM visibility
+          await adminSupabase.from("unified_orders").insert({
+            project_id: project.id,
+            customer_id: createdCust.id,
+            amount: 0.00,
+            status: "lead",
+            order_id: `SP_BOT_${spTgId || c.id}`,
+            bw_cid: newBwCid,
+            page_path: "/bot",
+            metadata: {
+              source: "sendpulse_bot_sync",
+              bot_name: bot.name,
+              username: spUsername
+            },
+            created_at: new Date().toISOString()
+          });
+        }
+      }
+
       if (matchedCustomer || matchedClubSub) {
         syncedCount++;
         const targetPhone = matchedCustomer?.phone || matchedClubSub?.phone;
@@ -4773,7 +4814,7 @@ export async function syncSendPulseBotContactsAction(projectId: string, botUsern
           } catch {}
         }
 
-        if (targetBwCid && !c.variables?.bw_cid) {
+        if (targetBwCid && (!c.variables?.bw_cid || c.variables?.bw_cid !== targetBwCid)) {
           try {
             await fetch("https://api.sendpulse.com/telegram/contacts/setVariable", {
               method: "POST",
