@@ -310,6 +310,60 @@ export const QuizzesTab = React.memo(function QuizzesTab({
         </div>
       </div>
 
+      {/* Individual Survey Landings Sub-tabs Bar */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
+        <button
+          type="button"
+          onClick={() => setSelectedLandingFilter("all")}
+          className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer shrink-0 border ${
+            selectedLandingFilter === "all"
+              ? "bg-emerald-500 text-black border-emerald-400 shadow-lg shadow-emerald-500/20"
+              : isLight
+              ? "bg-white text-neutral-700 border-neutral-200 hover:border-neutral-300"
+              : "bg-white/5 text-white/70 border-white/10 hover:border-white/20 hover:text-white"
+          }`}
+        >
+          <Layers className="w-3.5 h-3.5" />
+          <span>Усі анкетні сторінки</span>
+          <span
+            className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${
+              selectedLandingFilter === "all" ? "bg-black/20 text-black" : "bg-white/10 text-crm-muted"
+            }`}
+          >
+            {leadsWithSurveys.length}
+          </span>
+        </button>
+
+        {surveyLandingOptions.map((opt) => {
+          const isSelected = selectedLandingFilter === opt.path;
+          const count = leadsWithSurveys.filter((l) => isLeadMatchingLanding(l, opt.path)).length;
+          return (
+            <button
+              key={opt.path}
+              type="button"
+              onClick={() => setSelectedLandingFilter(opt.path)}
+              className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 cursor-pointer shrink-0 border ${
+                isSelected
+                  ? "bg-emerald-500 text-black border-emerald-400 shadow-lg shadow-emerald-500/20"
+                  : isLight
+                  ? "bg-white text-neutral-700 border-neutral-200 hover:border-neutral-300"
+                  : "bg-white/5 text-white/70 border-white/10 hover:border-white/20 hover:text-white"
+              }`}
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span>{opt.label}</span>
+              <span
+                className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${
+                  isSelected ? "bg-black/20 text-black" : "bg-white/10 text-crm-muted"
+                }`}
+              >
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Filter & Search Bar */}
       <div
         className={`p-4 rounded-2xl border ${
@@ -317,30 +371,8 @@ export const QuizzesTab = React.memo(function QuizzesTab({
         } flex flex-wrap items-center justify-between gap-4`}
       >
         <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
-          {/* Landing Filter Selector */}
-          <div className="flex items-center gap-2">
-            <span className={`text-[10px] font-black uppercase ${isLight ? "text-neutral-500" : "text-white/40"}`}>
-              Лендінг:
-            </span>
-            <select
-              value={selectedLandingFilter}
-              onChange={(e) => setSelectedLandingFilter(e.target.value)}
-              className="px-3 py-2 rounded-xl bg-crm-input-bg border border-crm-border text-xs font-bold text-crm-text focus:border-emerald-500 focus:outline-none cursor-pointer"
-            >
-              <option value="all">Усі анкетні сторінки ({leadsWithSurveys.length})</option>
-              {surveyLandingOptions.map((opt) => {
-                const count = leadsWithSurveys.filter((l) => isLeadMatchingLanding(l, opt.path)).length;
-                return (
-                  <option key={opt.path} value={opt.path}>
-                    {opt.label} ({count})
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-
           {/* Search Box */}
-          <div className="relative flex-1 min-w-[200px] max-w-md">
+          <div className="relative flex-1 min-w-[240px] max-w-md">
             <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-crm-muted" />
             <input
               type="text"

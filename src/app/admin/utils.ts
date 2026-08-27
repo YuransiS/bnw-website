@@ -214,120 +214,87 @@ export const getTouchUtm = (l: any, key: 'source' | 'medium' | 'campaign' | 'con
 };
 
 export const isLeadMatchingLanding = (lead: any, landingUrl: string) => {
-  if (landingUrl === "all") return true;
-  const targetNorm = normalizeUrlForMatching(landingUrl);
-  const targetHasPath = targetNorm.includes("/");
+  if (!lead) return false;
+  if (!landingUrl || landingUrl === "all") return true;
 
-  return lead.history?.some((touch: any) => {
-    const touchUrl = normalizeUrlForMatching(getTouchPageUrl(touch));
+  const targetClean = landingUrl.trim();
+  const targetNorm = normalizeUrlForMatching(targetClean);
+  const targetPath = targetClean.startsWith("http")
+    ? (() => { try { return new URL(targetClean).pathname.toLowerCase(); } catch { return targetClean.toLowerCase(); } })()
+    : targetClean.toLowerCase();
+
+  const isTargetRoot = targetClean === "/" || targetNorm === "" || targetPath === "/" || targetPath === "";
+
+  // Collect all items to check: lead itself + all touches in lead.history
+  const itemsToCheck: any[] = [lead];
+  if (Array.isArray(lead.history)) {
+    itemsToCheck.push(...lead.history);
+  }
+
+  for (const item of itemsToCheck) {
+    const itemUrl = normalizeUrlForMatching(getTouchPageUrl(item));
+    const itemPath = (
+      item.page_path ||
+      item.pagePath ||
+      item.metadata?.page_path ||
+      item.metadata?.pagePath ||
+      item.metadata?.raw_row?.page_path ||
+      item.metadata?.raw_row?.raw_payload?.page_path ||
+      ""
+    ).trim().toLowerCase();
 
     const originalSheet = (
-      touch.metadata?.original_sheet ||
-      touch.metadata?.originalSheet ||
-      touch.metadata?.raw_row?.original_sheet ||
-      touch.metadata?.raw_row?.originalSheet ||
+      item.metadata?.original_sheet ||
+      item.metadata?.originalSheet ||
+      item.metadata?.raw_row?.original_sheet ||
+      item.metadata?.raw_row?.originalSheet ||
       ""
     ).trim();
 
     const targetSheet = (
-      touch.metadata?.target_sheet ||
-      touch.metadata?.targetSheet ||
-      touch.metadata?.raw_row?.target_sheet ||
-      touch.metadata?.raw_row?.targetSheet ||
-      touch.metadata?.raw_row?.raw_payload?.sheet_name ||
+      item.metadata?.target_sheet ||
+      item.metadata?.targetSheet ||
+      item.metadata?.raw_row?.target_sheet ||
+      item.metadata?.raw_row?.targetSheet ||
+      item.metadata?.raw_row?.raw_payload?.sheet_name ||
       ""
     ).trim();
-    const tariff = (touch.metadata?.tariff || touch.metadata?.raw_row?.tariff || "").trim();
 
-    // 1. URL match
-    if (touchUrl) {
-      let urlMatch = false;
-      if (targetHasPath) {
-        urlMatch = touchUrl.includes(targetNorm);
-
-        if (!urlMatch && targetNorm.includes("body-taping")) {
-          urlMatch = touchUrl.includes("/body-taping");
-        }
-      } else {
-        const firstSlashIdx = touchUrl.indexOf("/");
-        if (firstSlashIdx === -1) {
-          urlMatch = touchUrl === targetNorm;
-        } else {
-          const domainPart = touchUrl.substring(0, firstSlashIdx);
-          const pathPart = touchUrl.substring(firstSlashIdx + 1).trim();
-          urlMatch = domainPart === targetNorm && pathPart === "";
-        }
-      }
-      if (urlMatch) return true;
+    // 1. Root / Main Page Matching
+    if (isTargetRoot) {
+      if (itemPath === "/" || itemPath === "" || itemPath === "/index.html") return true;
+      if (itemUrl && !itemUrl.includes("/")) return true;
+      if (["Головна", "Ленд 1", "Ленд 2", "МК 2.0", "Автовеб", "Ліди МК", "Webinars"].includes(originalSheet)) return true;
     }
 
-    // 2. Sheet semantic matching fallback
-    if (targetNorm.includes("svitlana3web.vercel.app")) {
-      if (originalSheet === "ВЕБ (бот)" || originalSheet === "Заявки ленд Веб" || originalSheet === "новый веб") return true;
-    }
-    if (targetNorm.includes("facedetox.vercel.app")) {
-      if (originalSheet === "новый веб") return true;
-    }
-    if (targetNorm.includes("tipstarinnyaa.vercel.app")) {
-      if (originalSheet === "Квіз") return true;
-    }
-    if (targetNorm.includes("antibotox.vercel.app")) {
-      if (originalSheet === "Заявки ленд веб") return true;
-    }
-    if (targetNorm.includes("zalomu-sny.vercel.app")) {
-      if (originalSheet === "Заломи") return true;
-    }
-    if (targetNorm.includes("body-taping")) {
-      if (originalSheet === "Тейпування тіла" || tariff === "body_taping") return true;
-    }
-
-    if (targetNorm.includes("/practicum")) {
-      if (originalSheet === "Практикум" || originalSheet === "Practicum_Leads" || targetSheet === "Заявки на практикум") return true;
-    }
-    if (targetNorm.includes("/free-lection") && !targetNorm.includes("vsl-form")) {
-      if (originalSheet === "VSL 1 етап" || originalSheet === "VSL Трафик" || originalSheet === "VLS Урок") return true;
-    }
-    if (targetNorm.includes("/free-lection/vsl-form")) {
-      if (originalSheet === "VSL Форма") return true;
-    }
-    if (targetNorm.includes("/rozbir")) {
-      const touchPath = (touch.page_path || touch.metadata?.page_path || touch.metadata?.raw_row?.page_path || "").trim().toLowerCase();
-      if (originalSheet === "Ленд 3" || targetSheet === "Ленд 3" || touchPath.includes("rozbir") || touchUrl.includes("/rozbir")) return true;
-    }
-    if (targetNorm.includes("/price")) {
-      if (originalSheet === "Бронювання" || originalSheet === "Заявки на практикум" || targetSheet === "Заявки на практикум") return true;
-    }
-    if (targetNorm.includes("/intensive")) {
-      if (targetSheet === "Заявки на інтенсив") return true;
-    }
-    if (targetNorm.includes("/web")) {
-      if (originalSheet === "Лиды Вебинар" || originalSheet === "Webinars" || originalSheet === "Заявки ленд Веб" || originalSheet === "ВЕБ (бот)" || originalSheet === "новый веб") return true;
-    }
-    if (targetNorm.includes("/sofia-invest/lesson")) {
-      if (originalSheet === "Заявки на урок" || originalSheet === "Анкети після уроку") return true;
-    }
-    if (targetNorm.includes("/sofia-invest") && !targetNorm.includes("/lesson")) {
-      if (originalSheet === "VSL Трафик" || originalSheet === "VLS Урок") return true;
-    }
-    if (targetNorm.includes("/office")) {
-      if (originalSheet === "Practicum_Leads") return true;
-    }
-
-    // 3. Fallback to main page if sheet matches default and target is main page (no path)
-    if (!targetHasPath) {
-      if (targetNorm.includes("victoria-mc.vercel.app")) {
-        if (["Ленд 1", "Ленд 2", "Ленд 3", "МК 2.0", "Автовеб", "Webinars", "Ліди МК"].includes(originalSheet)) return true;
-      }
-      if (targetNorm.includes("svitlanatape.vercel.app") || targetNorm.includes("svetlanatape.vercel.app")) {
-        if (["Діагностики", "Квіз", "Відповіді бот (19.05)"].includes(originalSheet)) return true;
-      }
-      if (targetNorm.includes("sofifinsight.vercel.app")) {
-        if (!originalSheet && !targetSheet) return true;
+    // 2. Specific Path Matching (e.g. "/rozbir", "/diagnostic", "/vsl-form")
+    if (targetPath && targetPath !== "/") {
+      const cleanSlug = targetPath.replace(/^\//, "").replace(/\/$/, "");
+      if (cleanSlug) {
+        if (itemPath.includes(cleanSlug)) return true;
+        if (itemUrl.includes(cleanSlug)) return true;
+        if (originalSheet.toLowerCase().includes(cleanSlug) || targetSheet.toLowerCase().includes(cleanSlug)) return true;
       }
     }
 
-    return false;
-  }) || false;
+    // 3. Exact URL matching
+    if (targetNorm && itemUrl) {
+      if (itemUrl.includes(targetNorm)) return true;
+    }
+
+    // 4. Known semantic project sheets
+    if (targetPath.includes("rozbir") || targetNorm.includes("rozbir")) {
+      if (originalSheet === "Ленд 3" || targetSheet === "Ленд 3" || originalSheet.toLowerCase().includes("розбір")) return true;
+    }
+    if (targetPath.includes("vsl") || targetNorm.includes("vsl")) {
+      if (originalSheet === "VSL Форма" || originalSheet === "VSL 1 етап" || originalSheet.toLowerCase().includes("vsl")) return true;
+    }
+    if (targetPath.includes("diagnostic") || targetNorm.includes("diagnostic") || targetNorm.includes("quiz")) {
+      if (originalSheet.toLowerCase().includes("діагностик") || originalSheet.toLowerCase().includes("квіз")) return true;
+    }
+  }
+
+  return false;
 };
 
 export const getLeadDate = (lead: any): Date => {

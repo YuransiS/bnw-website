@@ -197,6 +197,9 @@ export default function ProjectSettingsModal({
       if (onProjectUpdated && res.project) {
         onProjectUpdated(res.project);
       }
+      setTimeout(() => {
+        onClose();
+      }, 700);
     } catch (err: any) {
       setFeedback({ type: "error", message: err.message || "Помилка збереження" });
     } finally {
@@ -248,11 +251,14 @@ export default function ProjectSettingsModal({
       if (res.error) throw new Error(res.error);
       setFeedback({
         type: "success",
-        message: `Анкетні лендінги успішно збережено (${surveyLandingPaths.length} обрано)!`
+        message: `Анкетні лендінги успішно збережено на сервері (${surveyLandingPaths.length} обрано)!`
       });
       if (onProjectUpdated && res.project) {
         onProjectUpdated(res.project);
       }
+      setTimeout(() => {
+        onClose();
+      }, 700);
     } catch (err: any) {
       setFeedback({ type: "error", message: err.message || "Помилка збереження анкетних лендінгів" });
     } finally {
@@ -306,7 +312,12 @@ export default function ProjectSettingsModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+    >
       <div className="bg-crm-card border border-crm-border rounded-3xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-crm-border">
