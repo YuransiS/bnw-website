@@ -4461,7 +4461,9 @@ export async function getSendPulseBotContactsAction(projectId: string, botUserna
         : adminSupabase.from("club_subscriptions").select("*").eq("project_id", project.id).order("created_at", { ascending: false }),
       isViktoria
         ? adminSupabase.from("viktoria_chernysh_leads").select("name, phone, telegram, amount, status, order_id")
-        : Promise.resolve({ data: [] }),
+        : project.slug === "sergiy"
+        ? adminSupabase.from("sergiy_leads").select("name, phone, telegram, amount, status, order_id")
+        : adminSupabase.from("leads").select("name, phone, telegram, amount, status, order_id").eq("project_id", project.id),
       adminSupabase
         .from("bot_funnel_events")
         .select("id, step, funnel_id, customer_id, bw_cid, telegram_id, created_at, payload")
@@ -4589,7 +4591,7 @@ export async function getSendPulseBotContactsAction(projectId: string, botUserna
 
       // Calculate paid amounts scoped by funnel
       const customerOrders = matchedCustomer ? orders.filter((o: any) => o.customer_id === matchedCustomer.id) : [];
-      const funnelOrders = customerOrders.filter((o: any) => !funnelId || o.funnel_id === funnelId);
+      const funnelOrders = customerOrders.filter((o: any) => !funnelId || o.funnel_id === funnelId || !o.funnel_id);
       const otherFunnelOrders = customerOrders.filter((o: any) => funnelId && o.funnel_id && o.funnel_id !== funnelId);
 
       let funnelPaidAmount = funnelOrders
@@ -4604,19 +4606,20 @@ export async function getSendPulseBotContactsAction(projectId: string, botUserna
         .filter((o: any) => ["closed_won", "paid", "Approved", "Оплачено"].includes(o.status))
         .reduce((sum: number, o: any) => sum + Number(o.amount || 0), 0);
 
-      if (totalPaidAmount === 0 && matchedLead && ["Оплачено", "Купив курс", "Купив(-ла) Трипвайер"].includes(matchedLead.status)) {
+      if (totalPaidAmount === 0 && matchedLead && ["Оплачено", "Approved", "paid", "Купив курс", "Купив(-ла) Трипвайер"].includes(matchedLead.status)) {
         totalPaidAmount = Number(matchedLead.amount || 0);
-        if (!funnelId) funnelPaidAmount = totalPaidAmount;
+        if (!funnelId || funnelOrders.length === 0) funnelPaidAmount = totalPaidAmount;
       }
 
       const isMatched = !!(matchedCustomer || matchedClubSub || matchedLead);
 
       const resolvedName =
-        matchedClubSub?.name ||
-        matchedLead?.name ||
-        matchedCustomer?.name ||
+        (c.channel_data?.name && c.channel_data.name !== "Telegram User" && c.channel_data.name !== "Пользователь Telegram" ? c.channel_data.name : null) ||
         (c.name && c.name !== "Telegram User" && c.name !== "Пользователь Telegram" ? c.name : null) ||
-        (spUsername ? `@${spUsername}` : "Учасник клубу");
+        matchedClubSub?.name ||
+        matchedCustomer?.name ||
+        matchedLead?.name ||
+        (spUsername ? `@${spUsername}` : "Підписник Telegram");
 
       const resolvedPhone = matchedClubSub?.phone || matchedLead?.phone || matchedCustomer?.phone || spPhone || null;
 
