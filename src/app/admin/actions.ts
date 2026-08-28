@@ -4463,6 +4463,8 @@ export async function getSendPulseBotContactsAction(projectId: string, botUserna
         ? adminSupabase.from("viktoria_chernysh_leads").select("name, phone, telegram, amount, status, order_id")
         : project.slug === "sergiy"
         ? adminSupabase.from("sergiy_leads").select("name, phone, telegram, amount, status, order_id")
+        : project.slug === "nesoniaa"
+        ? adminSupabase.from("nesoniaa_leads").select("name, phone, telegram, amount, status, order_id")
         : adminSupabase.from("leads").select("name, phone, telegram, amount, status, order_id").eq("project_id", project.id),
       adminSupabase
         .from("bot_funnel_events")
