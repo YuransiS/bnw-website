@@ -4375,11 +4375,26 @@ export async function getFunnelBotEventsAction(projectId: string, funnelId?: str
 
     if (error) throw error;
 
-    // Aggregate by step
+    // Aggregate by step (unique users per step)
     const stepCounts: Record<string, number> = {};
+    const stepUserSets: Record<string, Set<string>> = {};
+
     (events || []).forEach((e: any) => {
       const s = (e.step || "other").toLowerCase();
-      stepCounts[s] = (stepCounts[s] || 0) + 1;
+      const userKey = e.telegram_id 
+        ? `tg_${e.telegram_id}` 
+        : e.customer_id 
+        ? `cust_${e.customer_id}` 
+        : e.bw_cid 
+        ? `bw_${e.bw_cid}` 
+        : `ev_${e.id}`;
+
+      if (!stepUserSets[s]) stepUserSets[s] = new Set();
+      stepUserSets[s].add(userKey);
+    });
+
+    Object.keys(stepUserSets).forEach((s) => {
+      stepCounts[s] = stepUserSets[s].size;
     });
 
     return {
