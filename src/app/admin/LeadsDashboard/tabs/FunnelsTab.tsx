@@ -2820,9 +2820,11 @@ export default function FunnelsTab({
                                               {st.includes("lesson_1") && "📖 Урок 1"}
                                               {st.includes("lesson_2") && "📖 Урок 2"}
                                               {st.includes("lesson_3") && "📖 Урок 3"}
+                                              {st.includes("lesson_4") && "📖 Урок 4"}
+                                              {st.includes("lesson_5") && "📖 Урок 5"}
                                               {st.includes("completed") && "🏁 Фініш"}
                                               {st.includes("offer") && "🎯 Офер"}
-                                              {!["bot_started", "lesson_1", "lesson_2", "lesson_3", "completed", "offer"].some(k => st.includes(k)) && st}
+                                              {!["bot_started", "lesson_1", "lesson_2", "lesson_3", "lesson_4", "lesson_5", "completed", "offer"].some(k => st.includes(k)) && st}
                                             </span>
                                           );
                                         })}
