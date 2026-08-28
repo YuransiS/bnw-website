@@ -207,7 +207,43 @@ export async function POST(req: Request) {
       })().catch(() => {});
     }
 
-    // 7. Insert bot funnel event
+    // 7. Idempotent Deduplication Check (1 event per user per step per funnel)
+    let existingEventQuery = supabaseAdmin
+      .from('bot_funnel_events')
+      .select('id')
+      .eq('project_id', projectId)
+      .eq('step', step);
+
+    if (funnelId) {
+      existingEventQuery = existingEventQuery.eq('funnel_id', funnelId);
+    } else {
+      existingEventQuery = existingEventQuery.is('funnel_id', null);
+    }
+
+    if (telegramId) {
+      existingEventQuery = existingEventQuery.eq('telegram_id', telegramId);
+    } else if (customerId) {
+      existingEventQuery = existingEventQuery.eq('customer_id', customerId);
+    } else if (bwCid) {
+      existingEventQuery = existingEventQuery.eq('bw_cid', bwCid);
+    }
+
+    const { data: existingEvent } = await existingEventQuery.limit(1).maybeSingle();
+
+    if (existingEvent) {
+      return NextResponse.json({
+        success: true,
+        event_id: existingEvent.id,
+        funnel_id: funnelId,
+        step,
+        bw_cid: bwCid,
+        telegram_id: telegramId,
+        customer_id: customerId,
+        deduplicated: true
+      });
+    }
+
+    // 8. Insert new bot funnel event
     const { data: eventRecord, error: insertError } = await supabaseAdmin
       .from('bot_funnel_events')
       .insert({
@@ -236,7 +272,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      event_id: eventRecord.id,
+      event_id: eventRecord?.id,
       funnel_id: funnelId,
       step,
       bw_cid: bwCid,
