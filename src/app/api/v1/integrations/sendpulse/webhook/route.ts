@@ -28,34 +28,36 @@ export async function POST(req: Request) {
     }
 
     const payload = typeof body === 'object' && body !== null ? body : {};
-    if (!funnelId && (payload.funnel_id || payload.funnel)) {
-      funnelId = String(payload.funnel_id || payload.funnel).trim();
+    const rootItem = payload['0'] || payload[0] || payload;
+    const contact = rootItem.contact || payload.contact || {};
+    const rawVariables = rootItem.variables || contact.variables || payload.variables || {};
+
+    if (!funnelId && (payload.funnel_id || payload.funnel || rootItem.funnel_id || rawVariables.funnel_id)) {
+      funnelId = String(payload.funnel_id || payload.funnel || rootItem.funnel_id || rawVariables.funnel_id).trim();
     }
 
     // 2. Extract step / milestone
-    const step = (queryStep || payload.step || payload.event || payload.action || payload.trigger || 'bot_activity').toString().trim().toLowerCase();
+    const step = (queryStep || payload.step || rootItem.step || payload.event || rootItem.event || payload.action || payload.trigger || 'bot_activity').toString().trim().toLowerCase();
 
     // 3. Extract identifier variables
-    const rawVariables = payload.variables || payload.contact?.variables || {};
-    const rawBwCid = payload.bw_cid || payload.cid || rawVariables.bw_cid || rawVariables.cid || rawVariables.start_param || payload.start_param || null;
+    const rawBwCid = rootItem.bw_cid || contact.bw_cid || payload.bw_cid || payload.cid || rawVariables.bw_cid || rawVariables.cid || rawVariables.start_param || payload.start_param || null;
     let bwCid = rawBwCid ? String(rawBwCid).trim() : null;
 
     // Telegram ID
-    const rawTgId = payload.telegram_id || payload.contact?.telegram_id || payload.chat_id || payload.contact?.channel_data?.id || (payload.channel === 'TELEGRAM' ? payload.contact?.id : null);
+    const rawTgId = contact.telegram_id || contact.channel_data?.id || rootItem.telegram_id || rootItem.chat_id || payload.telegram_id || payload.contact?.telegram_id || payload.chat_id || payload.contact?.channel_data?.id || (payload.channel === 'TELEGRAM' ? payload.contact?.id : null);
     const telegramId = rawTgId && !isNaN(Number(rawTgId)) ? Number(rawTgId) : null;
 
     // Contact info
-    const rawPhone = payload.phone || payload.contact?.phone || payload.contact?.phone_number || rawVariables.phone || null;
+    const rawPhone = contact.phone || contact.phone_number || rawVariables.phone || rootItem.phone || payload.phone || payload.contact?.phone || payload.contact?.phone_number || null;
     let phone: string | null = null;
     if (rawPhone) {
       const cleanDigits = String(rawPhone).replace(/[^0-9]/g, '');
       if (cleanDigits.length >= 7) phone = cleanDigits;
     }
 
-    const email = payload.email || payload.contact?.email || rawVariables.email || null;
-    const contact = payload.contact || {};
-    const telegramUsername = payload.username || payload.contact?.username || payload.contact?.channel_data?.username || rawVariables.username || null;
-    const botId = url.searchParams.get('bot') || url.searchParams.get('bot_username') || url.searchParams.get('bot_id') || payload.bot_id || payload.contact?.bot_id || null;
+    const email = contact.email || rawVariables.email || rootItem.email || payload.email || payload.contact?.email || null;
+    const telegramUsername = contact.username || contact.channel_data?.username || rootItem.username || rawVariables.username || payload.username || null;
+    const botId = url.searchParams.get('bot') || url.searchParams.get('bot_username') || url.searchParams.get('bot_id') || payload.bot_id || rootItem.bot?.id || payload.contact?.bot_id || null;
 
     // 4. Resolve Project ID
     const { data: project } = await supabaseAdmin

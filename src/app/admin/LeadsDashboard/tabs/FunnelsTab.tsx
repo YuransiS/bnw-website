@@ -414,14 +414,15 @@ export default function FunnelsTab({
   const [syncingBotContacts, setSyncingBotContacts] = useState<boolean>(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
   const [botContactSearch, setBotContactSearch] = useState<string>("");
-  const [botContactFilter, setBotContactFilter] = useState<"all" | "active" | "trial" | "matched" | "unmatched" | "expired">("all");
+  const [botContactFilter, setBotContactFilter] = useState<"all" | "this_funnel" | "paid" | "active" | "trial" | "matched" | "unmatched" | "expired">("all");
+  const [selectedStepFilter, setSelectedStepFilter] = useState<string | null>(null);
 
   const loadBotContacts = async (botUsername?: string) => {
     const targetBot = botUsername || selectedBotUsername || selectedFunnel?.bot_username;
     if (!targetBot) return;
     setLoadingBotContacts(true);
     try {
-      const res = await getSendPulseBotContactsAction(projectId, targetBot, 100);
+      const res = await getSendPulseBotContactsAction(projectId, targetBot, 100, selectedFunnel?.id);
       if (res && !("error" in res) && Array.isArray(res.contacts)) {
         setBotContacts(res.contacts);
       } else {
@@ -2460,65 +2461,105 @@ export default function FunnelsTab({
                   }
 
                   return (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
-                      {funnelSteps.map((item: any) => {
-                        const cleanSlug = item.slug || transliterateToSlug(item.label || item.name || 'step');
-                        const count = botStepCounts[cleanSlug] || 0;
-                        const boundBot = selectedFunnel.bot_username?.replace('@', '') || '';
-                        const webhookUrl = `https://bnw-prod.vercel.app/api/v1/integrations/sendpulse/webhook?project=${activeProject?.slug || 'sergiy'}&bot=${boundBot}&funnel_id=${selectedFunnel.id}&step=${cleanSlug}`;
-                        const isCopied = copiedStep === cleanSlug;
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+                        {funnelSteps.map((item: any) => {
+                          const cleanSlug = item.slug || transliterateToSlug(item.label || item.name || 'step');
+                          const count = botStepCounts[cleanSlug] || 0;
+                          const boundBot = selectedFunnel.bot_username?.replace('@', '') || '';
+                          const webhookUrl = `https://bnw-prod.vercel.app/api/v1/integrations/sendpulse/webhook?project=${activeProject?.slug || 'sergiy'}&bot=${boundBot}&funnel_id=${selectedFunnel.id}&step=${cleanSlug}`;
+                          const isCopied = copiedStep === cleanSlug;
+                          const isSelected = selectedStepFilter === cleanSlug;
 
-                        return (
-                          <div key={cleanSlug} className="bg-white/[0.02] border border-white/5 hover:border-white/15 p-3 rounded-xl space-y-2 flex flex-col justify-between transition-all group">
-                            <div>
-                              <div className="flex justify-between items-start gap-1">
-                                <span className="text-[11px] font-extrabold text-white block truncate" title={item.label}>
-                                  {item.label}
-                                </span>
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  <span className={`text-sm font-black ${item.color || 'text-white'}`}>{count}</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveCustomBotStep(cleanSlug)}
-                                    className="opacity-40 group-hover:opacity-100 hover:text-rose-400 text-white/50 hover:bg-rose-500/10 transition-all p-1 rounded-lg cursor-pointer"
-                                    title="Видалити цей крок із воронки"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
+                          return (
+                            <div 
+                              key={cleanSlug} 
+                              onClick={() => setSelectedStepFilter(prev => prev === cleanSlug ? null : cleanSlug)}
+                              className={`p-3 rounded-xl space-y-2 flex flex-col justify-between transition-all group cursor-pointer ${
+                                isSelected 
+                                  ? "bg-emerald-500/15 border-2 border-emerald-500 shadow-lg shadow-emerald-500/20 ring-2 ring-emerald-500/30" 
+                                  : "bg-white/[0.02] border border-white/5 hover:border-white/20 hover:bg-white/[0.04]"
+                              }`}
+                            >
+                              <div>
+                                <div className="flex justify-between items-start gap-1">
+                                  <span className="text-[11px] font-extrabold text-white block truncate" title={item.label}>
+                                    {item.label}
+                                  </span>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <span className={`text-sm font-black ${isSelected ? "text-emerald-400" : (item.color || 'text-white')}`}>
+                                      {count}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRemoveCustomBotStep(cleanSlug);
+                                      }}
+                                      className="opacity-40 group-hover:opacity-100 hover:text-rose-400 text-white/50 hover:bg-rose-500/10 transition-all p-1 rounded-lg cursor-pointer"
+                                      title="Видалити цей крок із воронки"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="flex items-center justify-between mt-0.5">
+                                  <span className="text-[9px] text-white/40 font-mono truncate" title={`step=${cleanSlug}`}>
+                                    step={cleanSlug}
+                                  </span>
+                                  {isSelected && (
+                                    <span className="text-[8px] bg-emerald-500 text-black font-black px-1.5 py-0.2 rounded shrink-0">
+                                      ФІЛЬТР
+                                    </span>
+                                  )}
                                 </div>
                               </div>
-                              <span className="text-[9px] text-white/40 block font-mono mt-0.5 truncate" title={`step=${cleanSlug}`}>
-                                step={cleanSlug}
-                              </span>
-                            </div>
 
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (navigator?.clipboard) {
-                                  navigator.clipboard.writeText(webhookUrl);
-                                  setCopiedStep(cleanSlug);
-                                  setTimeout(() => setCopiedStep(null), 2500);
-                                }
-                              }}
-                              className="w-full mt-2 px-2 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-bold text-white/70 hover:text-white rounded-lg flex items-center justify-center gap-1 transition-all cursor-pointer"
-                              title="Скопіювати Webhook URL для SendPulse"
-                            >
-                              {isCopied ? (
-                                <>
-                                  <Check className="w-3 h-3 text-emerald-400" />
-                                  <span className="text-emerald-400">Скопійовано!</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Copy className="w-3 h-3 text-white/50" />
-                                  <span>Копіювати Webhook</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        );
-                      })}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (navigator?.clipboard) {
+                                    navigator.clipboard.writeText(webhookUrl);
+                                    setCopiedStep(cleanSlug);
+                                    setTimeout(() => setCopiedStep(null), 2500);
+                                  }
+                                }}
+                                className="w-full mt-2 px-2 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-bold text-white/70 hover:text-white rounded-lg flex items-center justify-center gap-1 transition-all cursor-pointer"
+                                title="Скопіювати Webhook URL для SendPulse"
+                              >
+                                {isCopied ? (
+                                  <>
+                                    <Check className="w-3 h-3 text-emerald-400" />
+                                    <span className="text-emerald-400">Скопійовано!</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="w-3 h-3 text-white/50" />
+                                    <span>Копіювати Webhook</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {selectedStepFilter && (
+                        <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center justify-between text-xs text-emerald-300 font-bold animate-in fade-in">
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                            Фільтр кроку бота: <strong className="text-white">{funnelSteps.find((s: any) => (s.slug || s.id) === selectedStepFilter)?.label || selectedStepFilter}</strong> (клікніть на картку ще раз, щоб скинути)
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedStepFilter(null)}
+                            className="px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[10px] rounded-lg transition-all"
+                          >
+                            ✕ Скинути фільтр
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })()}
@@ -2526,7 +2567,7 @@ export default function FunnelsTab({
                 {/* SendPulse Subscribers & CRM bw_cid Mapping Section */}
                 <div className="pt-4 border-t border-white/5 space-y-4">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2.5">
                       <div className="p-1.5 bg-emerald-500/10 rounded-lg border border-emerald-500/20 text-emerald-400">
                         <Users className="w-4 h-4" />
                       </div>
@@ -2606,6 +2647,33 @@ export default function FunnelsTab({
                       </button>
                       <button
                         type="button"
+                        onClick={() => setBotContactFilter("this_funnel")}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-all flex items-center gap-1 cursor-pointer ${
+                          botContactFilter === "this_funnel" ? "bg-purple-500/20 text-purple-300 border border-purple-500/30" : "text-white/40 hover:text-white/70"
+                        }`}
+                      >
+                        🎯 Тільки з цієї воронки ({botContacts.filter(c => c.hasEventsInThisFunnel).length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBotContactFilter("paid")}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-all flex items-center gap-1 cursor-pointer ${
+                          botContactFilter === "paid" ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : "text-white/40 hover:text-white/70"
+                        }`}
+                      >
+                        💳 Оплатили ({botContacts.filter(c => (c.funnelPaidAmount || 0) > 0 || (c.totalPaidAmount || 0) > 0).length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBotContactFilter("matched")}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-all flex items-center gap-1 cursor-pointer ${
+                          botContactFilter === "matched" ? "bg-cyan-500/20 text-cyan-300" : "text-white/40 hover:text-white/70"
+                        }`}
+                      >
+                        <Check className="w-3 h-3" /> Зв'язані ({botContacts.filter(c => c.isMatched).length})
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setBotContactFilter("active")}
                         className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-all flex items-center gap-1 cursor-pointer ${
                           botContactFilter === "active" ? "bg-emerald-500/20 text-emerald-400" : "text-white/40 hover:text-white/70"
@@ -2621,15 +2689,6 @@ export default function FunnelsTab({
                         }`}
                       >
                         🟡 Тріал ({botContacts.filter(c => c.rawTariff === "trial_1_week" || String(c.rawClubStatus || "").includes("trial") || String(c.rawClubStatus || "").includes("funnel")).length})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setBotContactFilter("matched")}
-                        className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-all flex items-center gap-1 cursor-pointer ${
-                          botContactFilter === "matched" ? "bg-cyan-500/20 text-cyan-300" : "text-white/40 hover:text-white/70"
-                        }`}
-                      >
-                        <Check className="w-3 h-3" /> Зв'язані ({botContacts.filter(c => c.isMatched).length})
                       </button>
                       <button
                         type="button"
@@ -2650,7 +2709,7 @@ export default function FunnelsTab({
                         <thead className="sticky top-0 bg-[#0c0c10] border-b border-white/10 text-[9px] uppercase font-black text-white/40 z-10">
                           <tr>
                             <th className="p-3">Учасник / Telegram</th>
-                            <th className="p-3">Тариф & Статус Клубу</th>
+                            <th className="p-3">Пройдені кроки у воронці</th>
                             <th className="p-3">Сквозний ID (bw_cid)</th>
                             <th className="p-3">Контакти (Телефон / Email)</th>
                             <th className="p-3 text-right">Оплати в CRM</th>
@@ -2660,6 +2719,9 @@ export default function FunnelsTab({
                         <tbody className="divide-y divide-white/5 font-semibold text-white/80">
                           {(() => {
                             const filtered = botContacts.filter((c: any) => {
+                              if (selectedStepFilter && (!c.passedSteps || !c.passedSteps.includes(selectedStepFilter))) return false;
+                              if (botContactFilter === "this_funnel" && !c.hasEventsInThisFunnel) return false;
+                              if (botContactFilter === "paid" && (c.funnelPaidAmount || 0) === 0 && (c.totalPaidAmount || 0) === 0) return false;
                               if (botContactFilter === "active" && !(c.rawClubStatus === "active" && c.rawTariff !== "trial_1_week")) return false;
                               if (botContactFilter === "trial" && !(c.rawTariff === "trial_1_week" || String(c.rawClubStatus || "").includes("trial") || String(c.rawClubStatus || "").includes("funnel"))) return false;
                               if (botContactFilter === "matched" && !c.isMatched) return false;
@@ -2681,7 +2743,7 @@ export default function FunnelsTab({
                                 <tr>
                                   <td colSpan={6} className="p-8 text-center text-white/40 italic">
                                     <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-emerald-400" />
-                                    Завантаження бази підписників та учасників клубу...
+                                    Завантаження бази підписників та учасників воронки...
                                   </td>
                                 </tr>
                               );
@@ -2693,6 +2755,8 @@ export default function FunnelsTab({
                                   <td colSpan={6} className="p-8 text-center text-white/30 italic">
                                     {botContacts.length === 0
                                       ? "Не знайдено підписників або перевірте зв'язок з базою."
+                                      : selectedStepFilter
+                                      ? `Немає підписників, які дійшли до кроку "${selectedStepFilter}".`
                                       : "Немає підписників, які відповідають критеріям пошуку."}
                                   </td>
                                 </tr>
@@ -2701,6 +2765,7 @@ export default function FunnelsTab({
 
                             return filtered.map((c: any) => {
                               const cleanUsername = (c.username || "").replace(/^@/, "");
+                              const stepsPassed = Array.isArray(c.passedSteps) ? c.passedSteps : [];
                               return (
                                 <tr key={c.id} className="hover:bg-white/[0.02] transition-all">
                                   <td className="p-3">
@@ -2734,36 +2799,40 @@ export default function FunnelsTab({
                                     </div>
                                   </td>
 
-                                  {/* Tariff & Club Status */}
+                                  {/* Passed Bot Steps */}
                                   <td className="p-3">
-                                    <div className="space-y-1">
-                                      {c.tariff ? (
-                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                          <span className="px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-purple-300 text-[10px] font-extrabold">
-                                            {c.tariff}
-                                          </span>
-                                          {c.isSubscription && (
-                                            <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[9px] font-bold">
-                                              🔄 Рекурент
+                                    {stepsPassed.length > 0 ? (
+                                      <div className="flex items-center gap-1 flex-wrap max-w-xs">
+                                        {stepsPassed.map((st: string) => {
+                                          const isCurrentStep = selectedStepFilter === st;
+                                          const stepTime = c.stepTimestamps?.[st] ? new Date(c.stepTimestamps[st]).toLocaleDateString("uk-UA", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
+                                          return (
+                                            <span 
+                                              key={st}
+                                              title={stepTime ? `Пройдено: ${stepTime}` : st}
+                                              className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold flex items-center gap-1 border ${
+                                                isCurrentStep
+                                                  ? "bg-emerald-500 text-black border-emerald-400 font-black shadow-sm"
+                                                  : "bg-white/5 border-white/10 text-white/80 hover:border-white/20"
+                                              }`}
+                                            >
+                                              {st === "bot_started" && "🚀"}
+                                              {st.includes("lesson_1") && "📖 Урок 1"}
+                                              {st.includes("lesson_2") && "📖 Урок 2"}
+                                              {st.includes("lesson_3") && "📖 Урок 3"}
+                                              {st.includes("completed") && "🏁 Фініш"}
+                                              {st.includes("offer") && "🎯 Офер"}
+                                              {!["bot_started", "lesson_1", "lesson_2", "lesson_3", "completed", "offer"].some(k => st.includes(k)) && st}
                                             </span>
-                                          )}
-                                        </div>
-                                      ) : (
-                                        <span className="text-[10px] text-white/30 italic">Без тарифу</span>
-                                      )}
-                                      {c.clubStatus && (
-                                        <span className="text-[10px] text-white/60 block font-semibold">
-                                          {c.clubStatus}
-                                        </span>
-                                      )}
-                                      {c.expiresAt && (
-                                        <span className="text-[9px] text-white/30 font-mono block">
-                                          Діє до: {new Date(c.expiresAt).toLocaleDateString("uk-UA")}
-                                        </span>
-                                      )}
-                                    </div>
+                                          );
+                                        })}
+                                      </div>
+                                    ) : (
+                                      <span className="text-[10px] text-white/30 italic">Ще не проходив</span>
+                                    )}
                                   </td>
 
+                                  {/* bw_cid */}
                                   <td className="p-3">
                                     {c.bwCid ? (
                                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono text-[10px] font-bold">
@@ -2777,6 +2846,7 @@ export default function FunnelsTab({
                                     )}
                                   </td>
 
+                                  {/* Phone / Email */}
                                   <td className="p-3">
                                     <div className="space-y-0.5">
                                       {c.phone ? (
@@ -2794,14 +2864,24 @@ export default function FunnelsTab({
                                     </div>
                                   </td>
 
+                                  {/* Orders / Payments */}
                                   <td className="p-3 text-right">
-                                    {c.totalPaidAmount > 0 ? (
+                                    {c.funnelPaidAmount > 0 ? (
                                       <div>
                                         <span className="text-emerald-400 font-black text-xs block">
-                                          {c.totalPaidAmount.toLocaleString("uk-UA")} ₴
+                                          {c.funnelPaidAmount.toLocaleString("uk-UA")} ₴
                                         </span>
-                                        <span className="text-[9px] text-white/40">
-                                          {c.ordersCount} {c.ordersCount === 1 ? "замовлення" : "замовлень"}
+                                        <span className="text-[9px] text-emerald-400/80 font-bold block">
+                                          Оплата цієї воронки
+                                        </span>
+                                      </div>
+                                    ) : c.otherFunnelPaidAmount > 0 ? (
+                                      <div>
+                                        <span className="text-cyan-400/90 font-bold text-[11px] block">
+                                          {c.otherFunnelPaidAmount.toLocaleString("uk-UA")} ₴
+                                        </span>
+                                        <span className="text-[8px] text-cyan-400/60 font-semibold block">
+                                          Оплата іншої воронки
                                         </span>
                                       </div>
                                     ) : c.ordersCount > 0 ? (
@@ -2811,6 +2891,7 @@ export default function FunnelsTab({
                                     )}
                                   </td>
 
+                                  {/* Last Activity */}
                                   <td className="p-3 text-right">
                                     <span className="text-[10px] text-white/50 block font-mono">
                                       {c.lastActivity ? new Date(c.lastActivity).toLocaleDateString("uk-UA", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}

@@ -4392,8 +4392,7 @@ export async function getFunnelBotEventsAction(projectId: string, funnelId?: str
     return { error: err.message || "Failed to fetch bot events" };
   }
 }
-
-export async function getSendPulseBotContactsAction(projectId: string, botUsernameOrId: string, limit: number = 100) {
+export async function getSendPulseBotContactsAction(projectId: string, botUsernameOrId: string, limit: number = 100, funnelId?: string) {
   try {
     await checkProjectAccess(projectId);
     const adminSupabase = createAdminClient();
@@ -4433,27 +4432,32 @@ export async function getSendPulseBotContactsAction(projectId: string, botUserna
     // 3. Fetch CRM customers, orders, and project-specific club subscriptions
     const isViktoria = project.slug === "viktoria_chernysh";
 
-    const [customersRes, ordersRes, clubSubsRes, leadsRes] = await Promise.all([
+    const [customersRes, ordersRes, clubSubsRes, leadsRes, botEventsRes] = await Promise.all([
       adminSupabase
         .from("unified_customers")
         .select("id, name, phone, email, telegram, telegram_id, created_at")
         .eq("project_id", project.id),
       adminSupabase
         .from("unified_orders")
-        .select("id, customer_id, order_id, amount, status, metadata, created_at")
+        .select("id, customer_id, order_id, amount, status, metadata, funnel_id, created_at")
         .eq("project_id", project.id),
       isViktoria
         ? adminSupabase.from("viktoria_club_subscriptions").select("*").order("created_at", { ascending: false })
         : adminSupabase.from("club_subscriptions").select("*").eq("project_id", project.id).order("created_at", { ascending: false }),
       isViktoria
         ? adminSupabase.from("viktoria_chernysh_leads").select("name, phone, telegram, amount, status, order_id")
-        : Promise.resolve({ data: [] })
+        : Promise.resolve({ data: [] }),
+      adminSupabase
+        .from("bot_funnel_events")
+        .select("id, step, funnel_id, customer_id, bw_cid, telegram_id, created_at, payload")
+        .eq("project_id", project.id)
     ]);
 
     const customers = customersRes.data || [];
     const orders = ordersRes.data || [];
     const clubSubs = clubSubsRes.data || [];
     const projectLeads = leadsRes.data || [];
+    const botEvents = botEventsRes.data || [];
 
     // Helper to format tariff
     const formatTariff = (t: string) => {
@@ -4487,7 +4491,7 @@ export async function getSendPulseBotContactsAction(projectId: string, botUserna
     const seenTgUserIds = new Set<string>();
     const seenUsernames = new Set<string>();
 
-    // 4. Map contacts with CRM and Club Subscriptions
+    // 4. Map contacts with CRM, Club Subscriptions, and Bot Funnel Events
     const matchedContacts = rawContacts.map((c: any) => {
       seenContactIds.add(c.id);
       const spUsername = (c.username || c.channel_data?.username || "").replace(/^@/, "").toLowerCase().trim();
@@ -4533,14 +4537,56 @@ export async function getSendPulseBotContactsAction(projectId: string, botUserna
         return false;
       });
 
-      // Calculate paid amounts
+      const bwCid = matchedCustomer
+        ? `bw_${matchedCustomer.id.replace(/-/g, "").substring(0, 16)}`
+        : matchedClubSub
+        ? `bw_${matchedClubSub.id.replace(/-/g, "").substring(0, 16)}`
+        : (c.variables?.bw_cid || null);
+
+      // Match in bot_funnel_events
+      const contactEvents = botEvents.filter((e: any) => {
+        if (spTgId && e.telegram_id && String(e.telegram_id) === String(spTgId)) return true;
+        if (matchedCustomer && e.customer_id && e.customer_id === matchedCustomer.id) return true;
+        if (bwCid && e.bw_cid && e.bw_cid === bwCid) return true;
+        const eTgUser = (e.payload?.['0']?.contact?.username || e.payload?.contact?.username || "").replace(/^@/, "").toLowerCase().trim();
+        if (spUsername && eTgUser && spUsername === eTgUser) return true;
+        return false;
+      });
+
+      const funnelSpecificEvents = funnelId 
+        ? contactEvents.filter((e: any) => e.funnel_id === funnelId)
+        : contactEvents;
+
+      const passedSteps = Array.from(new Set(funnelSpecificEvents.map((e: any) => e.step)));
+      const allFunnelSteps = Array.from(new Set(contactEvents.map((e: any) => e.step)));
+      
+      const stepTimestamps: Record<string, string> = {};
+      funnelSpecificEvents.forEach((e: any) => {
+        if (!stepTimestamps[e.step] || new Date(e.created_at) > new Date(stepTimestamps[e.step])) {
+          stepTimestamps[e.step] = e.created_at;
+        }
+      });
+
+      // Calculate paid amounts scoped by funnel
       const customerOrders = matchedCustomer ? orders.filter((o: any) => o.customer_id === matchedCustomer.id) : [];
+      const funnelOrders = customerOrders.filter((o: any) => !funnelId || o.funnel_id === funnelId);
+      const otherFunnelOrders = customerOrders.filter((o: any) => funnelId && o.funnel_id && o.funnel_id !== funnelId);
+
+      let funnelPaidAmount = funnelOrders
+        .filter((o: any) => ["closed_won", "paid", "Approved", "Оплачено"].includes(o.status))
+        .reduce((sum: number, o: any) => sum + Number(o.amount || 0), 0);
+
+      const otherFunnelPaidAmount = otherFunnelOrders
+        .filter((o: any) => ["closed_won", "paid", "Approved", "Оплачено"].includes(o.status))
+        .reduce((sum: number, o: any) => sum + Number(o.amount || 0), 0);
+
       let totalPaidAmount = customerOrders
         .filter((o: any) => ["closed_won", "paid", "Approved", "Оплачено"].includes(o.status))
         .reduce((sum: number, o: any) => sum + Number(o.amount || 0), 0);
 
       if (totalPaidAmount === 0 && matchedLead && ["Оплачено", "Купив курс", "Купив(-ла) Трипвайер"].includes(matchedLead.status)) {
         totalPaidAmount = Number(matchedLead.amount || 0);
+        if (!funnelId) funnelPaidAmount = totalPaidAmount;
       }
 
       const isMatched = !!(matchedCustomer || matchedClubSub || matchedLead);
@@ -4554,12 +4600,6 @@ export async function getSendPulseBotContactsAction(projectId: string, botUserna
 
       const resolvedPhone = matchedClubSub?.phone || matchedLead?.phone || matchedCustomer?.phone || spPhone || null;
 
-      const bwCid = matchedCustomer
-        ? `bw_${matchedCustomer.id.replace(/-/g, "").substring(0, 16)}`
-        : matchedClubSub
-        ? `bw_${matchedClubSub.id.replace(/-/g, "").substring(0, 16)}`
-        : (c.variables?.bw_cid || null);
-
       return {
         id: c.id,
         telegramId: spTgId,
@@ -4572,6 +4612,13 @@ export async function getSendPulseBotContactsAction(projectId: string, botUserna
         matchedCustomerId: matchedCustomer?.id || matchedClubSub?.id || null,
         ordersCount: customerOrders.length || (totalPaidAmount > 0 ? 1 : 0),
         totalPaidAmount,
+        funnelPaidAmount,
+        otherFunnelPaidAmount,
+        hasOtherFunnelOrders: otherFunnelOrders.length > 0 || otherFunnelPaidAmount > 0,
+        passedSteps,
+        allFunnelSteps,
+        stepTimestamps,
+        hasEventsInThisFunnel: passedSteps.length > 0,
         tariff: matchedClubSub?.tariff ? formatTariff(matchedClubSub.tariff) : null,
         rawTariff: matchedClubSub?.tariff || null,
         clubStatus: matchedClubSub?.status ? formatClubStatus(matchedClubSub.status, matchedClubSub.tariff) : null,
@@ -4631,6 +4678,13 @@ export async function getSendPulseBotContactsAction(projectId: string, botUserna
           matchedCustomerId: matchedCust?.id || sub.id,
           ordersCount: custOrders.length || (totalPaid > 0 ? 1 : 0),
           totalPaidAmount: totalPaid,
+          funnelPaidAmount: totalPaid,
+          otherFunnelPaidAmount: 0,
+          hasOtherFunnelOrders: false,
+          passedSteps: [],
+          allFunnelSteps: [],
+          stepTimestamps: {},
+          hasEventsInThisFunnel: false,
           tariff: formatTariff(sub.tariff),
           rawTariff: sub.tariff,
           clubStatus: formatClubStatus(sub.status, sub.tariff),
