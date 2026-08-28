@@ -4506,6 +4506,14 @@ export async function getSendPulseBotContactsAction(projectId: string, botUserna
     const seenTgUserIds = new Set<string>();
     const seenUsernames = new Set<string>();
 
+    const isPhoneMatch = (p1?: string | null, p2?: string | null) => {
+      if (!p1 || !p2) return false;
+      const c1 = String(p1).replace(/[^0-9]/g, "");
+      const c2 = String(p2).replace(/[^0-9]/g, "");
+      if (c1.length < 9 || c2.length < 9) return false;
+      return c1 === c2 || c1.endsWith(c2.slice(-9)) || c2.endsWith(c1.slice(-9));
+    };
+
     // 4. Map contacts with CRM, Club Subscriptions, and Bot Funnel Events
     const matchedContacts = rawContacts.map((c: any) => {
       seenContactIds.add(c.id);
@@ -4522,8 +4530,7 @@ export async function getSendPulseBotContactsAction(projectId: string, botUserna
         if (spTgId && sub.tg_user_id && String(sub.tg_user_id) === String(spTgId)) return true;
         const subTg = (sub.telegram_username || "").replace(/^@/, "").toLowerCase().trim();
         if (spUsername && subTg && spUsername === subTg) return true;
-        const subPhone = (sub.phone || "").replace(/[^0-9]/g, "");
-        if (spPhone && subPhone && (spPhone.includes(subPhone) || subPhone.includes(spPhone))) return true;
+        if (isPhoneMatch(spPhone, sub.phone)) return true;
         if (spOrderId && sub.order_id === spOrderId) return true;
         return false;
       });
@@ -4532,8 +4539,7 @@ export async function getSendPulseBotContactsAction(projectId: string, botUserna
       const matchedLead = projectLeads.find((l: any) => {
         const lTg = (l.telegram || "").replace(/^@/, "").toLowerCase().trim();
         if (spUsername && lTg && spUsername === lTg) return true;
-        const lPhone = (l.phone || "").replace(/[^0-9]/g, "");
-        if (spPhone && lPhone && (spPhone.includes(lPhone) || lPhone.includes(spPhone))) return true;
+        if (isPhoneMatch(spPhone, l.phone)) return true;
         if (spOrderId && l.order_id === spOrderId) return true;
         return false;
       });
@@ -4543,8 +4549,7 @@ export async function getSendPulseBotContactsAction(projectId: string, botUserna
         if (spTgId && cust.telegram_id && String(cust.telegram_id) === String(spTgId)) return true;
         const custTg = (cust.telegram || "").replace(/^@/, "").toLowerCase().trim();
         if (spUsername && custTg && spUsername === custTg) return true;
-        const custPhone = (cust.phone || "").replace(/[^0-9]/g, "");
-        if (spPhone && custPhone && (spPhone.includes(custPhone) || custPhone.includes(spPhone))) return true;
+        if (isPhoneMatch(spPhone, cust.phone)) return true;
         if (spOrderId) {
           const orderMatch = orders.find((o: any) => o.order_id === spOrderId || o.id === spOrderId);
           if (orderMatch && orderMatch.customer_id === cust.id) return true;
@@ -4787,6 +4792,14 @@ export async function syncSendPulseBotContactsAction(projectId: string, botUsern
     const orders = ordersRes.data || [];
     const clubSubs = clubSubsRes.data || [];
 
+    const isPhoneMatch = (p1?: string | null, p2?: string | null) => {
+      if (!p1 || !p2) return false;
+      const c1 = String(p1).replace(/[^0-9]/g, "");
+      const c2 = String(p2).replace(/[^0-9]/g, "");
+      if (c1.length < 9 || c2.length < 9) return false;
+      return c1 === c2 || c1.endsWith(c2.slice(-9)) || c2.endsWith(c1.slice(-9));
+    };
+
     let syncedCount = 0;
 
     for (const c of rawContacts) {
@@ -4799,8 +4812,7 @@ export async function syncSendPulseBotContactsAction(projectId: string, botUsern
         if (spTgId && sub.tg_user_id && String(sub.tg_user_id) === String(spTgId)) return true;
         const subTg = (sub.telegram_username || "").replace(/^@/, "").toLowerCase().trim();
         if (spUsername && subTg && spUsername === subTg) return true;
-        const subPhone = (sub.phone || "").replace(/[^0-9]/g, "");
-        if (spPhone && subPhone && (spPhone.includes(subPhone) || subPhone.includes(spPhone))) return true;
+        if (isPhoneMatch(spPhone, sub.phone)) return true;
         if (spOrderId && sub.order_id === spOrderId) return true;
         return false;
       });
@@ -4809,8 +4821,7 @@ export async function syncSendPulseBotContactsAction(projectId: string, botUsern
         if (spTgId && cust.telegram_id && String(cust.telegram_id) === String(spTgId)) return true;
         const custTg = (cust.telegram || "").replace(/^@/, "").toLowerCase().trim();
         if (spUsername && custTg && spUsername === custTg) return true;
-        const custPhone = (cust.phone || "").replace(/[^0-9]/g, "");
-        if (spPhone && custPhone && (spPhone.includes(custPhone) || custPhone.includes(spPhone))) return true;
+        if (isPhoneMatch(spPhone, cust.phone)) return true;
         if (spOrderId) {
           const orderMatch = orders.find((o: any) => o.order_id === spOrderId || o.id === spOrderId);
           if (orderMatch && orderMatch.customer_id === cust.id) return true;
