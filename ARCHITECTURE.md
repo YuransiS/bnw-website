@@ -327,4 +327,30 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
   - У `src/lib/crmCache.ts` повністю видалено `emailMap` та операції `dsu.union` за email.
   - Усунено будь-які ризики помилкового схлопування клієнтів через сервісні та плацехолдерні адреси.
 
+---
+
+## 17. Обов'язковий стандарт підключення нових лендінгів та воронок (New Landing Mandatory Standard)
+
+Будь-який новий лендінг, підворонка чи сателітний сайт холдингу **ОБОВ'ЯЗКОВО** повинен відповідати наступним архітектурним вимогам:
+
+1. **Dual-Storage Атрибуція (Клієнтський рівень):**
+   - Усі вхідні параметри (`utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`, `campaign_id`, `adset_id`, `ad_id`, `fbclid`, `gclid`) та Meta-ідентифікатори (`_fbp`, `_fbc`) зберігаються одночасно в `localStorage` та 1st-party Cookie на 30 днів (`SameSite=Lax; path=/`).
+   - При кожному вході обов'язково генеруються `visitor_uuid` (v4 UUID) та наскрізний `bw_cid` (`bw_${visitor_uuid.replace(/-/g, '')}`).
+   - Фонова фіксація холодних відвідувачів: перший вхід на лендінг відправляє `status: 'Клик'` (`is_cold: true`) у таблицю `traffic_clicks`.
+
+2. **Meta Pixel & Conversions API (CAPI):**
+   - Заборонено дублювати `PageView` у `<script>` макета — використовується SPA-трекер `FacebookPixelTracker`.
+   - Суворий захист `Purchase`: заборонено викликати `Purchase` безумовно на сторінках `/thanks`. Подія викликається **тільки після підтвердженої оплати** (`transactionStatus === 'APPROVED'`).
+   - Серверний модуль `capi.ts`: відправка `Lead` та `Purchase` у Meta Graph API v18.0 з обов'язковим SHA-256 хэшуванням контактів (`em`, `ph`, `fn`, `ln`, `external_id`), передачею IP/User-Agent та єдиним `event_id` для дедуплікації.
+
+3. **Платіжні шлюзи та збереження UTM:**
+   - Перед редиректом на WayForPay / Monobank замовлення створюється в БД з унікальним `order_id` та повним набором UTM-міток.
+   - Серверний вебхук оновлює статус (`closed_won`) за `order_id`, не затираючи та не обнуляючи UTM-колонки.
+
+4. **Нормалізація контактів:**
+   - Телефон: виключно міжнародний формат E.164 (`+380XXXXXXXXX`).
+   - Telegram / Instagram: очищений юзернейм без символу `@`.
+   - Діагностичні опитування: збереження відповідей у `quiz_result` (JSONB) або `query`.
+
+
 
