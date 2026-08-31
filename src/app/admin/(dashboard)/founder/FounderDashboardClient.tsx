@@ -6,6 +6,7 @@ import { Layers, Users, BarChart4, ClipboardCheck, ArrowRight, ShieldAlert, Awar
 import { getFounderDashboardDataAction } from "../../actions";
 import { ParabolicProgressBar } from "@/components/ui/ParabolicProgressBar";
 import CustomCalendarPicker, { CustomDateRangeInputs } from "@/components/ui/CustomCalendarPicker";
+import { VideoTutorialButton } from "@/components/ui/VideoTutorialModal";
 
 interface FounderDashboardClientProps {
   cellsWithProjects: any[];
@@ -235,6 +236,15 @@ export default function FounderDashboardClient({
               $ USD
             </button>
           </div>
+
+          {/* Video Tutorial Button */}
+          <VideoTutorialButton
+            videoId="vzBvERnTmlk"
+            title="Відеоінструкція: Панель фаундерів (CEO Dashboard)"
+            badge="Панель фаундерів"
+            description="Огляд консолідованого звіту, метрик ячейок, лідерборду та аналітики виручки"
+            label="Відеоінструкція"
+          />
         </div>
       </div>
 

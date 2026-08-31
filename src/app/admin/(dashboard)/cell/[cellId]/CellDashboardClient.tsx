@@ -23,6 +23,7 @@ import {
 import { getCellAnalyticsAction, updateProjectPlanAction } from "./cellActions";
 import { ParabolicProgressBar } from "@/components/ui/ParabolicProgressBar";
 import CustomCalendarPicker, { CustomDateRangeInputs } from "@/components/ui/CustomCalendarPicker";
+import { VideoTutorialButton } from "@/components/ui/VideoTutorialModal";
 
 interface CellDashboardClientProps {
   cell: any;
@@ -246,6 +247,15 @@ export default function CellDashboardClient({
           >
             <RefreshCw className={`w-4 h-4 ${isPending ? "animate-spin" : ""}`} />
           </button>
+
+          {/* Video Tutorial Button */}
+          <VideoTutorialButton
+            videoId="M8e1B9rJ3Kc"
+            title="Відеоінструкція: Панель керівника ячейки"
+            badge="Керівник ячейки"
+            description="Огляд аналітики осередку, проєктів, планів продюсерів та фінансових показників"
+            label="Відеоінструкція"
+          />
         </div>
       </div>
 

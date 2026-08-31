@@ -64,6 +64,7 @@ import UnresolvedOrdersModal from "./components/UnresolvedOrdersModal";
 import ProjectSettingsModal from "./components/ProjectSettingsModal";
 import { ParabolicLoadingOverlay, ParabolicProgressBar } from "@/components/ui/ParabolicProgressBar";
 import CustomCalendarPicker, { CustomDateRangeInputs } from "@/components/ui/CustomCalendarPicker";
+import { VideoTutorialButton } from "@/components/ui/VideoTutorialModal";
 import { createClient } from "@/utils/supabase/client";
 
 interface LeadsDashboardProps {
@@ -844,6 +845,15 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
               <span>Помилка: {unresolvedOrders.length}</span>
             </button>
           )}
+
+          {/* Video Tutorial Button */}
+          <VideoTutorialButton
+            videoId="QCzsJsLaL5c"
+            title={activeProject ? `Відеоінструкція: Робота з проєктом ${activeProject.name}` : "Відеоінструкція: Робота з CRM та проєктами"}
+            badge="Розділ проєкту"
+            description="Огляд воронки, лідів, аналітики оплат, кабінету Meta Ads та налаштувань проєкту"
+            label="Відеоінструкція"
+          />
         </div>
 
         <div className="flex flex-wrap items-center gap-4">

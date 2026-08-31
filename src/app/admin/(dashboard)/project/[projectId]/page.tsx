@@ -2,6 +2,7 @@ import React from "react";
 import { checkProjectAccess, getUnifiedCRMData } from "../../../actions";
 import { createAdminClient } from "@/utils/supabase/server";
 import LeadsDashboard from "../../../LeadsDashboard";
+import { VideoTutorialButton } from "@/components/ui/VideoTutorialModal";
 
 export const revalidate = 0;
 
@@ -67,7 +68,7 @@ export default async function ProjectDashboardPage({ params }: PageProps) {
   return (
     <div className="space-y-4">
       {/* Prominent Project Workspace Header */}
-      <div className="bg-neutral-900 border border-white/10 p-4 rounded-2xl flex items-center justify-between gap-4 shadow-lg">
+      <div className="bg-neutral-900 border border-white/10 p-4 rounded-2xl flex items-center justify-between gap-4 shadow-lg flex-wrap">
         <div>
           <div className="flex items-center gap-2">
             <span className="text-[9px] font-black uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
@@ -77,6 +78,16 @@ export default async function ProjectDashboardPage({ params }: PageProps) {
           <h1 className="text-xl font-black text-white mt-1 flex items-center gap-2">
             🚀 {project.name}
           </h1>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <VideoTutorialButton
+            videoId="QCzsJsLaL5c"
+            title={`Відеоінструкція: Робота з проєктом ${project.name}`}
+            badge="Розділ проєкту"
+            description="Огляд воронки, лідів, аналітики оплат, кабінету Meta Ads та налаштувань проєкту"
+            label="Відеоінструкція"
+          />
         </div>
       </div>
 
