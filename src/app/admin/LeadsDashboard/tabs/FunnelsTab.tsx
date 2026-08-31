@@ -3410,6 +3410,23 @@ export default function FunnelsTab({
           }}
         />
       )}
+
+      {/* SendPulse Flows (Ланцюжки) Modal */}
+      {showFlowsModal && (
+        <SendPulseFlowsModal
+          isOpen={showFlowsModal}
+          onClose={() => setShowFlowsModal(false)}
+          botUsername={selectedFunnel?.bot_username || selectedBotUsername || ""}
+          funnelName={selectedFunnel?.name || "Воронка"}
+          flows={availableFlows}
+          loading={loadingFlows}
+          onRefresh={() => loadBotFlows()}
+          currentSteps={selectedFunnel?.bot_steps || []}
+          onImportFlowAsStep={handleImportFlowAsStep}
+          onFilterByFlow={(slug) => setSelectedStepFilter(slug)}
+          selectedFilterStep={selectedStepFilter}
+        />
+      )}
     </div>
   );
 }
