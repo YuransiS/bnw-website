@@ -220,6 +220,78 @@ export const LeadsTab = React.memo(function LeadsTab({
     })).sort((a, b) => b.count - a.count);
   }, [filtersSummary?.landingCounts, processedLeads]);
 
+  // Real-time client-side filtered leads for instant 0ms UI responsiveness
+  const filteredLeads = React.useMemo(() => {
+    let list = processedLeads || [];
+
+    // 1. Status Filter
+    if (statusFilter && statusFilter !== "all") {
+      list = list.filter((l: any) => l.status === statusFilter);
+    }
+
+    // 2. Traffic Channel Filter
+    if (trafficChannelFilter === "target") {
+      list = list.filter((l: any) => {
+        const src = l.utmSource || l.utm_source;
+        return src && src !== "direct";
+      });
+    } else if (trafficChannelFilter === "organic") {
+      list = list.filter((l: any) => {
+        const src = l.utmSource || l.utm_source;
+        return !src || src === "direct";
+      });
+    }
+
+    // 3. Touch Count Filter
+    if (touchCountFilter === "multi") {
+      list = list.filter((l: any) => Number(l.touchCount || l.touch_count || 1) >= 2);
+    } else if (touchCountFilter === "single") {
+      list = list.filter((l: any) => Number(l.touchCount || l.touch_count || 1) === 1);
+    }
+
+    // 4. Unpaid Intent Filter
+    if (unpaidIntentOnly) {
+      list = list.filter((l: any) => Boolean(l.isUnpaidIntent || l.is_unpaid_intent));
+    }
+
+    // 5. Landing Filter
+    if (selectedLanding && selectedLanding !== "all") {
+      if (selectedLanding === "multi") {
+        list = list.filter((l: any) => ((l.visitedLandings || l.visited_landings || []) as string[]).length >= 2);
+      } else if (selectedLanding === "unassigned") {
+        list = list.filter((l: any) => !l.visitedLandings?.length && !l.visited_landings?.length && (!l.page_path || l.page_path === "/"));
+      } else {
+        list = list.filter((l: any) => {
+          const vLandings = (l.visitedLandings || l.visited_landings || []) as string[];
+          return vLandings.includes(selectedLanding) || l.page_path === selectedLanding || l.page_url === selectedLanding;
+        });
+      }
+    }
+
+    // 6. Live Search Query
+    if (searchQuery && searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter((l: any) =>
+        (l.name && l.name.toLowerCase().includes(q)) ||
+        (l.phone && l.phone.includes(q)) ||
+        (l.telegram && l.telegram.toLowerCase().includes(q)) ||
+        (l.email && l.email.toLowerCase().includes(q)) ||
+        (l.visitor_uuid && l.visitor_uuid.toLowerCase().includes(q))
+      );
+    }
+
+    return list;
+  }, [processedLeads, statusFilter, trafficChannelFilter, touchCountFilter, unpaidIntentOnly, selectedLanding, searchQuery]);
+
+  const displayLeads = React.useMemo(() => {
+    // If paginatedLeads matches filtered count, prefer paginatedLeads, otherwise paginate filteredLeads
+    if (filteredLeads.length <= pageSize) {
+      return filteredLeads;
+    }
+    const fromIndex = (currentPage - 1) * pageSize;
+    return filteredLeads.slice(fromIndex, fromIndex + pageSize);
+  }, [filteredLeads, currentPage, pageSize]);
+
   const { theme } = useTheme();
   const isLight = theme === "light";
 
@@ -508,19 +580,19 @@ export const LeadsTab = React.memo(function LeadsTab({
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2 text-xs">
           <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold text-neutral-400">
             <span className="text-white">
-              Показано: <strong className="text-emerald-400">{paginatedLeads.length}</strong> з <strong className="text-white">{totalCount}</strong> лідів
+              Показано: <strong className="text-emerald-400">{displayLeads.length}</strong> з <strong className="text-white">{filteredLeads.length}</strong> лідів
             </span>
             <span className="text-white/20">•</span>
             <span>
-              🌐 З лендингів: <strong className="text-teal-400">{totalCount - (filtersSummary?.noLandingCount || 0)}</strong>
+              🌐 З лендингів: <strong className="text-teal-400">{filteredLeads.filter((l: any) => l.visitedLandings?.length || l.visited_landings?.length || (l.page_path && l.page_path !== "/")).length}</strong>
             </span>
             <span className="text-white/20">•</span>
             <span>
-              ⚡ Мульти-лендинг (крос-трафік): <strong className="text-amber-400">{filtersSummary?.multiLandingCount || 0}</strong>
+              ⚡ Мульти-лендинг: <strong className="text-amber-400">{filteredLeads.filter((l: any) => (l.visitedLandings?.length || l.visited_landings?.length || 0) >= 2).length}</strong>
             </span>
             <span className="text-white/20">•</span>
             <span>
-              👤 Прямі контакти: <strong className="text-neutral-300">{filtersSummary?.noLandingCount || 0}</strong>
+              👤 Прямі контакти: <strong className="text-neutral-300">{filteredLeads.filter((l: any) => (!l.visitedLandings?.length && !l.visited_landings?.length && (!l.page_path || l.page_path === "/"))).length}</strong>
             </span>
           </div>
 
@@ -685,14 +757,14 @@ export const LeadsTab = React.memo(function LeadsTab({
                     <td className="p-4 text-center"><SkeletonPulse className="h-6 w-24 mx-auto rounded-full" /></td>
                   </tr>
                 ))
-              ) : processedLeads.length === 0 ? (
+              ) : filteredLeads.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="p-8 text-center text-white/20 italic">
                     Заявки за заданими параметрами відсутні
                   </td>
                 </tr>
               ) : (
-                paginatedLeads.map((lead: any) => {
+                displayLeads.map((lead: any) => {
                   const col = PIPELINE_COLUMNS.find((c) => c.key === lead.status) || PIPELINE_COLUMNS[0];
                   const isRealUnpaid = Boolean(
                     (lead.is_unpaid_intent || lead.isUnpaidIntent) &&
@@ -962,10 +1034,10 @@ export const LeadsTab = React.memo(function LeadsTab({
 
         {/* Mobile Card List View */}
         <div className={`md:hidden divide-y ${isLight ? "divide-neutral-200" : "divide-white/5"}`}>
-          {processedLeads.length === 0 ? (
+          {filteredLeads.length === 0 ? (
             <div className="p-8 text-center text-white/20 italic">Заявки за заданими параметрами відсутні</div>
           ) : (
-            paginatedLeads.map((lead: any) => {
+            displayLeads.map((lead: any) => {
               const col = PIPELINE_COLUMNS.find((c) => c.key === lead.status) || PIPELINE_COLUMNS[0];
               const isRealUnpaid = Boolean(
                 (lead.is_unpaid_intent || lead.isUnpaidIntent) &&

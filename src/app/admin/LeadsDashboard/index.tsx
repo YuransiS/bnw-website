@@ -542,6 +542,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
     statusFilter,
     touchCountFilter,
     sourceFilter,
+    trafficChannelFilter,
     unpaidIntentOnly,
     startDate,
     endDate,
