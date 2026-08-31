@@ -206,6 +206,13 @@ export default function LeadJourneyModal({
                     {copiedKey === "bw_cid" ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Copy className="w-2.5 h-2.5 opacity-60" />}
                   </button>
                 )}
+
+                {(lead.createdAt || (lead as any).created_at) && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-white/5 text-emerald-400 border border-emerald-500/20">
+                    <Clock className="w-3 h-3 text-emerald-400" />
+                    <span>{new Date(lead.createdAt || (lead as any).created_at).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                  </span>
+                )}
               </div>
 
               <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight truncate">

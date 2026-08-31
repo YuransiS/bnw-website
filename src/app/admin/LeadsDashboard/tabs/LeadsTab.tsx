@@ -1,12 +1,51 @@
 "use client";
 
 import React from "react";
-import { Grid, Plus, Search, ChevronDown, Calendar, X, XCircle, Copy, Check, AlertCircle, Users, Globe, ExternalLink, Sparkles, Layers, Target } from "lucide-react";
+import { Grid, Plus, Search, ChevronDown, Calendar, X, XCircle, Copy, Check, AlertCircle, Users, Globe, ExternalLink, Sparkles, Layers, Target, Clock } from "lucide-react";
 import { useTheme } from "../../ThemeProvider";
 import { formatDualCurrency, formatLocaleNumber } from "@/app/admin/utils";
 import { LeadItem } from "../types";
 import { SkeletonPulse } from "@/components/ui/ParabolicProgressBar";
 import CustomCalendarPicker from "@/components/ui/CustomCalendarPicker";
+
+// Helper function to format lead date and time with exact and relative time
+function formatLeadDateTime(dateStr?: string | null): { formatted: string; relative: string; dateOnly: string; timeOnly: string } {
+  if (!dateStr) return { formatted: "—", relative: "", dateOnly: "—", timeOnly: "" };
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return { formatted: "—", relative: "", dateOnly: "—", timeOnly: "" };
+    
+    // Formatting: DD.MM.YYYY HH:mm
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    const hours = String(d.getHours()).padStart(2, "0");
+    const minutes = String(d.getMinutes()).padStart(2, "0");
+    
+    const dateOnly = `${day}.${month}.${year}`;
+    const timeOnly = `${hours}:${minutes}`;
+    const formatted = `${dateOnly} ${timeOnly}`;
+    
+    // Relative time in Ukrainian
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    let relative = "";
+    if (diffMins < 1) relative = "щойно";
+    else if (diffMins < 60) relative = `${diffMins} хв тому`;
+    else if (diffHours < 24) relative = `${diffHours} год тому`;
+    else if (diffDays === 1) relative = "вчора";
+    else if (diffDays < 7) relative = `${diffDays} дн. тому`;
+    else relative = `${diffDays} дн. тому`;
+
+    return { formatted, relative, dateOnly, timeOnly };
+  } catch {
+    return { formatted: "—", relative: "", dateOnly: "—", timeOnly: "" };
+  }
+}
 
 // Sales pipeline columns mapping
 const PIPELINE_COLUMNS = [
@@ -625,6 +664,7 @@ export const LeadsTab = React.memo(function LeadsTab({
             <thead>
               <tr className={`${tableHeaderClass} uppercase tracking-widest font-black border-b`}>
                 <th className="p-4">Клієнт</th>
+                <th className="p-4">Час ліда</th>
                 <th className="p-4">Контакти & Соцмережі</th>
                 <th className="p-4">Джерело та UTM-мітки</th>
                 <th className="p-4 text-center">Кількість торкань</th>
@@ -638,6 +678,7 @@ export const LeadsTab = React.memo(function LeadsTab({
                   <tr key={i} className="animate-pulse">
                     <td className="p-4"><SkeletonPulse className="h-5 w-36" /></td>
                     <td className="p-4"><SkeletonPulse className="h-4 w-28" /></td>
+                    <td className="p-4"><SkeletonPulse className="h-4 w-28" /></td>
                     <td className="p-4"><SkeletonPulse className="h-4 w-24" /></td>
                     <td className="p-4 text-center"><SkeletonPulse className="h-4 w-12 mx-auto" /></td>
                     <td className="p-4 text-center"><SkeletonPulse className="h-4 w-16 mx-auto" /></td>
@@ -646,7 +687,7 @@ export const LeadsTab = React.memo(function LeadsTab({
                 ))
               ) : processedLeads.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-white/20 italic">
+                  <td colSpan={7} className="p-8 text-center text-white/20 italic">
                     Заявки за заданими параметрами відсутні
                   </td>
                 </tr>
@@ -720,6 +761,27 @@ export const LeadsTab = React.memo(function LeadsTab({
                         >
                           Visitor ID: {lead.visitor_uuid}
                         </div>
+                      </td>
+
+                      {/* Lead Exact Timestamp Column */}
+                      <td className="p-4 whitespace-nowrap">
+                        {(() => {
+                          const timeInfo = formatLeadDateTime(lead.createdAt || lead.created_at);
+                          return (
+                            <div className="flex flex-col gap-0.5">
+                              <div className="flex items-center gap-1.5 font-bold text-xs">
+                                <Clock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                <span className={isLight ? "text-neutral-800" : "text-white/90"}>{timeInfo.dateOnly}</span>
+                                <span className="text-emerald-400 font-extrabold">{timeInfo.timeOnly}</span>
+                              </div>
+                              {timeInfo.relative && (
+                                <span className={`text-[10px] font-semibold pl-5 ${isLight ? "text-neutral-500" : "text-white/40"}`}>
+                                  {timeInfo.relative}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Contacts copy and Social handles */}
@@ -958,6 +1020,21 @@ export const LeadsTab = React.memo(function LeadsTab({
                       >
                         ID: {lead.visitor_uuid?.substring(0, 8)}...
                       </div>
+                      {/* Mobile Timestamp Badge */}
+                      {(() => {
+                        const timeInfo = formatLeadDateTime(lead.createdAt || lead.created_at);
+                        return (
+                          <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 pt-0.5">
+                            <Clock className="w-3 h-3 text-emerald-400 shrink-0" />
+                            <span>{timeInfo.formatted}</span>
+                            {timeInfo.relative && (
+                              <span className={`font-medium ${isLight ? "text-neutral-500" : "text-white/40"}`}>
+                                ({timeInfo.relative})
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     <div className="text-right shrink-0">
