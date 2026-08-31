@@ -157,11 +157,67 @@ export async function getProjectSendPulseBots(projectSlug: string = 'sergiy'): P
     }
 
     return bots;
-  } catch (err: any) {
-    console.error('[SendPulse] Service error fetching bots:', err);
+  } catch (err) {
+    console.error('[SendPulse] Failed to fetch bots:', err);
     return [];
   }
 }
+
+export interface SendPulseFlow {
+  id: string;
+  botId: string;
+  name: string;
+  status: number;
+  createdAt: string;
+  triggers?: any[];
+  channel?: 'TELEGRAM' | 'INSTAGRAM' | 'WHATSAPP';
+}
+
+export async function getProjectSendPulseFlows(projectSlug: string = 'sergiy', botIdOrUsername?: string): Promise<SendPulseFlow[]> {
+  try {
+    const token = await getSendPulseAccessToken(projectSlug);
+    const bots = await getProjectSendPulseBots(projectSlug);
+    
+    let targetBot = bots[0];
+    if (botIdOrUsername) {
+      const clean = botIdOrUsername.replace('@', '').toLowerCase().trim();
+      targetBot = bots.find(b => b.id === botIdOrUsername || b.username.toLowerCase() === clean) || bots[0];
+    }
+    
+    if (!targetBot) return [];
+
+    const endpoint = targetBot.channel === 'INSTAGRAM'
+      ? `https://api.sendpulse.com/instagram/flows?bot_id=${targetBot.id}`
+      : `https://api.sendpulse.com/telegram/flows?bot_id=${targetBot.id}`;
+
+    const res = await fetch(endpoint, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    const flows: SendPulseFlow[] = [];
+    if (Array.isArray(data.data)) {
+      data.data.forEach((f: any) => {
+        flows.push({
+          id: f.id,
+          botId: f.bot_id || targetBot.id,
+          name: f.name || 'Без назви',
+          status: f.status,
+          createdAt: f.created_at,
+          triggers: f.triggers || [],
+          channel: targetBot.channel
+        });
+      });
+    }
+    return flows;
+  } catch (err) {
+    console.error('[SendPulse] Failed to fetch flows:', err);
+    return [];
+  }
+}
+
 
 export interface SendPulseDeepLinkParams {
   botUsername: string;

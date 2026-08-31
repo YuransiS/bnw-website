@@ -13,7 +13,9 @@ import {
   getSendPulseBotsAction,
   getFunnelBotEventsAction,
   getSendPulseBotContactsAction,
-  syncSendPulseBotContactsAction
+  syncSendPulseBotContactsAction,
+  getSendPulseBotFlowsAction,
+  saveFunnelBotStepsAction
 } from "../../actions";
 import {
   createTransactionAction,
@@ -23,9 +25,11 @@ import {
   Plus, Target, Calendar, Link as LinkIcon, RefreshCw, BarChart2, Layers, AlertCircle,
   Search, Sparkles, ArrowLeft, Edit3, Trash2, CheckCircle, TrendingUp, DollarSign,
   ChevronRight, Eye, Award, X, Settings, Megaphone, Bot, Copy, Check, Users, UserCheck,
-  ExternalLink, Send, ShieldCheck, Phone, Mail, ArrowUpRight, Filter
+  ExternalLink, Send, ShieldCheck, Phone, Mail, ArrowUpRight, Filter, GitBranch, Zap,
+  SlidersHorizontal, ListFilter, CheckCircle2
 } from "lucide-react";
 import ProjectSettingsModal from "../components/ProjectSettingsModal";
+import SendPulseFlowsModal from "../components/SendPulseFlowsModal";
 import { isPaidStatus } from "@/lib/statusMapper";
 import { transliterateToSlug } from "@/utils/transliterate";
 import { SingleDatePicker } from "@/components/ui/CustomCalendarPicker";
@@ -417,6 +421,30 @@ export default function FunnelsTab({
   const [botContactFilter, setBotContactFilter] = useState<"all" | "this_funnel" | "paid" | "active" | "trial" | "matched" | "unmatched" | "expired">("all");
   const [selectedStepFilter, setSelectedStepFilter] = useState<string | null>(null);
 
+  // SendPulse Bot Flows (Ланцюжки) State
+  const [availableFlows, setAvailableFlows] = useState<any[]>([]);
+  const [loadingFlows, setLoadingFlows] = useState<boolean>(false);
+  const [showFlowsModal, setShowFlowsModal] = useState<boolean>(false);
+  const [importedFlowFeedback, setImportedFlowFeedback] = useState<string | null>(null);
+
+  const loadBotFlows = async (botUsername?: string) => {
+    const targetBot = botUsername || selectedBotUsername || selectedFunnel?.bot_username;
+    if (!targetBot) return;
+    setLoadingFlows(true);
+    try {
+      const res = await getSendPulseBotFlowsAction(projectId, targetBot);
+      if (res && !("error" in res) && Array.isArray(res.flows)) {
+        setAvailableFlows(res.flows);
+      } else {
+        setAvailableFlows([]);
+      }
+    } catch (e) {
+      console.error("Error loading bot flows:", e);
+    } finally {
+      setLoadingFlows(false);
+    }
+  };
+
   const loadBotContacts = async (botUsername?: string) => {
     const targetBot = botUsername || selectedBotUsername || selectedFunnel?.bot_username;
     if (!targetBot) return;
@@ -456,9 +484,53 @@ export default function FunnelsTab({
     }
   };
 
+  const handleImportFlowAsStep = async (flow: any) => {
+    if (!selectedFunnel) return;
+    const currentSteps = Array.isArray(selectedFunnel.bot_steps)
+      ? [...selectedFunnel.bot_steps]
+      : [...DEFAULT_BOT_STEPS];
+    const cleanSlug = transliterateToSlug(flow.name);
+
+    const exists = currentSteps.some(
+      (s: any) => (s.slug || transliterateToSlug(s.label || s.name)) === cleanSlug || (s.flow_id && s.flow_id === flow.id)
+    );
+
+    if (exists) {
+      setImportedFlowFeedback(`Крок "${flow.name}" вже є у воронці`);
+      setTimeout(() => setImportedFlowFeedback(null), 3000);
+      return;
+    }
+
+    const newStep = {
+      id: cleanSlug,
+      slug: cleanSlug,
+      label: flow.name,
+      flow_id: flow.id,
+      desc: "Ланцюжок SendPulse",
+      color: "text-emerald-400"
+    };
+    const updatedSteps = [...currentSteps, newStep];
+
+    try {
+      await saveFunnelBotStepsAction(selectedFunnel.id, updatedSteps, selectedFunnel.bot_username || undefined);
+      setSelectedFunnel({
+        ...selectedFunnel,
+        bot_steps: updatedSteps
+      });
+      setFunnels((prev) =>
+        prev.map((f) => (f.id === selectedFunnel.id ? { ...f, bot_steps: updatedSteps } : f))
+      );
+      setImportedFlowFeedback(`Ланцюжок "${flow.name}" успішно додано як крок!`);
+      setTimeout(() => setImportedFlowFeedback(null), 3500);
+    } catch (err: any) {
+      console.error("Error saving imported step:", err);
+    }
+  };
+
   useEffect(() => {
     if (selectedFunnel?.bot_username || selectedBotUsername) {
       loadBotContacts();
+      loadBotFlows();
     }
   }, [selectedFunnel?.id, selectedFunnel?.bot_username, selectedBotUsername]);
 
@@ -1926,14 +1998,43 @@ export default function FunnelsTab({
         return (
           <div className="space-y-6 animate-in fade-in duration-300">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-neutral-900 border border-white/5 p-6 rounded-2xl gap-4">
-              <div className="space-y-1">
-                <button
-                  type="button"
-                  onClick={() => setSelectedFunnel(null)}
-                  className="flex items-center gap-1.5 text-white/50 hover:text-white mb-2 transition-all font-bold cursor-pointer bg-transparent border-none p-0"
-                >
-                  <ArrowLeft className="w-4 h-4" /> Повернутися до списку
-                </button>
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedFunnel(null)}
+                    className="flex items-center gap-1.5 text-white/50 hover:text-white transition-all font-bold text-xs cursor-pointer bg-white/5 hover:bg-white/10 px-2.5 py-1.5 rounded-xl border border-white/10"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" /> Всі воронки
+                  </button>
+
+                  {funnels.length > 1 && (
+                    <div className="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/10 overflow-x-auto max-w-xl custom-scrollbar">
+                      <span className="text-[9px] uppercase font-black text-white/30 px-2 shrink-0">Перемкнути:</span>
+                      {funnels.map((f) => {
+                        const isCur = f.id === selectedFunnel.id;
+                        return (
+                          <button
+                            key={f.id}
+                            type="button"
+                            onClick={() => setSelectedFunnel(f)}
+                            className={`px-3 py-1 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+                              isCur
+                                ? "bg-emerald-500 text-black shadow-md shadow-emerald-500/20"
+                                : "text-white/60 hover:text-white hover:bg-white/10"
+                            }`}
+                          >
+                            <span>{f.name}</span>
+                            {f.bot_username && (
+                              <Bot className={`w-3 h-3 ${isCur ? "text-black" : "text-emerald-400"}`} />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex items-center gap-3">
                   <h3 className="text-xl font-black text-white">{selectedFunnel.name}</h3>
                   <span className={`text-[10px] uppercase font-black px-2.5 py-0.5 rounded-full border ${
@@ -2408,9 +2509,22 @@ export default function FunnelsTab({
                     </p>
                   </div>
 
-                  {/* Add Step Input & Button */}
-                  <div className="flex items-center gap-2 w-full lg:w-auto">
-                    <div className="relative flex-1 lg:w-72">
+                  {/* Add Step Input & Buttons */}
+                  <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowFlowsModal(true);
+                        loadBotFlows();
+                      }}
+                      className="px-3 py-2 bg-white/5 hover:bg-white/10 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all border border-white/10 cursor-pointer shrink-0"
+                      title="Переглянути та обрати існуючі ланцюжки з SendPulse"
+                    >
+                      <GitBranch className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Ланцюжки SendPulse {availableFlows.length > 0 && `(${availableFlows.length})`}</span>
+                    </button>
+
+                    <div className="relative flex-1 sm:w-64">
                       <input
                         type="text"
                         value={customStepInput}
@@ -2421,7 +2535,7 @@ export default function FunnelsTab({
                             handleAddCustomBotStep();
                           }
                         }}
-                        placeholder="Назва кроку (напр. Урок 1, Здав ДЗ)..."
+                        placeholder="Назва кроку (напр. Урок 1)..."
                         className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-xs text-white placeholder-white/30 focus:outline-none focus:border-emerald-500"
                       />
                     </div>
@@ -2436,6 +2550,13 @@ export default function FunnelsTab({
                     </button>
                   </div>
                 </div>
+
+                {importedFlowFeedback && (
+                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-400 font-bold flex items-center gap-2 animate-in fade-in">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>{importedFlowFeedback}</span>
+                  </div>
+                )}
 
                 {/* Bot Milestones Step Cards */}
                 {(() => {

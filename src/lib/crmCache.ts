@@ -415,6 +415,7 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
       managerComment: cust.manager_comment || "",
       customerId: lead.customer_id || null,
       assigned_manager_id: cust.assigned_manager_id || null,
+      bw_cid: lead.bw_cid || lead.metadata?.bw_cid || (lead.customer_id ? `bw_${lead.customer_id.replace(/-/g, '').substring(0, 16)}` : "")
     };
   });
 
@@ -425,11 +426,13 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
   const phoneMap = new Map<string, number>();
   const tgMap = new Map<string, number>();
   const uuidMap = new Map<string, number>();
+  const bwCidMap = new Map<string, number>();
 
   formattedLeads.forEach((lead: any, i: number) => {
     const phone = lead.phone?.replace(/\D/g, "") || "";
     const tg = lead.telegram?.toLowerCase().replace("@", "").trim() || "";
     const uuid = lead.visitor_uuid || "";
+    const bwCid = lead.bw_cid || lead.metadata?.bw_cid || "";
 
     if (phone.length >= 7 && !isBlacklistedPhone(phone)) {
       if (phoneMap.has(phone)) dsu.union(i, phoneMap.get(phone)!);
@@ -442,6 +445,10 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
     if (uuid) {
       if (uuidMap.has(uuid)) dsu.union(i, uuidMap.get(uuid)!);
       else uuidMap.set(uuid, i);
+    }
+    if (bwCid && bwCid.length >= 6) {
+      if (bwCidMap.has(bwCid)) dsu.union(i, bwCidMap.get(bwCid)!);
+      else bwCidMap.set(bwCid, i);
     }
   });
 
@@ -1057,7 +1064,8 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
       is_multi_source: isMultiSource,
       created_at: latestTouch.created_at || latestTouch.created_at_iso || new Date().toISOString(),
       assigned_manager_id: primaryLead.assigned_manager_id || null,
-      visitor_uuid: primaryLead.visitor_uuid || null
+      visitor_uuid: primaryLead.visitor_uuid || null,
+      bw_cid: primaryLead.bw_cid || null
     };
   }).filter((c) => {
     // Filter out anonymous users that didn't pay

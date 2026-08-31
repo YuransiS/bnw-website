@@ -4352,6 +4352,61 @@ export async function getSendPulseBotsAction(projectId: string) {
   }
 }
 
+export async function getSendPulseBotFlowsAction(projectId: string, botUsernameOrId?: string) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Unauthorized" };
+
+    const { data: project } = await supabase
+      .from("projects")
+      .select("id, slug")
+      .eq("id", projectId)
+      .single();
+
+    if (!project) return { error: "Project not found" };
+
+    const { getProjectSendPulseFlows } = await import("@/lib/sendpulse/service");
+    const flows = await getProjectSendPulseFlows(project.slug || "sergiy", botUsernameOrId);
+
+    return { success: true, flows };
+  } catch (err: any) {
+    console.error("Error in getSendPulseBotFlowsAction:", err);
+    return { error: err.message || "Failed to fetch SendPulse bot flows" };
+  }
+}
+
+export async function saveFunnelBotStepsAction(funnelId: string, botSteps: any[], botUsername?: string) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Unauthorized" };
+
+    const adminSupabase = createAdminClient();
+    const updateData: any = {
+      bot_steps: botSteps,
+      updated_at: new Date().toISOString()
+    };
+    if (botUsername !== undefined) {
+      updateData.bot_username = botUsername;
+    }
+
+    const { data, error } = await adminSupabase
+      .from("funnels")
+      .update(updateData)
+      .eq("id", funnelId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, funnel: data };
+  } catch (err: any) {
+    console.error("Error in saveFunnelBotStepsAction:", err);
+    return { error: err.message || "Failed to save funnel bot steps" };
+  }
+}
+
+
 export async function getFunnelBotEventsAction(projectId: string, funnelId?: string, botUsername?: string) {
   try {
     const supabase = await createClient();
