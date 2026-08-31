@@ -175,7 +175,17 @@ export async function POST(req: Request) {
     
     // Формируем условия поиска (только валидные идентификаторы)
     const orConditions: string[] = [];
-    if (phone && phone.length >= 7) orConditions.push(`phone.eq.${phone}`);
+    if (phone && phone.length >= 7) {
+      orConditions.push(`phone.eq.${phone}`);
+      const cleanDigits = phone.replace(/[^0-9]/g, '');
+      if (cleanDigits) {
+        orConditions.push(`phone.eq.${cleanDigits}`);
+        orConditions.push(`phone.eq.+${cleanDigits}`);
+        if (cleanDigits.length >= 9) {
+          orConditions.push(`phone.ilike.%${cleanDigits.slice(-9)}`);
+        }
+      }
+    }
     if (email && email.includes("@") && email.length >= 5) orConditions.push(`email.eq.${email}`);
     const cleanTg = telegram ? telegram.replace("@", "").trim() : "";
     const isValidTg = cleanTg.length >= 3 && /^[a-zA-Z0-9_]+$/.test(cleanTg) && !cleanTg.toLowerCase().includes("user") && !cleanTg.toLowerCase().includes("none") && !cleanTg.toLowerCase().includes("test");
@@ -481,6 +491,16 @@ export async function POST(req: Request) {
       } catch (linkErr) {
         console.warn('Could not generate SendPulse link:', linkErr);
       }
+    }
+
+    // 8. Trigger background CRM cache rebuild so status updates immediately in the UI
+    try {
+      const { rebuildProjectCache } = await import('@/lib/crmCache');
+      rebuildProjectCache(projectId, project_slug).catch((err) => {
+        console.warn(`[Lead Register Background Cache Rebuild Warning]:`, err?.message);
+      });
+    } catch (cacheErr) {
+      console.warn(`[Lead Register Cache Import Warning]:`, cacheErr);
     }
 
     return NextResponse.json({
