@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Grid, Plus, Search, ChevronDown, Calendar, X, XCircle, Copy, Check, AlertCircle, Users, Globe, ExternalLink, Sparkles } from "lucide-react";
+import { Grid, Plus, Search, ChevronDown, Calendar, X, XCircle, Copy, Check, AlertCircle, Users, Globe, ExternalLink, Sparkles, Layers, Target } from "lucide-react";
 import { useTheme } from "../../ThemeProvider";
 import { formatDualCurrency, formatLocaleNumber } from "@/app/admin/utils";
 import { LeadItem } from "../types";
@@ -90,6 +90,8 @@ interface LeadsTabProps {
   isDevMode?: boolean;
   funnels?: any[];
   isLoading?: boolean;
+  trafficChannelFilter?: "all" | "target" | "organic";
+  setTrafficChannelFilter?: (val: "all" | "target" | "organic") => void;
 }
 
 export const LeadsTab = React.memo(function LeadsTab({
@@ -106,6 +108,8 @@ export const LeadsTab = React.memo(function LeadsTab({
   setSourceFilter,
   selectedLanding = "all",
   setSelectedLanding,
+  trafficChannelFilter = "all",
+  setTrafficChannelFilter,
   filtersSummary,
   unpaidIntentOnly,
   setUnpaidIntentOnly,
@@ -284,6 +288,49 @@ export const LeadsTab = React.memo(function LeadsTab({
             </button>
           );
         })}
+      </div>
+
+      {/* Traffic Channel Fast Segment Switcher */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-white/10">
+        <span className="text-[11px] font-bold text-white/40 uppercase tracking-wider pr-1 flex items-center gap-1 shrink-0">
+          <Layers className="w-3.5 h-3.5 text-emerald-400" />
+          Канал трафіку:
+        </span>
+        <button
+          type="button"
+          onClick={() => setTrafficChannelFilter?.("all")}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+            trafficChannelFilter === "all"
+              ? "bg-white text-black font-black shadow-md"
+              : "bg-white/5 hover:bg-white/10 text-neutral-300 border border-white/5"
+          }`}
+        >
+          <span>🌐 Всі джерела</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setTrafficChannelFilter?.(trafficChannelFilter === "target" ? "all" : "target")}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+            trafficChannelFilter === "target"
+              ? "bg-purple-500 text-white font-black shadow-md shadow-purple-500/20"
+              : "bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/20"
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full bg-purple-400" />
+          <span>🎯 Таргет / Реклама (Meta Ads / UTM)</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setTrafficChannelFilter?.(trafficChannelFilter === "organic" ? "all" : "organic")}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+            trafficChannelFilter === "organic"
+              ? "bg-emerald-500 text-black font-black shadow-md shadow-emerald-500/20"
+              : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/20"
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full bg-emerald-400" />
+          <span>🔗 По прямому посиланню (Органіка)</span>
+        </button>
       </div>
 
       {/* Filtering control panel */}
@@ -723,16 +770,24 @@ export const LeadsTab = React.memo(function LeadsTab({
                       <td className="p-4">
                         <div className="flex flex-col gap-1 max-w-[240px]">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span
-                              className={`font-black uppercase text-[9px] tracking-wider px-1.5 py-0.5 rounded ${
-                                isLight
-                                  ? "bg-neutral-100 text-neutral-700 border border-neutral-200"
-                                  : "bg-white/5 text-white/80 border border-white/10"
-                              }`}
-                              title="Джерело (UTM Source)"
-                            >
-                              🌐 {lead.utmSource || lead.utm_source || "direct"}
-                            </span>
+                            {(() => {
+                              const rawSource = lead.utmSource || lead.utm_source || "";
+                              const isTarget = Boolean(rawSource && rawSource !== "direct");
+                              return (
+                                <span
+                                  className={`font-black uppercase text-[9px] tracking-wider px-1.5 py-0.5 rounded ${
+                                    isTarget
+                                      ? "bg-purple-500/15 text-purple-300 border border-purple-500/30 font-extrabold"
+                                      : isLight
+                                      ? "bg-neutral-100 text-neutral-700 border border-neutral-200"
+                                      : "bg-white/5 text-white/60 border border-white/10"
+                                  }`}
+                                  title={`Джерело: ${isTarget ? "Таргет / Meta Ads" : "Пряме посилання / Органіка"}`}
+                                >
+                                  {isTarget ? `🎯 ${rawSource}` : "🔗 direct (посилання)"}
+                                </span>
+                              );
+                            })()}
                             {(lead.utmMedium || lead.utm_medium) && (
                               <span
                                 className="font-bold text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20"

@@ -218,6 +218,7 @@ async function handleQueryLeads(request: Request) {
     const statusFilter = filters?.statusFilter || "all";
     const touchCountFilter = filters?.touchCountFilter || "all";
     const sourceFilter = filters?.sourceFilter || "all";
+    const trafficChannelFilter = filters?.trafficChannelFilter || "all";
     const unpaidIntentOnly = filters?.unpaidIntentOnly || false;
     const startDate = filters?.startDate || "";
     const endDate = filters?.endDate || "";
@@ -230,6 +231,11 @@ async function handleQueryLeads(request: Request) {
     }
     if (statusFilter !== "all") {
       query = query.eq("status", statusFilter);
+    }
+    if (trafficChannelFilter === "target") {
+      query = query.not("utm_source", "is", null).neq("utm_source", "").neq("utm_source", "direct");
+    } else if (trafficChannelFilter === "organic") {
+      query = query.or("utm_source.is.null,utm_source.eq.,utm_source.eq.direct");
     }
     if (touchCountFilter !== "all") {
       if (touchCountFilter === "multi") {

@@ -150,6 +150,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [touchCountFilter, setTouchCountFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
+  const [trafficChannelFilter, setTrafficChannelFilter] = useState<"all" | "target" | "organic">("all");
   const [unpaidIntentOnly, setUnpaidIntentOnly] = useState(false);
   const monthDates = getCurrentMonthDates();
   const [startDate, setStartDate] = useState(monthDates.startDate);
@@ -206,6 +207,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       setStatusFilter("all");
       setTouchCountFilter("all");
       setSourceFilter("all");
+      setTrafficChannelFilter("all");
       setUnpaidIntentOnly(false);
       setCurrentPage(1);
       setSelectedLanding("all");
@@ -234,6 +236,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       statusFilter: isProjectSwitched ? "all" : statusFilter,
       touchCountFilter: isProjectSwitched ? "all" : touchCountFilter,
       sourceFilter: isProjectSwitched ? "all" : sourceFilter,
+      trafficChannelFilter: isProjectSwitched ? "all" : trafficChannelFilter,
       unpaidIntentOnly: isProjectSwitched ? false : unpaidIntentOnly,
       startDate: isProjectSwitched ? "" : startDate,
       endDate: isProjectSwitched ? "" : endDate,
@@ -442,6 +445,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       statusFilter,
       touchCountFilter,
       sourceFilter,
+      trafficChannelFilter,
       unpaidIntentOnly,
       startDate: startDate,
       endDate: endDate,
@@ -480,6 +484,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
       statusFilter,
       touchCountFilter,
       sourceFilter,
+      trafficChannelFilter,
       unpaidIntentOnly,
       startDate: startDate,
       endDate: endDate,
@@ -1292,6 +1297,8 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
             setShowAddLead={setShowAddLead}
             selectedLanding={selectedLanding}
             setSelectedLanding={setSelectedLanding}
+            trafficChannelFilter={trafficChannelFilter}
+            setTrafficChannelFilter={setTrafficChannelFilter}
             filtersSummary={dashboardData?.filtersSummary}
             isLoading={isLoading}
           />

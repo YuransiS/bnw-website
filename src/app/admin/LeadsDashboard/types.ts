@@ -121,6 +121,7 @@ export interface DashboardData {
     startDate: string;
     endDate: string;
     selectedLanding: string;
+    trafficChannelFilter?: "all" | "target" | "organic";
   };
   dataHealth?: {
     leadsWithoutUuidCount: number;

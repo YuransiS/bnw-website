@@ -244,6 +244,7 @@ export async function getUnifiedCRMData(
     startDate?: string;
     endDate?: string;
     selectedLanding?: string;
+    trafficChannelFilter?: "all" | "target" | "organic" | string;
     skipTraffic?: boolean;
   }
 ) {
@@ -550,6 +551,7 @@ export async function getUnifiedCRMData(
     const statusFilter = filters?.statusFilter || "all";
     const touchCountFilter = filters?.touchCountFilter || "all";
     const sourceFilter = filters?.sourceFilter || "all";
+    const trafficChannelFilter = filters?.trafficChannelFilter || "all";
     const unpaidIntentOnly = filters?.unpaidIntentOnly || false;
     const today = new Date();
     const year = today.getFullYear();
@@ -571,6 +573,13 @@ export async function getUnifiedCRMData(
     if (statusFilter !== "all") {
       query = query.eq("status", statusFilter);
       aggQuery = aggQuery.eq("status", statusFilter);
+    }
+    if (trafficChannelFilter === "target") {
+      query = query.not("utm_source", "is", null).neq("utm_source", "").neq("utm_source", "direct");
+      aggQuery = aggQuery.not("utm_source", "is", null).neq("utm_source", "").neq("utm_source", "direct");
+    } else if (trafficChannelFilter === "organic") {
+      query = query.or("utm_source.is.null,utm_source.eq.,utm_source.eq.direct");
+      aggQuery = aggQuery.or("utm_source.is.null,utm_source.eq.,utm_source.eq.direct");
     }
     if (touchCountFilter !== "all") {
       if (touchCountFilter === "multi") {
@@ -1099,7 +1108,8 @@ export async function getUnifiedCRMData(
         unpaidIntentOnly,
         startDate,
         endDate,
-        selectedLanding
+        selectedLanding,
+        trafficChannelFilter
       },
       filtersSummary: filtersSummaryRes?.data || null,
       dataHealth
