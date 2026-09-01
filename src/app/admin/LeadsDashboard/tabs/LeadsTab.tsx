@@ -224,6 +224,15 @@ export const LeadsTab = React.memo(function LeadsTab({
   const filteredLeads = React.useMemo(() => {
     let list = processedLeads || [];
 
+    // 0. Funnel / Source Filter
+    if (sourceFilter && sourceFilter !== "all") {
+      if (sourceFilter === "unassigned") {
+        list = list.filter((l: any) => !l.funnelId && !l.funnel_id);
+      } else {
+        list = list.filter((l: any) => l.funnelId === sourceFilter || l.funnel_id === sourceFilter || l.target_sheet === sourceFilter || l.targetSheet === sourceFilter);
+      }
+    }
+
     // 1. Status Filter
     if (statusFilter && statusFilter !== "all") {
       list = list.filter((l: any) => l.status === statusFilter);
@@ -281,7 +290,7 @@ export const LeadsTab = React.memo(function LeadsTab({
     }
 
     return list;
-  }, [processedLeads, statusFilter, trafficChannelFilter, touchCountFilter, unpaidIntentOnly, selectedLanding, searchQuery]);
+  }, [processedLeads, sourceFilter, statusFilter, trafficChannelFilter, touchCountFilter, unpaidIntentOnly, selectedLanding, searchQuery]);
 
   const displayLeads = React.useMemo(() => {
     // If paginatedLeads matches filtered count, prefer paginatedLeads, otherwise paginate filteredLeads
