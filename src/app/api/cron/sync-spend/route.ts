@@ -92,7 +92,7 @@ async function fetchMetaInsightsAsync(
     body: JSON.stringify({
       access_token: metaToken,
       level: "ad",
-      fields: "campaign_id,campaign_name,adset_id,ad_id,spend,impressions,clicks,actions,action_values,date_start",
+      fields: "campaign_id,campaign_name,adset_id,ad_id,spend,impressions,clicks,inline_link_clicks,actions,action_values,date_start",
       time_increment: 1,
       time_range: timeRange,
       limit: 500
@@ -253,10 +253,10 @@ export async function GET(req: Request) {
 
     const accounts = Array.from(accountsMap.values());
 
-    // Date range: last 3 days
+    // Date range: allow query params or default to last 14 days
     const today = new Date();
-    const until = today.toISOString().split("T")[0];
-    const since = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const until = searchParams.get("until") || today.toISOString().split("T")[0];
+    const since = searchParams.get("since") || new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
     const allRecords: any[] = [];
     const summary: Record<string, number> = {};
@@ -399,7 +399,7 @@ export async function GET(req: Request) {
           campaign_name: ins.campaign_name || "",
           adset_id: ins.adset_id || "",
           ad_id: ins.ad_id || "",
-          clicks: Number(ins.clicks || 0),
+          clicks: Number(ins.inline_link_clicks || ins.clicks || 0),
           impressions: Number(ins.impressions || 0),
           spend: spend,
           spend_usd: Number(spendUsd.toFixed(2)),
