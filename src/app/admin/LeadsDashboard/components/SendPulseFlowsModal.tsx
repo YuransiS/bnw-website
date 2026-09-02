@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import {
   X, GitBranch, Search, RefreshCw, Check, Plus, Filter, Sparkles,
-  ExternalLink, Bot, Zap, ArrowRight, Layers, CheckCircle2
+  ExternalLink, Bot, Zap, ArrowRight, Layers, CheckCircle2, Link2, Unlink, HelpCircle
 } from "lucide-react";
 import { transliterateToSlug } from "@/utils/transliterate";
 
@@ -26,6 +26,12 @@ interface SendPulseFlowsModalProps {
   loading: boolean;
   onRefresh: () => void;
   currentSteps: any[];
+  boundFlowId?: string | null;
+  boundFlowName?: string | null;
+  flowMode?: "single" | "multi";
+  onBindFlow?: (flow: SendPulseFlowItem) => Promise<void> | void;
+  onUnbindFlow?: () => Promise<void> | void;
+  onSetFlowMode?: (mode: "single" | "multi") => void;
   onImportFlowAsStep: (flow: SendPulseFlowItem) => Promise<void> | void;
   onFilterByFlow?: (slug: string) => void;
   selectedFilterStep?: string | null;
@@ -40,12 +46,19 @@ export default function SendPulseFlowsModal({
   loading,
   onRefresh,
   currentSteps,
+  boundFlowId,
+  boundFlowName,
+  flowMode = "single",
+  onBindFlow,
+  onUnbindFlow,
+  onSetFlowMode,
   onImportFlowAsStep,
   onFilterByFlow,
   selectedFilterStep
 }: SendPulseFlowsModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [importingId, setImportingId] = useState<string | null>(null);
+  const [activeMode, setActiveMode] = useState<"single" | "multi">(flowMode || "single");
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -69,19 +82,44 @@ export default function SendPulseFlowsModal({
     );
   };
 
+  const handleBind = async (flow: SendPulseFlowItem) => {
+    if (!onBindFlow) return;
+    setActionLoadingId(flow.id);
+    try {
+      await onBindFlow(flow);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleUnbind = async (flowId: string) => {
+    if (!onUnbindFlow) return;
+    setActionLoadingId(flowId);
+    try {
+      await onUnbindFlow();
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
   const handleImport = async (flow: SendPulseFlowItem) => {
-    setImportingId(flow.id);
+    setActionLoadingId(flow.id);
     try {
       await onImportFlowAsStep(flow);
     } finally {
-      setImportingId(null);
+      setActionLoadingId(null);
     }
+  };
+
+  const handleModeChange = (mode: "single" | "multi") => {
+    setActiveMode(mode);
+    if (onSetFlowMode) onSetFlowMode(mode);
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
       <div
-        className="bg-[#0f0f13] border border-white/10 rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
+        className="bg-[#0f0f13] border border-white/10 rounded-2xl w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -98,7 +136,7 @@ export default function SendPulseFlowsModal({
                 </span>
               </div>
               <p className="text-xs text-white/40 mt-0.5">
-                Оберіть ланцюжок з бота SendPulse для додавання у воронку «{funnelName || "Поточна воронка"}» або швидкої фільтрації підписників.
+                Підв'язка ланцюжка до воронки «{funnelName || "Поточна воронка"}» або імпорт окремих кроків.
               </p>
             </div>
           </div>
@@ -120,6 +158,67 @@ export default function SendPulseFlowsModal({
             >
               <X className="w-5 h-5" />
             </button>
+          </div>
+        </div>
+
+        {/* Architecture Mode Selector (90% vs 10%) */}
+        <div className="px-5 pt-4 pb-3 border-b border-white/5 bg-black/40 space-y-2.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span className="text-[10px] uppercase font-black tracking-wider text-white/50 flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-amber-400" /> Архітектура підв'язки воронки:
+            </span>
+
+            <div className="flex items-center p-1 bg-white/5 border border-white/10 rounded-xl gap-1">
+              <button
+                type="button"
+                onClick={() => handleModeChange("single")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeMode === "single"
+                    ? "bg-emerald-500 text-black shadow-md shadow-emerald-500/20"
+                    : "text-white/60 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                <span>⚡ 1 ланцюжок = 1 воронка</span>
+                <span className={`text-[9px] px-1.5 py-0.2 rounded font-extrabold ${activeMode === "single" ? "bg-black/20 text-black" : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"}`}>
+                  90%
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleModeChange("multi")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeMode === "multi"
+                    ? "bg-purple-500 text-white shadow-md shadow-purple-500/20"
+                    : "text-white/60 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                <span>🔀 Кілька ланцюжків як кроки</span>
+                <span className={`text-[9px] px-1.5 py-0.2 rounded font-extrabold ${activeMode === "multi" ? "bg-black/20 text-white" : "bg-white/10 text-white/40"}`}>
+                  10%
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* Mode Context Hint */}
+          <div className={`p-2.5 rounded-xl border text-xs flex items-start gap-2 ${
+            activeMode === "single"
+              ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-300/90"
+              : "bg-purple-500/5 border-purple-500/20 text-purple-300/90"
+          }`}>
+            <HelpCircle className="w-4 h-4 shrink-0 mt-0.5 text-current opacity-70" />
+            <div className="text-[11px] leading-relaxed">
+              {activeMode === "single" ? (
+                <>
+                  <strong>Режим 1 ланцюжка (Рекомендовано):</strong> воронка повністю прив'язується до одного обраного ланцюжка. База підписників та аналітика цієї воронки фільтруються виключно за учасниками цього ланцюжка, а не за всією аудиторією бота.
+                </>
+              ) : (
+                <>
+                  <strong>Покроковий режим (10% випадків):</strong> для складних воронок, розбитих на окремі частини. Ви можете додати будь-яку кількість ланцюжків як окремі кроки воронки зі своїми Webhook URL.
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -147,12 +246,16 @@ export default function SendPulseFlowsModal({
           <div className="flex items-center gap-2 shrink-0 text-xs text-white/50">
             <span>Знайдено: <strong className="text-white">{filteredFlows.length}</strong></span>
             <span>•</span>
-            <span>У воронці: <strong className="text-emerald-400">{currentSteps.length}</strong></span>
+            {activeMode === "single" ? (
+              <span>Підв'язано: <strong className="text-emerald-400">{boundFlowName ? boundFlowName : "Не обрано"}</strong></span>
+            ) : (
+              <span>У воронці: <strong className="text-purple-400">{currentSteps.length} кроків</strong></span>
+            )}
           </div>
         </div>
 
         {/* Flows List */}
-        <div className="p-5 overflow-y-auto max-h-[550px] space-y-3 custom-scrollbar">
+        <div className="p-5 overflow-y-auto max-h-[500px] space-y-3 custom-scrollbar">
           {loading ? (
             <div className="py-16 text-center text-white/40 italic space-y-2">
               <RefreshCw className="w-6 h-6 animate-spin text-emerald-400 mx-auto mb-2" />
@@ -169,8 +272,9 @@ export default function SendPulseFlowsModal({
             </div>
           ) : (
             filteredFlows.map((flow) => {
+              const isBound = boundFlowId === flow.id;
               const imported = isStepImported(flow);
-              const isImporting = importingId === flow.id;
+              const isLoading = actionLoadingId === flow.id;
               const cleanSlug = transliterateToSlug(flow.name);
               const isFiltering = selectedFilterStep === cleanSlug;
 
@@ -178,8 +282,10 @@ export default function SendPulseFlowsModal({
                 <div
                   key={flow.id}
                   className={`p-4 rounded-2xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 group ${
-                    imported
-                      ? "bg-emerald-500/[0.04] border-emerald-500/30"
+                    isBound
+                      ? "bg-emerald-500/[0.08] border-emerald-500/50 shadow-lg shadow-emerald-500/5 ring-1 ring-emerald-500/30"
+                      : imported && activeMode === "multi"
+                      ? "bg-purple-500/[0.06] border-purple-500/40"
                       : "bg-white/[0.02] border-white/5 hover:border-white/20 hover:bg-white/[0.04]"
                   }`}
                 >
@@ -197,14 +303,19 @@ export default function SendPulseFlowsModal({
                       >
                         {flow.status === 1 ? "Активний" : "Чернетка"}
                       </span>
-                      {imported && (
-                        <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-full text-[9px] font-black flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" /> Додано у воронку
+                      {isBound && (
+                        <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-full text-[9px] font-black flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Основний ланцюжок воронки
+                        </span>
+                      )}
+                      {!isBound && imported && activeMode === "multi" && (
+                        <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-full text-[9px] font-black flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Додано як крок
                         </span>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-3 text-[10px] text-white/40 font-mono">
+                    <div className="flex items-center gap-3 text-[10px] text-white/40 font-mono flex-wrap">
                       <span>ID: {flow.id}</span>
                       <span>•</span>
                       <span>slug: step={cleanSlug}</span>
@@ -239,33 +350,68 @@ export default function SendPulseFlowsModal({
                       </button>
                     )}
 
-                    <button
-                      type="button"
-                      onClick={() => handleImport(flow)}
-                      disabled={imported || isImporting}
-                      className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
-                        imported
-                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 cursor-default opacity-80"
-                          : "bg-emerald-500 hover:bg-emerald-400 text-black shadow-lg shadow-emerald-500/10"
-                      }`}
-                    >
-                      {isImporting ? (
-                        <>
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                          <span>Додавання...</span>
-                        </>
-                      ) : imported ? (
-                        <>
-                          <Check className="w-3.5 h-3.5" />
-                          <span>У воронці</span>
-                        </>
+                    {activeMode === "single" ? (
+                      isBound ? (
+                        <button
+                          type="button"
+                          onClick={() => handleUnbind(flow.id)}
+                          disabled={isLoading}
+                          className="px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer bg-white/5 hover:bg-rose-500/20 text-white/60 hover:text-rose-300 border border-white/10 hover:border-rose-500/30"
+                          title="Відв'язати цей ланцюжок від воронки"
+                        >
+                          <Unlink className="w-3.5 h-3.5 text-rose-400" />
+                          <span>{isLoading ? "Відв'язування..." : "Відв'язати"}</span>
+                        </button>
                       ) : (
-                        <>
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>+ Додати як крок</span>
-                        </>
-                      )}
-                    </button>
+                        <button
+                          type="button"
+                          onClick={() => handleBind(flow)}
+                          disabled={isLoading}
+                          className="px-3.5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer bg-emerald-500 hover:bg-emerald-400 text-black shadow-lg shadow-emerald-500/10"
+                          title="Підв'язати цей ланцюжок як основний для цієї воронки"
+                        >
+                          {isLoading ? (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              <span>Підв'язую...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Link2 className="w-3.5 h-3.5" />
+                              <span>🔗 Підв'язати до воронки</span>
+                            </>
+                          )}
+                        </button>
+                      )
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleImport(flow)}
+                        disabled={imported || isLoading}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                          imported
+                            ? "bg-purple-500/10 text-purple-300 border border-purple-500/20 cursor-default opacity-80"
+                            : "bg-purple-500 hover:bg-purple-400 text-white shadow-lg shadow-purple-500/10"
+                        }`}
+                      >
+                        {isLoading ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Додавання...</span>
+                          </>
+                        ) : imported ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            <span>У воронці</span>
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>+ Додати як крок</span>
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -276,7 +422,9 @@ export default function SendPulseFlowsModal({
         {/* Footer */}
         <div className="p-4 border-t border-white/10 bg-white/[0.01] flex items-center justify-between text-xs text-white/40">
           <span>
-            💡 Кожен доданий ланцюжок автоматично генерує унікальний Webhook URL для відстеження конверсій.
+            {activeMode === "single"
+              ? "⚡ У режимі «1 ланцюжок = 1 воронка» база контактів автоматично фільтрується за цим ланцюжком."
+              : "🔀 Кожен доданий крок автоматично генерує Webhook URL для SendPulse блоків «Дія»."}
           </span>
           <button
             type="button"

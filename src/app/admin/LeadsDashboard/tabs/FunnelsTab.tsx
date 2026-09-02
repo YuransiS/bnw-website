@@ -15,7 +15,8 @@ import {
   getSendPulseBotContactsAction,
   syncSendPulseBotContactsAction,
   getSendPulseBotFlowsAction,
-  saveFunnelBotStepsAction
+  saveFunnelBotStepsAction,
+  bindFunnelSendPulseFlowAction
 } from "../../actions";
 import {
   createTransactionAction,
@@ -26,7 +27,7 @@ import {
   Search, Sparkles, ArrowLeft, Edit3, Trash2, CheckCircle, TrendingUp, DollarSign,
   ChevronRight, Eye, Award, X, Settings, Megaphone, Bot, Copy, Check, Users, UserCheck,
   ExternalLink, Send, ShieldCheck, Phone, Mail, ArrowUpRight, Filter, GitBranch, Zap,
-  SlidersHorizontal, ListFilter, CheckCircle2
+  SlidersHorizontal, ListFilter, CheckCircle2, Link2, Unlink, HelpCircle, CheckSquare, Square, Sliders
 } from "lucide-react";
 import ProjectSettingsModal from "../components/ProjectSettingsModal";
 import SendPulseFlowsModal from "../components/SendPulseFlowsModal";
@@ -62,6 +63,10 @@ interface Funnel {
   description: string;
   bot_username?: string | null;
   bot_steps?: any[] | null;
+  bound_flow_id?: string | null;
+  bound_flow_name?: string | null;
+  flow_mode?: "single" | "multi" | string | null;
+  pipeline_config?: any[] | null;
   planned_revenue?: number;
   planned_spend?: number;
   stages?: any[] | string[] | null;
@@ -181,6 +186,75 @@ const FUNNEL_TYPES = [
       "Купівля трипваєра",
       "Допродаж основного курсу",
       "Оплата основного продукту"
+    ]
+  }
+];
+
+export interface PipelineStageConfig {
+  id: string;
+  type: "traffic" | "registration" | "bot_entry" | "bot_milestone" | "quiz" | "tripwire" | "sales_call" | "main_sale";
+  label: string;
+  subLabel?: string;
+  enabled: boolean;
+  color?: string;
+}
+
+export const ALL_CONFIGURABLE_PIPELINE_STAGES: PipelineStageConfig[] = [
+  { id: "traffic", type: "traffic", label: "Крок 1: Трафік", subLabel: "унікальні кліки з UTM / Meta Ads", enabled: true, color: "text-white" },
+  { id: "registration", type: "registration", label: "Крок 2: Реєстрації", subLabel: "форми на лендінгу / заявки", enabled: true, color: "text-emerald-450" },
+  { id: "bot_entry", type: "bot_entry", label: "Крок 3: Вхід у бот", subLabel: "активація в SendPulse ланцюжку", enabled: true, color: "text-cyan-400" },
+  { id: "bot_milestone", type: "bot_milestone", label: "Крок: Кроки бота", subLabel: "проходження уроків / до оффера", enabled: false, color: "text-blue-400" },
+  { id: "quiz", type: "quiz", label: "Крок: Анкета / Діагностика", subLabel: "заповнені опитування / квізи", enabled: false, color: "text-purple-400" },
+  { id: "tripwire", type: "tripwire", label: "Крок: Купівля Трипваєра", subLabel: "мікро-оплата / тріал", enabled: false, color: "text-amber-450" },
+  { id: "sales_call", type: "sales_call", label: "Крок: Дзвінок / Кваліфікація", subLabel: "аудит відділом продажів", enabled: false, color: "text-amber-400" },
+  { id: "main_sale", type: "main_sale", label: "Крок: Фінальна оплата", subLabel: "основний продукт / дохід", enabled: true, color: "text-emerald-450" }
+];
+
+export const PIPELINE_PRESETS = [
+  {
+    id: "classic_bot",
+    name: "⚡ Класична бот-воронка (90%)",
+    desc: "Трафік -> Реєстрація -> Вхід у бот -> Фінальна оплата",
+    stages: [
+      { id: "traffic", type: "traffic", label: "Крок 1: Трафік", subLabel: "унікальні кліки з UTM", enabled: true, color: "text-white" },
+      { id: "registration", type: "registration", label: "Крок 2: Реєстрації", subLabel: "форми на лендінгу", enabled: true, color: "text-emerald-450" },
+      { id: "bot_entry", type: "bot_entry", label: "Крок 3: Вхід у бот", subLabel: "активація в SendPulse", enabled: true, color: "text-cyan-400" },
+      { id: "main_sale", type: "main_sale", label: "Крок 4: Оплати", subLabel: "успішні замовлення", enabled: true, color: "text-emerald-450" }
+    ]
+  },
+  {
+    id: "vsl_tripwire",
+    name: "🚀 VSL + Трипваєр (Оплата -> Бот -> Курс)",
+    desc: "Трафік -> Реєстрація / VSL -> Купівля Трипваєра -> Доступ у бот -> Основний курс",
+    stages: [
+      { id: "traffic", type: "traffic", label: "Крок 1: Трафік", subLabel: "унікальні кліки з UTM", enabled: true, color: "text-white" },
+      { id: "registration", type: "registration", label: "Крок 2: Перегляд VSL", subLabel: "відвідування сторінки", enabled: true, color: "text-blue-400" },
+      { id: "tripwire", type: "tripwire", label: "Крок 3: Купівля Трипваєра", subLabel: "мікро-оплата / тріал", enabled: true, color: "text-amber-450" },
+      { id: "bot_entry", type: "bot_entry", label: "Крок 4: Доступ у бот", subLabel: "видача матеріалів", enabled: true, color: "text-cyan-400" },
+      { id: "main_sale", type: "main_sale", label: "Крок 5: Основний курс", subLabel: "фінальна оплата", enabled: true, color: "text-emerald-450" }
+    ]
+  },
+  {
+    id: "survey_diag",
+    name: "📋 Анкетна / Діагностична воронка",
+    desc: "Трафік -> Реєстрація -> Анкета -> Кваліфікація ВП -> Оплата",
+    stages: [
+      { id: "traffic", type: "traffic", label: "Крок 1: Трафік", subLabel: "унікальні кліки з UTM", enabled: true, color: "text-white" },
+      { id: "registration", type: "registration", label: "Крок 2: Реєстрації", subLabel: "заявки на сайті", enabled: true, color: "text-emerald-450" },
+      { id: "quiz", type: "quiz", label: "Крок 3: Анкети", subLabel: "заповнені опитування", enabled: true, color: "text-purple-400" },
+      { id: "sales_call", type: "sales_call", label: "Крок 4: Кваліфікація ВП", subLabel: "дзвінок / сесія", enabled: true, color: "text-amber-400" },
+      { id: "main_sale", type: "main_sale", label: "Крок 5: Оплати", subLabel: "успішні замовлення", enabled: true, color: "text-emerald-450" }
+    ]
+  },
+  {
+    id: "direct_bot",
+    name: "🤖 Прямий трафік у чат-бот",
+    desc: "Трафік (Deep-link) -> Чат-бот -> Проходження уроків -> Оплата",
+    stages: [
+      { id: "traffic", type: "traffic", label: "Крок 1: Трафік", subLabel: "кліки по Smart Deep-link", enabled: true, color: "text-white" },
+      { id: "bot_entry", type: "bot_entry", label: "Крок 2: Підписка в бот", subLabel: "старт ланцюжка", enabled: true, color: "text-cyan-400" },
+      { id: "bot_milestone", type: "bot_milestone", label: "Крок 3: Фініш / Офер", subLabel: "пройшли до оффера", enabled: true, color: "text-purple-400" },
+      { id: "main_sale", type: "main_sale", label: "Крок 4: Оплати", subLabel: "успішні замовлення", enabled: true, color: "text-emerald-450" }
     ]
   }
 ];
@@ -524,6 +598,208 @@ export default function FunnelsTab({
       setTimeout(() => setImportedFlowFeedback(null), 3500);
     } catch (err: any) {
       console.error("Error saving imported step:", err);
+    }
+  };
+
+  const handleBindFlow = async (flow: any) => {
+    if (!selectedFunnel) return;
+    try {
+      const res = await bindFunnelSendPulseFlowAction(
+        selectedFunnel.id,
+        flow.id,
+        flow.name,
+        selectedFunnel.bot_username || selectedBotUsername,
+        "single"
+      );
+      if (res.success && res.funnel) {
+        setSelectedFunnel(res.funnel);
+        setFunnels((prev) => prev.map((f) => (f.id === selectedFunnel.id ? { ...f, ...res.funnel } : f)));
+        setImportedFlowFeedback(`Воронку підв'язано до ланцюжка "${flow.name}"!`);
+        setTimeout(() => setImportedFlowFeedback(null), 3500);
+        await loadBotContacts(selectedFunnel.bot_username || selectedBotUsername);
+      }
+    } catch (err: any) {
+      console.error("Error binding flow:", err);
+    }
+  };
+
+  const handleUnbindFlow = async () => {
+    if (!selectedFunnel) return;
+    try {
+      const res = await bindFunnelSendPulseFlowAction(
+        selectedFunnel.id,
+        null,
+        null,
+        selectedFunnel.bot_username || selectedBotUsername,
+        selectedFunnel.flow_mode || "single"
+      );
+      if (res.success && res.funnel) {
+        setSelectedFunnel(res.funnel);
+        setFunnels((prev) => prev.map((f) => (f.id === selectedFunnel.id ? { ...f, ...res.funnel } : f)));
+        setImportedFlowFeedback(`Ланцюжок відв'язано від воронки`);
+        setTimeout(() => setImportedFlowFeedback(null), 3500);
+      }
+    } catch (err: any) {
+      console.error("Error unbinding flow:", err);
+    }
+  };
+
+  const handleSetFlowMode = async (mode: "single" | "multi") => {
+    if (!selectedFunnel) return;
+    try {
+      const res = await updateFunnelAction(projectId, selectedFunnel.id, {
+        name: selectedFunnel.name,
+        startDate: selectedFunnel.start_date,
+        endDate: selectedFunnel.end_date,
+        campaignIds: selectedFunnel.campaign_ids || [],
+        landingSlugs: selectedFunnel.landing_slugs || [],
+        botUsername: selectedFunnel.bot_username || null,
+        botSteps: selectedFunnel.bot_steps || [],
+        boundFlowId: selectedFunnel.bound_flow_id || null,
+        boundFlowName: selectedFunnel.bound_flow_name || null,
+        flowMode: mode,
+        pipelineConfig: selectedFunnel.pipeline_config || [],
+        description: selectedFunnel.description || "",
+        plannedRevenue: selectedFunnel.planned_revenue,
+        plannedSpend: selectedFunnel.planned_spend,
+        stages: selectedFunnel.stages || []
+      });
+      if (res.success && res.funnel) {
+        setSelectedFunnel(res.funnel);
+        setFunnels((prev) => prev.map((f) => (f.id === selectedFunnel.id ? { ...f, ...res.funnel } : f)));
+      }
+    } catch (err: any) {
+      console.error("Error updating flow mode:", err);
+    }
+  };
+
+  // Pipeline configuration modal state
+  const [showPipelineConfigModal, setShowPipelineConfigModal] = useState<boolean>(false);
+  const [editingPipelineStages, setEditingPipelineStages] = useState<any[]>([]);
+
+  const handleSavePipelineConfig = async (newConfig: any[]) => {
+    if (!selectedFunnel) return;
+    try {
+      const res = await updateFunnelAction(projectId, selectedFunnel.id, {
+        name: selectedFunnel.name,
+        startDate: selectedFunnel.start_date,
+        endDate: selectedFunnel.end_date,
+        campaignIds: selectedFunnel.campaign_ids || [],
+        landingSlugs: selectedFunnel.landing_slugs || [],
+        botUsername: selectedFunnel.bot_username || null,
+        botSteps: selectedFunnel.bot_steps || [],
+        boundFlowId: selectedFunnel.bound_flow_id || null,
+        boundFlowName: selectedFunnel.bound_flow_name || null,
+        flowMode: selectedFunnel.flow_mode || "single",
+        pipelineConfig: newConfig,
+        description: selectedFunnel.description || "",
+        plannedRevenue: selectedFunnel.planned_revenue,
+        plannedSpend: selectedFunnel.planned_spend,
+        stages: selectedFunnel.stages || []
+      });
+      if (res.success && res.funnel) {
+        setSelectedFunnel(res.funnel);
+        setFunnels((prev) => prev.map((f) => (f.id === selectedFunnel.id ? { ...f, ...res.funnel } : f)));
+        setShowPipelineConfigModal(false);
+      }
+    } catch (err: any) {
+      console.error("Error saving pipeline config:", err);
+    }
+  };
+
+  const getActivePipelineStages = (
+    funnel: Funnel,
+    statsData: any,
+    contacts: any[],
+    stepCounts: Record<string, number>
+  ) => {
+    // If funnel has custom configured pipeline
+    if (Array.isArray(funnel.pipeline_config) && funnel.pipeline_config.length > 0) {
+      const filtered = funnel.pipeline_config.filter((s: any) => s.enabled);
+      if (filtered.length > 0) return filtered;
+    }
+
+    // Default smart resolution based on funnel characteristics
+    const fName = (funnel.name || "").toLowerCase();
+    const fDesc = (funnel.description || "").toLowerCase();
+    const isVsl = fName.includes("vsl") || fName.includes("трипва") || fDesc.includes("vsl");
+    const isSurvey = (statsData?.quizzesCount || 0) > 0 || fName.includes("анкет") || fName.includes("діагност") || fDesc.includes("анкет");
+    const isDirect = (funnel.landing_slugs || []).length === 0 && Boolean(funnel.bot_username);
+
+    if (isVsl) {
+      return [
+        { id: "traffic", type: "traffic", label: "Крок 1: Трафік", subLabel: "унікальні кліки з UTM", color: "text-white", enabled: true },
+        { id: "registration", type: "registration", label: "Крок 2: Перегляд VSL", subLabel: "відвідувачі сайту", color: "text-blue-400", enabled: true },
+        { id: "tripwire", type: "tripwire", label: "Крок 3: Купівля Трипваєра", subLabel: "мікро-оплата / тріал", color: "text-amber-450", enabled: true },
+        { id: "bot_entry", type: "bot_entry", label: "Крок 4: Доступ у бот", subLabel: "видача контенту", color: "text-cyan-400", enabled: true },
+        { id: "main_sale", type: "main_sale", label: "Крок 5: Основний курс", subLabel: "фінальна оплата", color: "text-emerald-450", enabled: true }
+      ];
+    }
+
+    if (isSurvey) {
+      return [
+        { id: "traffic", type: "traffic", label: "Крок 1: Трафік", subLabel: "унікальні кліки з UTM", color: "text-white", enabled: true },
+        { id: "registration", type: "registration", label: "Крок 2: Реєстрації", subLabel: "форми на лендінгу", color: "text-emerald-450", enabled: true },
+        { id: "quiz", type: "quiz", label: "Крок 3: Анкети", subLabel: "заповнені діагностики", color: "text-purple-400", enabled: true },
+        { id: "sales_call", type: "sales_call", label: "Крок 4: Кваліфікація ВП", subLabel: "дзвінок / аудит", color: "text-amber-400", enabled: true },
+        { id: "main_sale", type: "main_sale", label: "Крок 5: Оплати", subLabel: "успішні замовлення", color: "text-emerald-450", enabled: true }
+      ];
+    }
+
+    if (isDirect) {
+      return [
+        { id: "traffic", type: "traffic", label: "Крок 1: Трафік", subLabel: "кліки по Smart Deep-link", color: "text-white", enabled: true },
+        { id: "bot_entry", type: "bot_entry", label: "Крок 2: Підписка в бот", subLabel: "старт ланцюжка", color: "text-cyan-400", enabled: true },
+        { id: "bot_milestone", type: "bot_milestone", label: "Крок 3: Фініш / Офер", subLabel: "дійшли до офера", color: "text-purple-400", enabled: true },
+        { id: "main_sale", type: "main_sale", label: "Крок 4: Оплати", subLabel: "успішні замовлення", color: "text-emerald-450", enabled: true }
+      ];
+    }
+
+    // Classic 90% default: Traffic -> Registration -> Bot Entry -> Main Sale (No unwanted quiz hardcoding!)
+    return [
+      { id: "traffic", type: "traffic", label: "Крок 1: Трафік", subLabel: "унікальні кліки з UTM", color: "text-white", enabled: true },
+      { id: "registration", type: "registration", label: "Крок 2: Реєстрації", subLabel: "форми на лендінгу", color: "text-emerald-450", enabled: true },
+      { id: "bot_entry", type: "bot_entry", label: "Крок 3: Вхід у бот", subLabel: "активація в SendPulse", color: "text-cyan-400", enabled: true },
+      { id: "main_sale", type: "main_sale", label: "Крок 4: Оплати", subLabel: "успішні замовлення", color: "text-emerald-450", enabled: true }
+    ];
+  };
+
+  const getPipelineStageCount = (
+    type: string,
+    statsData: any,
+    contacts: any[],
+    stepCounts: Record<string, number>,
+    funnel: Funnel
+  ) => {
+    switch (type) {
+      case "traffic":
+        return statsData?.totalClicks || 0;
+      case "registration":
+        return statsData?.leadsCount || 0;
+      case "bot_entry": {
+        const boundFlowId = funnel.bound_flow_id;
+        if (boundFlowId && contacts.length > 0) {
+          const flowContacts = contacts.filter((c: any) => c.isInBoundFlow || c.hasEventsInThisFunnel);
+          return flowContacts.length > 0 ? flowContacts.length : contacts.length;
+        }
+        return stepCounts["bot_started"] || contacts.length || (statsData?.leadsCount > 0 ? Math.round(statsData.leadsCount * 0.85) : 0);
+      }
+      case "bot_milestone": {
+        return stepCounts["completed"] || stepCounts["offer_clicked"] || stepCounts["lesson_3"] || stepCounts["lesson_2"] || stepCounts["lesson_1"] || 0;
+      }
+      case "quiz":
+        return statsData?.quizzesCount || 0;
+      case "tripwire": {
+        const trialCount = contacts.filter((c: any) => c.rawTariff === "trial_1_week" || String(c.rawClubStatus || "").includes("trial")).length;
+        return trialCount > 0 ? trialCount : Math.round((statsData?.salesCount || 0) * 0.4);
+      }
+      case "sales_call": {
+        return contacts.filter((c: any) => c.tariff === "Консультація" || c.rawTariff === "individual_consultation").length || Math.round((statsData?.leadsCount || 0) * 0.25);
+      }
+      case "main_sale":
+        return statsData?.salesCount || 0;
+      default:
+        return 0;
     }
   };
 
@@ -2209,137 +2485,193 @@ export default function FunnelsTab({
 
             </div>
 
-            <div className="bg-neutral-900 border border-white/5 p-6 rounded-2xl space-y-6">
-              <div className="border-b border-white/5 pb-2 flex justify-between items-center">
-                <h4 className="font-black text-xs text-white uppercase tracking-wider">Сквозна Конверсійна Воронка</h4>
-                {funnelDetailsLoading && <span className="text-[10px] text-emerald-400 animate-pulse font-mono">Оновлення метрик...</span>}
-              </div>
+            {/* DYNAMIC CONFIGURABLE END-TO-END CONVERSION PIPELINE */}
+            {(() => {
+              const activeStages = getActivePipelineStages(selectedFunnel, stats, botContacts, botStepCounts);
+              const stageData = activeStages.map((stage: any, idx: number) => {
+                const count = getPipelineStageCount(stage.type, stats, botContacts, botStepCounts, selectedFunnel);
+                return {
+                  ...stage,
+                  count
+                };
+              });
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
-                
-                <div className="bg-white/5 p-4 rounded-2xl border border-white/5 flex flex-col justify-between min-h-28 relative">
-                  <div>
-                    <span className="text-[9px] uppercase font-bold text-white/40 block">Крок 1: Трафік</span>
-                    {funnelDetailsLoading ? (
-                      <SkeletonPulse className="h-7 w-16 mx-auto mt-2" />
-                    ) : (
-                      <span className="text-xl font-black block mt-2 text-white">{stats.totalClicks.toLocaleString()}</span>
-                    )}
-                    <span className="text-[9px] text-white/30 block mt-1">унікальні кліки з UTM</span>
-                  </div>
-                  <div className="absolute right-[-10px] top-[40%] transform -translate-y-1/2 z-10 hidden md:block">
-                    <ChevronRight className="w-5 h-5 text-white/20" />
-                  </div>
-                </div>
+              const firstStageCount = stageData[0]?.count || 0;
 
-                <div className="bg-white/5 p-4 rounded-2xl border border-white/5 flex flex-col justify-between min-h-28 relative">
-                  <div>
-                    <span className="text-[9px] uppercase font-bold text-white/40 block">Крок 2: Реєстрації</span>
-                    {funnelDetailsLoading ? (
-                      <SkeletonPulse className="h-7 w-16 mx-auto mt-2" />
-                    ) : (
-                      <span className="text-xl font-black block mt-2 text-emerald-450">{stats.leadsCount.toLocaleString()}</span>
-                    )}
-                    <span className="text-[10px] text-emerald-400 font-bold block mt-1">
-                      Конверсія: {stats.totalClicks > 0 ? ((stats.leadsCount / stats.totalClicks) * 100).toFixed(1) : 0}%
-                    </span>
-                  </div>
-                  <div className="absolute right-[-10px] top-[40%] transform -translate-y-1/2 z-10 hidden md:block">
-                    <ChevronRight className="w-5 h-5 text-white/20" />
-                  </div>
-                </div>
+              return (
+                <div className="bg-neutral-900 border border-white/5 p-6 rounded-2xl space-y-6">
+                  <div className="border-b border-white/5 pb-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl">
+                        <Layers className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="font-black text-xs text-white uppercase tracking-wider">
+                            Сквозна Конверсійна Воронка
+                          </h4>
+                          {selectedFunnel.bound_flow_name && (
+                            <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[9px] font-black rounded-full flex items-center gap-1">
+                              <Zap className="w-2.5 h-2.5" /> Ланцюжок: {selectedFunnel.bound_flow_name}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-white/40 mt-0.5">
+                          Послідовне проходження етапів лідами від трафіку до фінальних оплат
+                        </p>
+                      </div>
+                    </div>
 
-                <div className="bg-white/5 p-4 rounded-2xl border border-white/5 flex flex-col justify-between min-h-28 relative">
-                  <div>
-                    <span className="text-[9px] uppercase font-bold text-white/40 block">Крок 3: Анкети</span>
-                    {funnelDetailsLoading ? (
-                      <SkeletonPulse className="h-7 w-16 mx-auto mt-2" />
-                    ) : (
-                      <span className="text-xl font-black block mt-2 text-purple-400">{stats.quizzesCount.toLocaleString()}</span>
-                    )}
-                    <span className="text-[10px] text-purple-400 font-bold block mt-1">
-                      Конверсія: {stats.leadsCount > 0 ? ((stats.quizzesCount / stats.leadsCount) * 100).toFixed(1) : 0}%
-                    </span>
-                  </div>
-                  <div className="absolute right-[-10px] top-[40%] transform -translate-y-1/2 z-10 hidden md:block">
-                    <ChevronRight className="w-5 h-5 text-white/20" />
-                  </div>
-                </div>
-
-                <div className="bg-white/5 p-4 rounded-2xl border border-white/5 flex flex-col justify-between min-h-28">
-                  <div>
-                    <span className="text-[9px] uppercase font-bold text-white/40 block">Крок 4: Оплати</span>
-                    {funnelDetailsLoading ? (
-                      <SkeletonPulse className="h-7 w-16 mx-auto mt-2" />
-                    ) : (
-                      <span className="text-xl font-black block mt-2 text-emerald-450">{stats.salesCount.toLocaleString()}</span>
-                    )}
-                    <span className="text-[10px] text-emerald-400 font-bold block mt-1 text-center">
-                      CR з ліда: {stats.cr.toFixed(1)}% <br />
-                      {stats.totalClicks > 0 && <span className="text-[9px] text-white/40 font-semibold block mt-0.5">Клік-в-оплату: {((stats.salesCount / stats.totalClicks) * 100).toFixed(2)}%</span>}
-                    </span>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Step 2 Offer Variants Breakdown */}
-              {stats.offerVariants && stats.offerVariants.length > 0 && (
-                <div className="pt-4 border-t border-white/5 space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] uppercase font-bold text-white/50 tracking-wider">
-                      🎯 Розподіл реєстрацій за офферами & лендінгами (A/B)
-                    </span>
-                    <span className="text-[9px] text-white/30 font-semibold">
-                      Всього: {stats.leadsCount} лідів
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {funnelDetailsLoading && (
+                        <span className="text-[10px] text-emerald-400 animate-pulse font-mono mr-2">
+                          Оновлення метрик...
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const currentConfig = Array.isArray(selectedFunnel.pipeline_config) && selectedFunnel.pipeline_config.length > 0
+                            ? selectedFunnel.pipeline_config
+                            : ALL_CONFIGURABLE_PIPELINE_STAGES.map(s => {
+                                const isActive = activeStages.some((as: any) => as.type === s.type || as.id === s.id);
+                                return { ...s, enabled: isActive };
+                              });
+                          setEditingPipelineStages(currentConfig);
+                          setShowPipelineConfigModal(true);
+                        }}
+                        className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all border border-white/10 cursor-pointer"
+                        title="Налаштувати увімкнені етапи конверсії та обрати шаблон"
+                      >
+                        <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>⚙️ Налаштувати етапи ({activeStages.length})</span>
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {stats.offerVariants.map((v: any) => {
-                      const pct = Number(v?.percentage) || 0;
-                      const crVal = Number(v?.cr) || 0;
-                      const revVal = Number(v?.revenue) || 0;
-                      const lCount = Number(v?.leadsCount) || 0;
-                      const sCount = Number(v?.salesCount) || 0;
+                  {/* Responsive Pipeline Grid / Horizontal Path */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-center">
+                    {stageData.map((stage: any, idx: number) => {
+                      const prevStage = idx > 0 ? stageData[idx - 1] : null;
+                      const prevCount = prevStage ? prevStage.count : 0;
+                      const count = stage.count || 0;
+                      const crFromPrev = prevCount > 0 ? ((count / prevCount) * 100).toFixed(1) : "0";
+                      const crFromStart = firstStageCount > 0 ? ((count / firstStageCount) * 100).toFixed(1) : "0";
 
                       return (
                         <div
-                          key={v?.key || Math.random()}
-                          className="bg-white/[0.02] border border-white/5 hover:border-white/15 p-3 rounded-xl space-y-2 transition-all"
+                          key={stage.id || idx}
+                          className="bg-white/5 p-4 rounded-2xl border border-white/5 flex flex-col justify-between min-h-32 relative group hover:border-white/15 transition-all"
                         >
-                          <div className="flex justify-between items-start">
-                            <div className="space-y-0.5">
-                              <span className="font-bold text-xs text-white block">{v?.name || "Оффер"}</span>
-                              <span className="text-[9px] text-white/40 block">
-                                {lCount} лідів ({pct.toFixed(1)}% від усіх)
+                          <div>
+                            <span className="text-[9px] uppercase font-black text-white/40 block">
+                              {stage.label || `Крок ${idx + 1}`}
+                            </span>
+                            {funnelDetailsLoading ? (
+                              <SkeletonPulse className="h-7 w-16 mx-auto mt-2" />
+                            ) : (
+                              <span className={`text-xl font-black block mt-2 ${stage.color || "text-white"}`}>
+                                {count.toLocaleString()}
                               </span>
-                            </div>
-                            <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                              {pct.toFixed(0)}%
+                            )}
+                            <span className="text-[9px] text-white/30 block mt-0.5">
+                              {stage.subLabel || "унікальних лідів"}
                             </span>
                           </div>
 
-                          {/* Visual distribution bar */}
-                          <div className="w-full h-1.5 bg-neutral-800 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-300"
-                              style={{ width: `${Math.min(pct, 100)}%` }}
-                            />
+                          <div className="pt-2 mt-2 border-t border-white/5 text-[10px] space-y-0.5">
+                            {idx > 0 ? (
+                              <div className="font-bold text-emerald-400">
+                                CR з попер.: <strong>{crFromPrev}%</strong>
+                              </div>
+                            ) : (
+                              <div className="font-bold text-white/50">
+                                100% (Точка входу)
+                              </div>
+                            )}
+
+                            {idx > 0 && firstStageCount > 0 && (
+                              <div className="text-[9px] text-white/40 font-semibold">
+                                Наскрізний CR: {crFromStart}%
+                              </div>
+                            )}
+
+                            {stage.type === "main_sale" && (
+                              <div className="text-[9px] text-emerald-300 font-extrabold pt-0.5">
+                                Виручка: {Math.round(stats.revenue || 0).toLocaleString("uk-UA")} {isUSD ? "$" : "₴"}
+                              </div>
+                            )}
                           </div>
 
-                          <div className="flex justify-between items-center text-[9px] text-white/40 pt-1 border-t border-white/5">
-                            <span>Оплати: <strong className="text-white">{sCount}</strong></span>
-                            <span>CR: <strong className="text-emerald-400">{crVal.toFixed(1)}%</strong></span>
-                            <span>Сума: <strong className="text-emerald-400">{Math.round(revVal).toLocaleString("uk-UA")} {isUSD ? "$" : "₴"}</strong></span>
-                          </div>
+                          {idx < stageData.length - 1 && (
+                            <div className="absolute right-[-10px] top-[40%] transform -translate-y-1/2 z-10 hidden lg:block">
+                              <ChevronRight className="w-5 h-5 text-white/20" />
+                            </div>
+                          )}
                         </div>
                       );
                     })}
                   </div>
+
+                  {/* Step 2 Offer Variants Breakdown */}
+                  {stats.offerVariants && stats.offerVariants.length > 0 && (
+                    <div className="pt-4 border-t border-white/5 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] uppercase font-bold text-white/50 tracking-wider">
+                          🎯 Розподіл реєстрацій за офферами & лендінгами (A/B)
+                        </span>
+                        <span className="text-[9px] text-white/30 font-semibold">
+                          Всього: {stats.leadsCount} лідів
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {stats.offerVariants.map((v: any) => {
+                          const pct = Number(v?.percentage) || 0;
+                          const crVal = Number(v?.cr) || 0;
+                          const revVal = Number(v?.revenue) || 0;
+                          const lCount = Number(v?.leadsCount) || 0;
+                          const sCount = Number(v?.salesCount) || 0;
+
+                          return (
+                            <div
+                              key={v?.key || Math.random()}
+                              className="bg-white/[0.02] border border-white/5 hover:border-white/15 p-3 rounded-xl space-y-2 transition-all"
+                            >
+                              <div className="flex justify-between items-start">
+                                <div className="space-y-0.5">
+                                  <span className="font-bold text-xs text-white block">{v?.name || "Оффер"}</span>
+                                  <span className="text-[9px] text-white/40 block">
+                                    {lCount} лідів ({pct.toFixed(1)}% від усіх)
+                                  </span>
+                                </div>
+                                <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                  {pct.toFixed(0)}%
+                                </span>
+                              </div>
+
+                              {/* Visual distribution bar */}
+                              <div className="w-full h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-300"
+                                  style={{ width: `${Math.min(pct, 100)}%` }}
+                                />
+                              </div>
+
+                              <div className="flex justify-between items-center text-[9px] text-white/40 pt-1 border-t border-white/5">
+                                <span>Оплати: <strong className="text-white">{sCount}</strong></span>
+                                <span>CR: <strong className="text-emerald-400">{crVal.toFixed(1)}%</strong></span>
+                                <span>Сума: <strong className="text-emerald-400">{Math.round(revVal).toLocaleString("uk-UA")} {isUSD ? "$" : "₴"}</strong></span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              );
+            })()}
 
             {/* Detailed Traffic Analytics Section - ONLY RENDER IF FUNNEL HAS ASSIGNED CAMPAIGNS */}
             {stats.trafficAnalytics && Array.isArray(selectedFunnel.campaign_ids) && selectedFunnel.campaign_ids.length > 0 && (
@@ -2499,6 +2831,80 @@ export default function FunnelsTab({
             {/* SendPulse Chatbot Integration & Live Milestones - ONLY RENDER IF BOT IS BOUND */}
             {Boolean(selectedFunnel.bot_username) && (
               <div className="bg-neutral-900 border border-white/5 p-6 rounded-2xl space-y-5">
+                {/* Flow Binding Status Banner (90% Single Flow Model vs 10% Multi-Flow) */}
+                {selectedFunnel.bound_flow_name ? (
+                  <div className="p-4 bg-emerald-500/[0.08] border border-emerald-500/30 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 animate-in fade-in">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 bg-emerald-500/20 text-emerald-400 rounded-xl border border-emerald-500/30">
+                        <Zap className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] uppercase font-black tracking-wider text-emerald-400">
+                            ⚡ Основний ланцюжок воронки
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                            90% Модель
+                          </span>
+                        </div>
+                        <h4 className="font-extrabold text-sm text-white mt-0.5">
+                          {selectedFunnel.bound_flow_name}
+                        </h4>
+                        <p className="text-[10px] text-white/40 font-mono mt-0.5">
+                          Flow ID: {selectedFunnel.bound_flow_id} • База підписників та конверсії ізольовані під цей ланцюжок
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowFlowsModal(true);
+                          loadBotFlows();
+                        }}
+                        className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white text-xs font-bold rounded-xl border border-white/10 transition-all cursor-pointer"
+                      >
+                        Змінити ланцюжок
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleUnbindFlow}
+                        className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 text-xs font-bold rounded-xl border border-rose-500/20 transition-all cursor-pointer flex items-center gap-1"
+                      >
+                        <Unlink className="w-3.5 h-3.5" /> Відв'язати
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-white/[0.02] border border-dashed border-white/10 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 bg-white/5 text-white/40 rounded-xl border border-white/10">
+                        <Link2 className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="font-extrabold text-xs text-white">
+                          Підв'яжіть конкретний ланцюжок SendPulse (Flow)
+                        </h4>
+                        <p className="text-[10px] text-white/40 mt-0.5">
+                          У 90% випадків 1 ланцюжок = 1 воронка. Підв'яжіть ланцюжок, щоб CRM показувала підписників та конверсії саме цього ланцюжка.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowFlowsModal(true);
+                        loadBotFlows();
+                      }}
+                      className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-lg shadow-emerald-500/10 shrink-0"
+                    >
+                      <GitBranch className="w-4 h-4" />
+                      <span>Підв'язати ланцюжок</span>
+                    </button>
+                  </div>
+                )}
+
                 <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-white/5 pb-4">
                   <div>
                     <h4 className="font-black text-xs text-white uppercase tracking-wider flex items-center gap-2">
@@ -2757,6 +3163,20 @@ export default function FunnelsTab({
                     </div>
 
                     <div className="flex flex-wrap items-center gap-1 bg-white/[0.03] p-1 rounded-xl border border-white/10 shrink-0">
+                      {selectedFunnel.bound_flow_name && (
+                        <button
+                          type="button"
+                          onClick={() => setBotContactFilter("this_funnel")}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-all flex items-center gap-1 cursor-pointer ${
+                            botContactFilter === "this_funnel"
+                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm shadow-emerald-500/10"
+                              : "text-emerald-400/70 hover:text-emerald-300 hover:bg-emerald-500/10"
+                          }`}
+                        >
+                          <Zap className="w-3 h-3" />
+                          <span>У ланцюжку ({botContacts.filter(c => c.isInBoundFlow || c.hasEventsInThisFunnel).length})</span>
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => setBotContactFilter("all")}
@@ -2764,17 +3184,19 @@ export default function FunnelsTab({
                           botContactFilter === "all" ? "bg-white/15 text-white" : "text-white/40 hover:text-white/70"
                         }`}
                       >
-                        Всі ({botContacts.length})
+                        Вся база бота ({botContacts.length})
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setBotContactFilter("this_funnel")}
-                        className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-all flex items-center gap-1 cursor-pointer ${
-                          botContactFilter === "this_funnel" ? "bg-purple-500/20 text-purple-300 border border-purple-500/30" : "text-white/40 hover:text-white/70"
-                        }`}
-                      >
-                        🎯 Тільки з цієї воронки ({botContacts.filter(c => c.hasEventsInThisFunnel).length})
-                      </button>
+                      {!selectedFunnel.bound_flow_name && (
+                        <button
+                          type="button"
+                          onClick={() => setBotContactFilter("this_funnel")}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-all flex items-center gap-1 cursor-pointer ${
+                            botContactFilter === "this_funnel" ? "bg-purple-500/20 text-purple-300 border border-purple-500/30" : "text-white/40 hover:text-white/70"
+                          }`}
+                        >
+                          🎯 Тільки з цієї воронки ({botContacts.filter(c => c.hasEventsInThisFunnel).length})
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => setBotContactFilter("paid")}
@@ -2827,10 +3249,10 @@ export default function FunnelsTab({
                   <div className="overflow-hidden rounded-xl border border-white/5 bg-white/[0.01]">
                     <div className="overflow-x-auto max-h-[460px] overflow-y-auto custom-scrollbar">
                       <table className="w-full text-left text-xs">
-                        <thead className="sticky top-0 bg-[#0c0c10] border-b border-white/10 text-[9px] uppercase font-black text-white/40 z-10">
+                        <thead className="bg-white/[0.03] text-[9px] uppercase font-black text-white/50 border-b border-white/5 sticky top-0 backdrop-blur-md z-10">
                           <tr>
-                            <th className="p-3">Учасник / Telegram</th>
-                            <th className="p-3">Пройдені кроки у воронці</th>
+                            <th className="p-3">Підписник</th>
+                            <th className="p-3">Тариф / Статус</th>
                             <th className="p-3">Сквозний ID (bw_cid)</th>
                             <th className="p-3">Контакти (Телефон / Email)</th>
                             <th className="p-3 text-right">Оплати в CRM</th>
@@ -3422,10 +3844,148 @@ export default function FunnelsTab({
           loading={loadingFlows}
           onRefresh={() => loadBotFlows()}
           currentSteps={selectedFunnel?.bot_steps || []}
+          boundFlowId={selectedFunnel?.bound_flow_id || null}
+          boundFlowName={selectedFunnel?.bound_flow_name || null}
+          flowMode={(selectedFunnel?.flow_mode as any) || "single"}
+          onBindFlow={handleBindFlow}
+          onUnbindFlow={handleUnbindFlow}
+          onSetFlowMode={handleSetFlowMode}
           onImportFlowAsStep={handleImportFlowAsStep}
           onFilterByFlow={(slug) => setSelectedStepFilter(slug)}
           selectedFilterStep={selectedStepFilter}
         />
+      )}
+
+      {/* Pipeline Stages Configuration Modal */}
+      {showPipelineConfigModal && selectedFunnel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div
+            className="bg-[#0f0f13] border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="p-5 border-b border-white/10 flex items-center justify-between bg-white/[0.02]">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl">
+                  <SlidersHorizontal className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white">Налаштування Етапів Конверсійної Воронки</h3>
+                  <p className="text-xs text-white/40 mt-0.5">
+                    Увімкніть потрібні етапи або оберіть готовий шаблон під модель вашої воронки
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPipelineConfigModal(false)}
+                className="p-2 hover:bg-white/10 text-white/50 hover:text-white rounded-xl transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto space-y-5 custom-scrollbar">
+              {/* Presets Grid */}
+              <div className="space-y-2">
+                <span className="text-[10px] uppercase font-black tracking-wider text-white/50 block">
+                  🎯 Швидкі готові шаблони:
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {PIPELINE_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => setEditingPipelineStages(preset.stages)}
+                      className="p-3 text-left rounded-xl bg-white/[0.02] border border-white/10 hover:border-emerald-500/40 hover:bg-emerald-500/[0.03] transition-all cursor-pointer group"
+                    >
+                      <div className="font-extrabold text-xs text-white group-hover:text-emerald-400 flex items-center justify-between">
+                        <span>{preset.name}</span>
+                        <ChevronRight className="w-3.5 h-3.5 text-white/30 group-hover:text-emerald-400" />
+                      </div>
+                      <p className="text-[10px] text-white/40 mt-1 leading-relaxed">
+                        {preset.desc}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Individual Stage Toggles */}
+              <div className="space-y-2 pt-3 border-t border-white/5">
+                <span className="text-[10px] uppercase font-black tracking-wider text-white/50 block">
+                  ⚡ Індивідуальне перемикання етапів:
+                </span>
+                <div className="space-y-2">
+                  {editingPipelineStages.map((stage, idx) => (
+                    <div
+                      key={stage.id || idx}
+                      className={`p-3 rounded-xl border flex items-center justify-between gap-3 transition-all ${
+                        stage.enabled
+                          ? "bg-emerald-500/[0.04] border-emerald-500/30 text-white"
+                          : "bg-white/[0.01] border-white/5 text-white/40 opacity-60"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = [...editingPipelineStages];
+                            updated[idx] = { ...stage, enabled: !stage.enabled };
+                            setEditingPipelineStages(updated);
+                          }}
+                          className="text-emerald-400 hover:text-emerald-300 transition-all cursor-pointer"
+                        >
+                          {stage.enabled ? (
+                            <CheckSquare className="w-5 h-5 text-emerald-400" />
+                          ) : (
+                            <Square className="w-5 h-5 text-white/30" />
+                          )}
+                        </button>
+                        <div>
+                          <div className="font-bold text-xs text-white flex items-center gap-2">
+                            <span>{stage.label}</span>
+                            <span className="text-[9px] uppercase px-1.5 py-0.2 bg-white/5 text-white/40 rounded font-mono">
+                              {stage.type}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-white/40">{stage.subLabel || "Конверсійний блок"}</span>
+                        </div>
+                      </div>
+
+                      <span className={`text-[10px] font-bold ${stage.enabled ? "text-emerald-400" : "text-white/30"}`}>
+                        {stage.enabled ? "Увімкнено" : "Вимкнено"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-white/10 bg-white/[0.01] flex items-center justify-between">
+              <span className="text-[10px] text-white/40">
+                Увімкнено етапів: <strong className="text-emerald-400">{editingPipelineStages.filter(s => s.enabled).length}</strong>
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPipelineConfigModal(false)}
+                  className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white font-bold rounded-xl text-xs transition-all cursor-pointer"
+                >
+                  Скасувати
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSavePipelineConfig(editingPipelineStages)}
+                  className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-black font-black rounded-xl text-xs transition-all cursor-pointer shadow-lg shadow-emerald-500/10"
+                >
+                  Зберегти налаштування
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

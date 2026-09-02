@@ -110,6 +110,10 @@
 * `campaign_ids` (TEXT[]) - UTM Campaign ID, привязанные к воронке
 * `landing_slugs` (TEXT[]) - Лендинги, привязанные к воронке
 * `bot_username` (TEXT, nullable) - Конкретный привязанный Telegram/Instagram бот SendPulse
+* `bound_flow_id` (TEXT, nullable) - ID привязанной цепочки SendPulse (90% модель: 1 цепочка = 1 воронка)
+* `bound_flow_name` (TEXT, nullable) - Название привязанной цепочки SendPulse
+* `flow_mode` (TEXT, default 'single') - Режим привязки цепочек: `'single'` (1 цепочка = 1 воронка с изолированной базой) или `'multi'` (10% модель: мульти-цепочки как шаги воронки)
+* `pipeline_config` (JSONB, default '[]') - Конфигурация кастомных этапов сквозной конверсионной воронки (Трафик, Регистрация, Вход в бот, Квизы/Анкеты, Трипваер, Квалификация ОП, Оплаты)
 * `bot_steps` (JSONB, default '[]') - Кастомные шаги и вебхуки воронки с авто-транслитерацией
 * `planned_revenue` (NUMERIC, default 0) - Плановый доход воронки
 * `planned_spend` (NUMERIC, default 0) - Плановые затраты воронки

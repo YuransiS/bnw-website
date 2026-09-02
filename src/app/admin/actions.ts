@@ -2456,7 +2456,11 @@ export async function createFunnelAction(
   plannedSpend?: number,
   stages?: any[],
   botUsername?: string | null,
-  botSteps?: any[]
+  botSteps?: any[],
+  boundFlowId?: string | null,
+  boundFlowName?: string | null,
+  flowMode?: string,
+  pipelineConfig?: any[]
 ) {
   try {
     await checkProjectAccess(projectId);
@@ -2472,6 +2476,10 @@ export async function createFunnelAction(
         landing_slugs: landingSlugs,
         bot_username: botUsername || null,
         bot_steps: botSteps || [],
+        bound_flow_id: boundFlowId || null,
+        bound_flow_name: boundFlowName || null,
+        flow_mode: flowMode || "single",
+        pipeline_config: pipelineConfig || [],
         description: description || "",
         planned_revenue: plannedRevenue || 0,
         planned_spend: plannedSpend || 0,
@@ -2498,6 +2506,10 @@ export async function updateFunnelAction(
     landingSlugs: string[];
     botUsername?: string | null;
     botSteps?: any[];
+    boundFlowId?: string | null;
+    boundFlowName?: string | null;
+    flowMode?: string;
+    pipelineConfig?: any[];
     description?: string;
     plannedRevenue?: number;
     plannedSpend?: number;
@@ -2522,6 +2534,18 @@ export async function updateFunnelAction(
     if (updates.botSteps !== undefined) {
       updatePayload.bot_steps = updates.botSteps;
     }
+    if (updates.boundFlowId !== undefined) {
+      updatePayload.bound_flow_id = updates.boundFlowId;
+    }
+    if (updates.boundFlowName !== undefined) {
+      updatePayload.bound_flow_name = updates.boundFlowName;
+    }
+    if (updates.flowMode !== undefined) {
+      updatePayload.flow_mode = updates.flowMode;
+    }
+    if (updates.pipelineConfig !== undefined) {
+      updatePayload.pipeline_config = updates.pipelineConfig;
+    }
 
     const { data, error } = await adminSupabase
       .from("funnels")
@@ -2534,6 +2558,44 @@ export async function updateFunnelAction(
     return { success: true, funnel: data };
   } catch (err: any) {
     return { error: err.message || "Failed to update funnel" };
+  }
+}
+
+export async function bindFunnelSendPulseFlowAction(
+  funnelId: string,
+  flowId: string | null,
+  flowName: string | null,
+  botUsername?: string | null,
+  flowMode: string = "single"
+) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Unauthorized" };
+
+    const adminSupabase = createAdminClient();
+    const updatePayload: any = {
+      bound_flow_id: flowId,
+      bound_flow_name: flowName,
+      flow_mode: flowMode,
+      updated_at: new Date().toISOString()
+    };
+    if (botUsername !== undefined) {
+      updatePayload.bot_username = botUsername;
+    }
+
+    const { data, error } = await adminSupabase
+      .from("funnels")
+      .update(updatePayload)
+      .eq("id", funnelId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, funnel: data };
+  } catch (err: any) {
+    console.error("Error in bindFunnelSendPulseFlowAction:", err);
+    return { error: err.message || "Failed to bind flow" };
   }
 }
 
@@ -4431,10 +4493,10 @@ export async function getSendPulseBotContactsAction(projectId: string, botUserna
     const contactsJson = await contactsRes.json();
     const rawContacts = contactsJson.data || [];
 
-    // 3. Fetch CRM customers, orders, and project-specific club subscriptions
+    // 3. Fetch CRM customers, orders, project-specific club subscriptions, and bound funnel
     const isViktoria = project.slug === "viktoria_chernysh";
 
-    const [customersRes, ordersRes, clubSubsRes, leadsRes, botEventsRes] = await Promise.all([
+    const [customersRes, ordersRes, clubSubsRes, leadsRes, botEventsRes, funnelRes] = await Promise.all([
       adminSupabase
         .from("unified_customers")
         .select("id, name, phone, email, telegram, telegram_id, created_at")
@@ -4456,8 +4518,13 @@ export async function getSendPulseBotContactsAction(projectId: string, botUserna
       adminSupabase
         .from("bot_funnel_events")
         .select("id, step, funnel_id, customer_id, bw_cid, telegram_id, created_at, payload")
-        .eq("project_id", project.id)
+        .eq("project_id", project.id),
+      funnelId && funnelId !== "all" && funnelId !== "unassigned"
+        ? adminSupabase.from("funnels").select("id, name, bound_flow_id, bound_flow_name, flow_mode, bot_steps").eq("id", funnelId).maybeSingle()
+        : Promise.resolve({ data: null })
     ]);
+
+    const boundFunnel = funnelRes?.data || null;
 
     const customers = customersRes.data || [];
     const orders = ordersRes.data || [];
@@ -4612,6 +4679,22 @@ export async function getSendPulseBotContactsAction(projectId: string, botUserna
 
       const resolvedPhone = matchedClubSub?.phone || matchedLead?.phone || matchedCustomer?.phone || spPhone || null;
 
+      const isBoundFlowMatch = Boolean(
+        boundFunnel?.bound_flow_id && (
+          c.variables?.flow_id === boundFunnel.bound_flow_id ||
+          c.variables?.last_flow_id === boundFunnel.bound_flow_id ||
+          c.variables?.bound_flow_id === boundFunnel.bound_flow_id ||
+          (c.tags || []).some((t: string) =>
+            typeof t === "string" && (
+              t.toLowerCase().includes(boundFunnel.bound_flow_id.toLowerCase()) ||
+              (boundFunnel.bound_flow_name && t.toLowerCase().includes(boundFunnel.bound_flow_name.toLowerCase()))
+            )
+          )
+        )
+      );
+
+      const hasEventsInThisFunnel = passedSteps.length > 0 || isBoundFlowMatch;
+
       return {
         id: c.id,
         telegramId: spTgId,
@@ -4630,7 +4713,11 @@ export async function getSendPulseBotContactsAction(projectId: string, botUserna
         passedSteps,
         allFunnelSteps,
         stepTimestamps,
-        hasEventsInThisFunnel: passedSteps.length > 0,
+        hasEventsInThisFunnel,
+        isInBoundFlow: isBoundFlowMatch,
+        boundFlowId: boundFunnel?.bound_flow_id || null,
+        boundFlowName: boundFunnel?.bound_flow_name || null,
+        flowMode: boundFunnel?.flow_mode || "single",
         tariff: matchedClubSub?.tariff ? formatTariff(matchedClubSub.tariff) : null,
         rawTariff: matchedClubSub?.tariff || null,
         clubStatus: matchedClubSub?.status ? formatClubStatus(matchedClubSub.status, matchedClubSub.tariff) : null,
