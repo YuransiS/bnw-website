@@ -2562,6 +2562,7 @@ export async function updateFunnelAction(
 }
 
 export async function bindFunnelSendPulseFlowAction(
+  projectId: string,
   funnelId: string,
   flowId: string | null,
   flowName: string | null,
@@ -2569,18 +2570,15 @@ export async function bindFunnelSendPulseFlowAction(
   flowMode: string = "single"
 ) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { error: "Unauthorized" };
-
+    await checkProjectAccess(projectId);
     const adminSupabase = createAdminClient();
     const updatePayload: any = {
-      bound_flow_id: flowId,
-      bound_flow_name: flowName,
-      flow_mode: flowMode,
+      bound_flow_id: flowId || null,
+      bound_flow_name: flowName || null,
+      flow_mode: flowMode || "single",
       updated_at: new Date().toISOString()
     };
-    if (botUsername !== undefined) {
+    if (botUsername !== undefined && botUsername !== null) {
       updatePayload.bot_username = botUsername;
     }
 
@@ -2591,7 +2589,10 @@ export async function bindFunnelSendPulseFlowAction(
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error("Database error in bindFunnelSendPulseFlowAction:", error);
+      throw error;
+    }
     return { success: true, funnel: data };
   } catch (err: any) {
     console.error("Error in bindFunnelSendPulseFlowAction:", err);

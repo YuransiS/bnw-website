@@ -605,6 +605,7 @@ export default function FunnelsTab({
     if (!selectedFunnel) return;
     try {
       const res = await bindFunnelSendPulseFlowAction(
+        projectId,
         selectedFunnel.id,
         flow.id,
         flow.name,
@@ -617,9 +618,15 @@ export default function FunnelsTab({
         setImportedFlowFeedback(`Воронку підв'язано до ланцюжка "${flow.name}"!`);
         setTimeout(() => setImportedFlowFeedback(null), 3500);
         await loadBotContacts(selectedFunnel.bot_username || selectedBotUsername);
+      } else if (res.error) {
+        console.error("Error binding flow:", res.error);
+        setImportedFlowFeedback(`Помилка підв'язки: ${res.error}`);
+        setTimeout(() => setImportedFlowFeedback(null), 4000);
       }
     } catch (err: any) {
       console.error("Error binding flow:", err);
+      setImportedFlowFeedback(`Помилка: ${err.message || "Не вдалося підв'язати"}`);
+      setTimeout(() => setImportedFlowFeedback(null), 4000);
     }
   };
 
@@ -627,6 +634,7 @@ export default function FunnelsTab({
     if (!selectedFunnel) return;
     try {
       const res = await bindFunnelSendPulseFlowAction(
+        projectId,
         selectedFunnel.id,
         null,
         null,
@@ -638,9 +646,15 @@ export default function FunnelsTab({
         setFunnels((prev) => prev.map((f) => (f.id === selectedFunnel.id ? { ...f, ...res.funnel } : f)));
         setImportedFlowFeedback(`Ланцюжок відв'язано від воронки`);
         setTimeout(() => setImportedFlowFeedback(null), 3500);
+      } else if (res.error) {
+        console.error("Error unbinding flow:", res.error);
+        setImportedFlowFeedback(`Помилка: ${res.error}`);
+        setTimeout(() => setImportedFlowFeedback(null), 4000);
       }
     } catch (err: any) {
       console.error("Error unbinding flow:", err);
+      setImportedFlowFeedback(`Помилка: ${err.message || "Не вдалося відв'язати"}`);
+      setTimeout(() => setImportedFlowFeedback(null), 4000);
     }
   };
 

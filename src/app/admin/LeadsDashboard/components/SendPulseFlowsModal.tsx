@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   X, GitBranch, Search, RefreshCw, Check, Plus, Filter, Sparkles,
   ExternalLink, Bot, Zap, ArrowRight, Layers, CheckCircle2, Link2, Unlink, HelpCircle
@@ -59,6 +59,15 @@ export default function SendPulseFlowsModal({
   const [searchQuery, setSearchQuery] = useState("");
   const [activeMode, setActiveMode] = useState<"single" | "multi">(flowMode || "single");
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [localBoundFlowId, setLocalBoundFlowId] = useState<string | null>(boundFlowId || null);
+
+  useEffect(() => {
+    setLocalBoundFlowId(boundFlowId || null);
+  }, [boundFlowId]);
+
+  useEffect(() => {
+    if (flowMode) setActiveMode(flowMode);
+  }, [flowMode]);
 
   if (!isOpen) return null;
 
@@ -85,8 +94,12 @@ export default function SendPulseFlowsModal({
   const handleBind = async (flow: SendPulseFlowItem) => {
     if (!onBindFlow) return;
     setActionLoadingId(flow.id);
+    const prevBound = localBoundFlowId;
+    setLocalBoundFlowId(flow.id);
     try {
       await onBindFlow(flow);
+    } catch (err) {
+      setLocalBoundFlowId(prevBound);
     } finally {
       setActionLoadingId(null);
     }
@@ -95,8 +108,12 @@ export default function SendPulseFlowsModal({
   const handleUnbind = async (flowId: string) => {
     if (!onUnbindFlow) return;
     setActionLoadingId(flowId);
+    const prevBound = localBoundFlowId;
+    setLocalBoundFlowId(null);
     try {
       await onUnbindFlow();
+    } catch (err) {
+      setLocalBoundFlowId(prevBound);
     } finally {
       setActionLoadingId(null);
     }
@@ -272,7 +289,7 @@ export default function SendPulseFlowsModal({
             </div>
           ) : (
             filteredFlows.map((flow) => {
-              const isBound = boundFlowId === flow.id;
+              const isBound = String(localBoundFlowId || "") === String(flow.id || "");
               const imported = isStepImported(flow);
               const isLoading = actionLoadingId === flow.id;
               const cleanSlug = transliterateToSlug(flow.name);
