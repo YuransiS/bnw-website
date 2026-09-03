@@ -365,11 +365,13 @@ export const AnalyticsTab = React.memo(function AnalyticsTab({
               ) : (
                 <p className="text-2xl font-black text-red-400 mt-2">
                   {globalCurrency === "UAH"
-                    ? `${formatLocaleNumber(singleProjectStats?.totalSpendUah || ((singleProjectStats?.totalSpend || 0) * 41.5))} ₴`
-                    : `$${(singleProjectStats?.totalSpend || 0).toFixed(2)}`}
+                    ? `${formatLocaleNumber(singleProjectStats?.totalSpendUah != null ? singleProjectStats.totalSpendUah : (singleProjectStats?.totalSpend || 0))} ₴`
+                    : `$${(singleProjectStats?.totalSpend != null ? singleProjectStats.totalSpend : ((singleProjectStats?.totalSpendUah || 0) / 41.5)).toFixed(2)}`}
                 </p>
               )}
-              <p className={`text-[10px] ${textMutedClass} mt-0.5 font-semibold`}>Сумарний бюджет усього періоду</p>
+              <p className={`text-[10px] ${textMutedClass} mt-0.5 font-semibold`}>
+                {dateRangePreset === "all" ? "Сумарний бюджет усього періоду" : "Витрати за обраний період"}
+              </p>
             </div>
 
             {/* Course Revenue Card */}

@@ -471,6 +471,9 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
       lead.metadata?.tariffName ||
       lead.metadata?.tariff ||
       lead.metadata?.offer_title ||
+      lead.metadata?.product_name ||
+      lead.metadata?.leadData?.course ||
+      lead.metadata?.lead?.leadData?.course ||
       lead.quiz_result ||
       ""
     ).toLowerCase();
@@ -479,6 +482,8 @@ export async function rebuildProjectCache(projectId: string, activeSlug: string)
     const courseName = String(lead.metadata?.leadData?.course || lead.metadata?.lead?.leadData?.course || "").trim();
 
     const isTripwire =
+      lead.metadata?.product_type === "tripwire" ||
+      lead.order_type === "tripwire" ||
       pagePath.includes("minicourse") ||
       pagePath.includes("mini-course") ||
       pagePath.includes("practicum") ||

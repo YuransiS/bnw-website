@@ -251,6 +251,28 @@ export async function GET(req: Request) {
       }
     }
 
+    // Direct fallback for mapped accounts that /me/adaccounts did not return
+    for (const [accId] of accountToSlug.entries()) {
+      if (!accountsMap.has(accId)) {
+        for (const token of metaTokens) {
+          try {
+            const directUrl = `https://graph.facebook.com/${apiVersion}/${accId}?fields=id,name,currency&access_token=${token}`;
+            const directRes = await fetch(directUrl);
+            if (directRes.ok) {
+              const accData = await directRes.json();
+              if (accData.id) {
+                accountsMap.set(accData.id, accData);
+                accountWorkingToken.set(accData.id, token);
+                break;
+              }
+            }
+          } catch (err) {
+            console.warn(`Could not fetch mapped account ${accId} directly:`, err);
+          }
+        }
+      }
+    }
+
     const accounts = Array.from(accountsMap.values());
 
     // Date range: allow query params or default to last 14 days

@@ -184,6 +184,7 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
 * `public.get_superman_summary()` — Консолидированная сводка фаундера по проектам с единой валютной нормализацией и корректным учетом всех типов продуктов.
 * `public.get_producers_leaderboard()` — Рейтинг операционных продюсеров с расчетом совокупной выручки, окупаемости и ROI по всем закрепленным проектам.
 * `public.swap_crm_leads_cache(p_project_id)` — Функция атомарного свопа кэша из staging-таблицы в рабочую crm_leads_cache без zero-data downtime.
+* **Zero-Empty-Cache Recovery Guard:** В API роуте `/api/crm/leads` и Server Action `getUnifiedCRMData` внедрена защита от зависания пустого кэша: если количество записей в `crm_leads_cache` равно 0 (`cachedCount === 0`), система форсирует синхронный ребилд кэша (`needsSyncRebuild = true`), гарантируя, что пользователи никогда не увидят ложный пустой экран с 0 лидов. В `crmCache.ts` нормализатор `isTripwire` расширен поддержкой полей `metadata.product_type = 'tripwire'`, `order_type = 'tripwire'`, `metadata.product_name` и путей лендингов с дефисом (`/mini-course/*`).
 * `public.get_crm_metrics(...)` — Функция бэкенд-агрегации сквозных финансовых показателей проектов на уровне БД с использованием static placeholders (EXECUTE ... USING).
 * `public.get_traffic_clicks_summary(...)` — Функция БД-свертки уникальных кликов по UTM-меткам.
 * `public.get_utm_leads_summary(...)` — Функция БД-свертки уникальных лидов по UTM-меткам для построения UTM-дерева без перегрузки RAM Node.js.
@@ -225,7 +226,7 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
 * **Каталог активных официальных проектов:**
   - `svitlana`: **Світлана Тейп** (Ad Account: `act_1363085972126749` — Тейпування 1)
   - `anastasia_sych`: **Анастасія Сич** (Ad Account: `act_643114835286850` — Фітнес-тренерка Анастасія Сич)
-  - `nesoniaa`: **Nesoniaa** (Ad Account: `act_1062492249359185` — Nedesign)
+  - `nesoniaa`: **Nesoniaa** (Ad Account: `act_1062492249359185` — Nedesign, валюта кабинета: UAH)
   - `victoria`: **Вікторія Візуал** (Ad Account: `act_338278609686728` — 338278609686728)
   - `clean_klinom`: **clean.klinom** (Ad Account: `act_955118766915652` — SW LAB)
   - `sergiy`: **Сергій Чернявський** (Ad Account: `act_1451088823442765` — Sergiy.Chernyavskyy.Business)

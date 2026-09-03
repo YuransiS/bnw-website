@@ -453,8 +453,9 @@ export async function getUnifiedCRMData(
       .eq("project_id", activeProject.id);
 
     let cacheRebuildMs = 0;
-    const needsRebuild = !dirtyQueue || dirtyQueue.is_dirty;
-    const needsSyncRebuild = !dirtyQueue;
+    const isCacheEmpty = !cachedCount || cachedCount === 0;
+    const needsRebuild = !dirtyQueue || dirtyQueue.is_dirty || isCacheEmpty;
+    const needsSyncRebuild = !dirtyQueue || isCacheEmpty;
 
     if (needsRebuild) {
       // Set dirty to false immediately to lock and prevent concurrent rebuilds

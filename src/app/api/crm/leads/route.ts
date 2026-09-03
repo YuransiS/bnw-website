@@ -128,15 +128,22 @@ async function handleQueryLeads(request: Request) {
 
     // --- Caching Rebuild Trigger Check ---
     const cacheCheckStart = performance.now();
-    const { data: dirtyQueue } = await adminSupabase
-      .from("crm_cache_dirty_queue")
-      .select("is_dirty, metadata")
-      .eq("project_id", activeProject.id)
-      .maybeSingle();
+    const [{ data: dirtyQueue }, { count: cachedCount }] = await Promise.all([
+      adminSupabase
+        .from("crm_cache_dirty_queue")
+        .select("is_dirty, metadata")
+        .eq("project_id", activeProject.id)
+        .maybeSingle(),
+      adminSupabase
+        .from("crm_leads_cache")
+        .select("*", { count: "exact", head: true })
+        .eq("project_id", activeProject.id)
+    ]);
 
     let cacheRebuildMs = 0;
-    const needsRebuild = !dirtyQueue || dirtyQueue.is_dirty;
-    const needsSyncRebuild = !dirtyQueue;
+    const isCacheEmpty = !cachedCount || cachedCount === 0;
+    const needsRebuild = !dirtyQueue || dirtyQueue.is_dirty || isCacheEmpty;
+    const needsSyncRebuild = !dirtyQueue || isCacheEmpty;
 
     if (needsRebuild) {
       // Set dirty to false immediately to lock and prevent concurrent rebuilds
@@ -375,7 +382,7 @@ async function handleQueryLeads(request: Request) {
       (() => {
         let q = adminSupabase
           .from("daily_traffic_and_costs")
-          .select("date, spend")
+          .select("date, spend, spend_usd, spend_uah")
           .eq("project_id", activeProject.id);
         if (startDate) {
           q = q.gte("date", startDate);
@@ -479,7 +486,13 @@ async function handleQueryLeads(request: Request) {
       }
       return true;
     });
-    const totalCostsSpend = filteredCosts.reduce((sum: number, c: any) => sum + Number(c.spend || 0), 0);
+
+    const { getExchangeRates } = await import("@/lib/exchange-rate");
+    const todayRates = await getExchangeRates();
+
+    const totalCostsSpendUsd = filteredCosts.reduce((sum: number, c: any) => sum + Number(c.spend_usd != null ? c.spend_usd : (c.spend || 0)), 0);
+    const totalCostsSpendUah = filteredCosts.reduce((sum: number, c: any) => sum + Number(c.spend_uah != null ? c.spend_uah : (Number(c.spend || 0) * (todayRates?.usdRate || 41.5))), 0);
+    const totalCostsSpend = totalCostsSpendUsd;
 
     // Helper for robust case-insensitive paid status detection
     const isPaidOrderStatus = (status: string) => {
@@ -511,9 +524,6 @@ async function handleQueryLeads(request: Request) {
 
     const { data: rawPaidOrders } = await rawPaidOrdersQuery;
     const paidOrders = (rawPaidOrders || []).filter((o: any) => isPaidOrderStatus(o.status));
-
-    const { getExchangeRates } = await import("@/lib/exchange-rate");
-    const todayRates = await getExchangeRates();
 
     const missingDates = Array.from(
       new Set(
@@ -611,30 +621,33 @@ async function handleQueryLeads(request: Request) {
     const totalBlendedRevenueUah = blendedCourseRevenueUah + blendedTripwireRevenueUah;
     const exactTotalSales = exactCourseCount + exactTripwireCount;
 
-    const blendedProfitUsd = totalBlendedRevenueUsd - totalCostsSpend;
-    const blendedProfitUah = totalBlendedRevenueUah - (totalCostsSpend * todayRates.usdRate);
+    const blendedProfitUsd = totalBlendedRevenueUsd - totalCostsSpendUsd;
+    const blendedProfitUah = totalBlendedRevenueUah - totalCostsSpendUah;
 
     const effectiveSalesCount = exactTotalSales > 0 ? exactTotalSales : (paidLeadsCount + paidTripwiresCount);
     const blendedAovUsd = effectiveSalesCount > 0 ? totalBlendedRevenueUsd / effectiveSalesCount : 0;
     const blendedAovUah = effectiveSalesCount > 0 ? totalBlendedRevenueUah / effectiveSalesCount : 0;
 
-    const roi = totalCostsSpend > 0 ? (totalBlendedRevenueUsd / totalCostsSpend) * 100 : 0;
+    const roi = totalCostsSpendUsd > 0 ? ((totalBlendedRevenueUsd - totalCostsSpendUsd) / totalCostsSpendUsd) * 100 : 0;
 
     // Clicks summary
     const groupedTraffic = trafficSummaryRes.data || [];
     const totalClicks = groupedTraffic.reduce((sum: number, t: any) => sum + Number(t.clicks_count || 0), 0);
 
     const conversionRate = totalClicks > 0 ? (totalLeads / totalClicks) * 100 : 0;
-    const cpl = totalLeads > 0 ? totalCostsSpend / totalLeads : 0;
+    const cpl = totalLeads > 0 ? totalCostsSpendUsd / totalLeads : 0;
+    const cplUah = totalLeads > 0 ? totalCostsSpendUah / totalLeads : 0;
     const leadToSaleConv = totalLeads > 0 ? (effectiveSalesCount / totalLeads) * 100 : 0;
 
     const singleProjectStats = {
       totalLeads,
       totalClicks,
-      totalSpend: totalCostsSpend,
+      totalSpend: totalCostsSpendUsd,
+      totalSpendUah: totalCostsSpendUah,
       totalApplications,
       conversionRate,
       cpl,
+      cplUah,
       usdRevenue: totalBlendedRevenueUsd,
       uahRevenue: totalBlendedRevenueUah,
       eurRevenue: totalEurRevenue,
@@ -645,6 +658,7 @@ async function handleQueryLeads(request: Request) {
       uahTripwireRevenue: blendedTripwireRevenueUah,
       eurTripwireRevenue,
       netProfitUsd: blendedProfitUsd,
+      netProfitUah: blendedProfitUah,
       roi,
       totalSales: effectiveSalesCount,
       paidLeadsCount: exactCourseCount > 0 ? exactCourseCount : paidLeadsCount,
@@ -834,6 +848,8 @@ async function handleQueryLeads(request: Request) {
       activeProject,
       leads,
       totalCount,
+      totalSpendUAH: totalCostsSpendUah,
+      totalSpendUSD: totalCostsSpendUsd,
       stats: singleProjectStats,
       splineTrendData: splineTrendData || [],
       utmAttributionTree,

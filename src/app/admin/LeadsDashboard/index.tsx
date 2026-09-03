@@ -1235,7 +1235,7 @@ export default function LeadsDashboard({ initialData }: LeadsDashboardProps) {
           <FinanceExpertTab
             projectId={activeProject.id}
             projectRevenue={singleProjectStats?.uahRevenue || dashboardData?.totalRevenueUAH || 0}
-            projectSpend={singleProjectStats?.totalSpendUah || dashboardData?.totalSpendUAH || (singleProjectStats?.totalSpend ? singleProjectStats.totalSpend * 41.5 : 0)}
+            projectSpend={singleProjectStats?.totalSpendUah != null ? singleProjectStats.totalSpendUah : (dashboardData?.totalSpendUAH != null ? dashboardData.totalSpendUAH : 0)}
             isLight={isLight}
           />
         )}
