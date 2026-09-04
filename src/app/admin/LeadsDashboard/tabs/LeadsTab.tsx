@@ -3,7 +3,7 @@
 import React from "react";
 import { Grid, Plus, Search, ChevronDown, Calendar, X, XCircle, Copy, Check, AlertCircle, Users, Globe, ExternalLink, Sparkles, Layers, Target, Clock } from "lucide-react";
 import { useTheme } from "../../ThemeProvider";
-import { formatDualCurrency, formatLocaleNumber } from "@/app/admin/utils";
+import { formatDualCurrency, formatLocaleNumber, isLeadMatchingLanding, extractCanonicalLandingPath } from "@/app/admin/utils";
 import { LeadItem } from "../types";
 import { SkeletonPulse } from "@/components/ui/ParabolicProgressBar";
 import CustomCalendarPicker from "@/components/ui/CustomCalendarPicker";
@@ -64,24 +64,17 @@ const PIPELINE_COLUMNS = [
 function formatLandingDisplay(url: string): string {
   if (!url) return "Головна (/)";
   try {
-    let path = url;
-    if (url.startsWith("http://") || url.startsWith("https://")) {
-      const parsed = new URL(url);
-      path = parsed.pathname;
-    } else {
-      path = url.split("?")[0].split("#")[0];
-    }
-    path = path.trim().replace(/\/$/, "");
+    const path = extractCanonicalLandingPath(url);
     if (!path || path === "/") return "Головна (/)";
+    if (path === "/mini-course/figma") return "Міні-курс Figma (/mini-course/figma)";
+    if (path === "/mini-course/ai") return "Міні-курс AI (/mini-course/ai)";
+    if (path === "/mini-course/free/ai" || path.includes("free/ai") || path.includes("free-ai")) return "Безкоштовний AI (/mini-course/free/ai)";
     if (path.includes("5-likes")) return "5 Лайків (/intensive/5-likes)";
     if (path === "/anketa") return "Анкета (/anketa)";
-    if (path.includes("free/ai") || path.includes("free-ai")) return "Безкоштовний AI (/mini-course/free/ai)";
-    if (path.includes("mini-course/ai")) return "Міні-курс AI (/mini-course/ai)";
-    if (path.includes("mini-course/figma")) return "Міні-курс Figma (/mini-course/figma)";
-    if (path.includes("minicourse") || path.includes("mini-course")) return "Міні-курс";
     if (path.includes("rozbir") || path.includes("diagnostic")) return "Діагностика / Розбір";
     if (path.includes("price") || path.includes("tariffs")) return "Тарифи / Ціни";
     if (path.includes("system")) return "Система (/intensive/system)";
+    if (path.includes("minicourse") || path.includes("mini-course")) return `Міні-курс (${path})`;
     return path;
   } catch {
     return url;
@@ -189,28 +182,44 @@ export const LeadsTab = React.memo(function LeadsTab({
   const landingOptions = React.useMemo(() => {
     const countsMap = new Map<string, number>();
 
+    const addPath = (rawLanding: string, count = 1) => {
+      if (!rawLanding) return;
+      const canonical = extractCanonicalLandingPath(rawLanding);
+      if (!canonical || canonical === "/") return;
+      countsMap.set(canonical, (countsMap.get(canonical) || 0) + count);
+    };
+
     // 1. From filtersSummary if available
     if (filtersSummary?.landingCounts && filtersSummary.landingCounts.length > 0) {
       filtersSummary.landingCounts.forEach((item) => {
         if (item.landing) {
-          countsMap.set(item.landing, item.count);
+          addPath(item.landing, item.count);
         }
       });
     }
 
-    // 2. Also populate / merge from processedLeads / paginatedLeads
+    // 2. Also populate / merge from processedLeads
     (processedLeads || []).forEach((lead: any) => {
       const vLandings: string[] = (lead.visitedLandings || lead.visited_landings || []) as string[];
       if (vLandings.length > 0) {
         vLandings.forEach((land) => {
-          if (land && !countsMap.has(land)) {
-            countsMap.set(land, (countsMap.get(land) || 0) + 1);
+          if (land) {
+            const canonical = extractCanonicalLandingPath(land);
+            if (canonical && canonical !== "/" && !countsMap.has(canonical)) {
+              countsMap.set(canonical, 1);
+            }
           }
         });
-      } else if (lead.page_path && lead.page_path !== "/" && !countsMap.has(lead.page_path)) {
-        countsMap.set(lead.page_path, (countsMap.get(lead.page_path) || 0) + 1);
-      } else if (lead.page_url && lead.page_url !== "" && !countsMap.has(lead.page_url)) {
-        countsMap.set(lead.page_url, (countsMap.get(lead.page_url) || 0) + 1);
+      } else if (lead.page_path && lead.page_path !== "/") {
+        const canonical = extractCanonicalLandingPath(lead.page_path);
+        if (canonical && canonical !== "/" && !countsMap.has(canonical)) {
+          countsMap.set(canonical, 1);
+        }
+      } else if (lead.page_url && lead.page_url !== "") {
+        const canonical = extractCanonicalLandingPath(lead.page_url);
+        if (canonical && canonical !== "/" && !countsMap.has(canonical)) {
+          countsMap.set(canonical, 1);
+        }
       }
     });
 
@@ -270,10 +279,7 @@ export const LeadsTab = React.memo(function LeadsTab({
       } else if (selectedLanding === "unassigned") {
         list = list.filter((l: any) => !l.visitedLandings?.length && !l.visited_landings?.length && (!l.page_path || l.page_path === "/"));
       } else {
-        list = list.filter((l: any) => {
-          const vLandings = (l.visitedLandings || l.visited_landings || []) as string[];
-          return vLandings.includes(selectedLanding) || l.page_path === selectedLanding || l.page_url === selectedLanding;
-        });
+        list = list.filter((l: any) => isLeadMatchingLanding(l, selectedLanding));
       }
     }
 
@@ -452,6 +458,56 @@ export const LeadsTab = React.memo(function LeadsTab({
           <span>🔗 По прямому посиланню (Органіка)</span>
         </button>
       </div>
+
+      {/* Landing / Offer Fast Segment Switcher */}
+      {landingOptions.length > 0 && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-white/10">
+          <span className="text-[11px] font-bold text-white/40 uppercase tracking-wider pr-1 flex items-center gap-1 shrink-0">
+            <Globe className="w-3.5 h-3.5 text-blue-400" />
+            Лендинг / Оффер:
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedLanding?.("all")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              selectedLanding === "all"
+                ? "bg-white text-black font-black shadow-md"
+                : "bg-white/5 hover:bg-white/10 text-neutral-300 border border-white/5"
+            }`}
+          >
+            <span>Всі лендинги</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+              selectedLanding === "all" ? "bg-black/20 text-black" : "bg-white/10 text-white"
+            }`}>
+              {totalCount}
+            </span>
+          </button>
+          {landingOptions.slice(0, 6).map((opt) => {
+            const isActive = selectedLanding === opt.landing;
+            const displayName = formatLandingDisplay(opt.landing);
+            return (
+              <button
+                key={opt.landing}
+                type="button"
+                onClick={() => setSelectedLanding?.(isActive ? "all" : opt.landing)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                  isActive
+                    ? "bg-blue-500 text-white font-black shadow-md shadow-blue-500/20"
+                    : "bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 border border-blue-500/20"
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-blue-400" />
+                <span>{displayName}</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  isActive ? "bg-black/20 text-white" : "bg-blue-400/20 text-blue-200"
+                }`}>
+                  {opt.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Filtering control panel */}
       <div className="bg-[#0C0C0F] border border-white/5 p-6 rounded-2xl shadow-2xl backdrop-blur-md space-y-4">

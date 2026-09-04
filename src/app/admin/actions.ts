@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { devLogger } from "@/utils/logger";
 import { rebuildProjectCache } from "@/lib/crmCache";
-import { parseClientDateRange, statusPriority } from "./utils";
+import { parseClientDateRange, statusPriority, extractCanonicalLandingPath } from "./utils";
 import { DEFAULT_PROJECT_LANDINGS } from "@/lib/projectLandings";
 
 // Memory cache for Superman Global Hub mode
@@ -695,8 +695,19 @@ export async function getUnifiedCRMData(
       aggQuery = aggQuery.lte("created_at", endStr);
     }
     if (selectedLanding !== "all") {
-      query = query.contains("visited_landings", [selectedLanding]);
-      aggQuery = aggQuery.contains("visited_landings", [selectedLanding]);
+      if (selectedLanding === "multi") {
+        query = query.not("visited_landings", "is", null);
+      } else if (selectedLanding === "unassigned") {
+        query = query.or("page_path.is.null,page_path.eq.,page_path.eq./");
+        aggQuery = aggQuery.or("page_path.is.null,page_path.eq.,page_path.eq./");
+      } else {
+        const cleanLanding = extractCanonicalLandingPath(selectedLanding);
+        if (cleanLanding && cleanLanding !== "/") {
+          const term = `%${cleanLanding}%`;
+          query = query.or(`page_path.ilike.${term},page_url.ilike.${term}`);
+          aggQuery = aggQuery.or(`page_path.ilike.${term},page_url.ilike.${term}`);
+        }
+      }
     }
 
     const page = filters?.page || 1;

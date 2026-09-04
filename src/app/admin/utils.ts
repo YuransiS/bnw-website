@@ -267,13 +267,20 @@ export const isLeadMatchingLanding = (lead: any, landingUrl: string) => {
       if (["Головна", "Ленд 1", "Ленд 2", "МК 2.0", "Автовеб", "Ліди МК", "Webinars"].includes(originalSheet)) return true;
     }
 
-    // 2. Specific Path Matching (e.g. "/rozbir", "/diagnostic", "/vsl-form")
+    // 2. Specific Path Matching (e.g. "/mini-course/figma", "/mini-course/ai", "/rozbir", "/diagnostic")
     if (targetPath && targetPath !== "/") {
       const cleanSlug = targetPath.replace(/^\//, "").replace(/\/$/, "");
       if (cleanSlug) {
         if (itemPath.includes(cleanSlug)) return true;
         if (itemUrl.includes(cleanSlug)) return true;
         if (originalSheet.toLowerCase().includes(cleanSlug) || targetSheet.toLowerCase().includes(cleanSlug)) return true;
+        
+        // Check visited_landings array
+        const visitedLandings: string[] = (item.visited_landings || item.visitedLandings || []) as string[];
+        for (const vLand of visitedLandings) {
+          const vClean = extractCanonicalLandingPath(vLand).toLowerCase();
+          if (vClean.includes(cleanSlug) || normalizeUrlForMatching(vLand).includes(cleanSlug)) return true;
+        }
       }
     }
 
@@ -627,4 +634,25 @@ export const parseSurveyQuestions = (lead: any): Array<{ key: string; label: str
   return results;
 };
 
-
+/**
+ * Extracts normalized canonical pathname from any URL or path string.
+ * e.g. "https://nesoniaa.vercel.app/mini-course/figma?o=1" -> "/mini-course/figma"
+ * e.g. "mini-course/ai/" -> "/mini-course/ai"
+ */
+export function extractCanonicalLandingPath(urlOrPath: string): string {
+  if (!urlOrPath) return "";
+  try {
+    let path = String(urlOrPath).trim();
+    if (path.startsWith("http://") || path.startsWith("https://")) {
+      const parsed = new URL(path);
+      path = parsed.pathname;
+    } else {
+      path = path.split("?")[0].split("#")[0];
+    }
+    path = path.trim().replace(/\/+$/, "");
+    if (!path || path === "/") return "/";
+    return path.startsWith("/") ? path : `/${path}`;
+  } catch {
+    return String(urlOrPath).trim();
+  }
+}
